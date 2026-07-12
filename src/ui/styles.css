@@ -1,3 +1,20 @@
+/* Self-hosted faces (no CDN dependency; inlined as data URIs in the
+   single-file build). Bungee = display, Nunito = body. */
+@font-face {
+  font-family: 'Bungee';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/bungee.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('/fonts/nunito.woff2') format('woff2');
+}
+
 :root {
   --night: #0D1026;
   --panel: #1A1F3D;

@@ -22,10 +22,17 @@ html = html.replace(
   },
 );
 
-// Inline the CSS.
+// Inline the CSS, with fonts embedded as data URIs.
 html = html.replace(
   /<link rel="stylesheet"[^>]*href="\.?\/?(assets\/[^"]+\.css)"[^>]*>/,
-  (_, href) => `<style>\n${readFileSync(join(dist, href), 'utf8')}\n</style>`,
+  (_, href) => {
+    let css = readFileSync(join(dist, href), 'utf8');
+    css = css.replace(/url\(([^)]*fonts\/([\w-]+\.woff2))[^)]*\)/g, (_m, _full, fname) => {
+      const b64 = readFileSync(join('public/fonts', fname)).toString('base64');
+      return `url(data:font/woff2;base64,${b64})`;
+    });
+    return `<style>\n${css}\n</style>`;
+  },
 );
 
 // Embed the character sprites as data URIs.
