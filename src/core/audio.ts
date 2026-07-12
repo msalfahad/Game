@@ -68,6 +68,7 @@ class AudioEngine {
   fall() { this.tone(500, 80, 0.5, 'sine', 0.35); }
   out() { this.tone(300, 80, 0.6, 'square', 0.3); this.noise(0.4, 0.3, 700); }
   tick() { this.tone(1000, 1000, 0.05, 'square', 0.15); }
+  gem() { this.tone(880, 1320, 0.12, 'sine', 0.25); this.tone(1320, 1760, 0.1, 'sine', 0.15, 0.06); }
   crack() { this.tone(180, 90, 0.14, 'triangle', 0.3); this.noise(0.12, 0.35, 1500); }
   win() { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, f, 0.18, 'square', 0.25, i * 0.13)); }
   lose() { [400, 350, 300, 200].forEach((f, i) => this.tone(f, f * 0.9, 0.2, 'sawtooth', 0.25, i * 0.15)); }

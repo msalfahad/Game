@@ -113,4 +113,24 @@ button.big { width: 100%; max-width: 280px; }
 
 #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 30; background: var(--night); font-family: 'Bungee', cursive; color: var(--aqua); font-size: 18px; }
 
+/* Family picker */
+.famGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 150px)); gap: 10px; justify-content: center; width: min(680px, 94vw); }
+.famCard { background: var(--panel); border-radius: 16px; padding: 12px 8px; text-align: center; cursor: pointer; border: 3px solid transparent; }
+.famCard:active, .famCard:hover { border-color: var(--aqua); background: var(--panel2); }
+.famCard .fi { font-size: 34px; }
+.famCard .fn { font-family: 'Bungee', cursive; font-size: 11px; color: var(--gold); margin-top: 4px; }
+.famCard .fd { font-size: 10.5px; opacity: .75; font-weight: 700; margin-top: 2px; }
+.famCard.lab { opacity: .8; }
+.gameBtn .tier { font-size: 9px; color: var(--aqua); opacity: .9; margin-left: 4px; }
+
+/* Tuning drawer */
+#tuneDrawer { position: fixed; right: 12px; top: 12px; bottom: 12px; width: min(320px, 86vw); z-index: 40;
+  background: rgba(13,16,38,.96); border: 2px solid var(--panel2); border-radius: 18px; padding: 16px;
+  display: flex; flex-direction: column; gap: 10px; overflow-y: auto; touch-action: auto; }
+#tuneDrawer h3 { font-family: 'Bungee', cursive; color: var(--aqua); font-size: 15px; text-align: center; }
+.tinyTag { font-size: 11px; opacity: .75; font-weight: 700; text-align: center; }
+.tuneRow { display: grid; grid-template-columns: 1fr; gap: 2px; font-size: 11px; font-weight: 900; }
+.tuneRow input { width: 100%; }
+.tuneRow em { font-style: normal; color: var(--gold); font-family: 'Bungee', cursive; font-size: 11px; text-align: right; }
+
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

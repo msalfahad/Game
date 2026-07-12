@@ -1,6 +1,7 @@
 import type { Player } from './player';
 import type { Surface } from '../data/surfaces';
 import { speedMult } from '../data/characters';
+import { TUNING } from '../core/tuning';
 
 // Movement + surface physics (SPEC section 4). Shared free-roam kinematics used
 // by the Surface Lab and free-roam games. Hockey uses its own 1-axis paddle
@@ -16,7 +17,7 @@ const DASH_CD = 2; // seconds (SPEC section 4)
 export interface MoveOpts {
   halfSize: number;
   sprint?: boolean;
-  allowJumpDive?: boolean;
+  noClamp?: boolean; // open-edge arenas (pushout / breaktiles / dodge) handle falls themselves
 }
 
 /**
@@ -31,12 +32,16 @@ export function moveFreeRoam(
   dt: number,
   opts: MoveOpts,
 ) {
-  const topSpeed = BASE_SPEED * speedMult(p.hero) * (opts.sprint ? SPRINT : 1);
+  const topSpeed =
+    BASE_SPEED * speedMult(p.hero) * (opts.sprint ? SPRINT : 1) *
+    (p.speedT > 0 ? 1.35 : 1) * TUNING.speedScale;
   const accel = topSpeed * 2.6 * surf.accel;
 
-  // Direct acceleration from intent.
-  p.vx += ax * accel * dt;
-  p.vz += ay * accel * dt;
+  // Direct acceleration from intent (frozen players get no control).
+  if (p.freezeT <= 0) {
+    p.vx += ax * accel * dt;
+    p.vz += ay * accel * dt;
+  }
 
   // Constant surface push (conveyors).
   if (surf.push) {
@@ -87,7 +92,7 @@ export function moveFreeRoam(
   if (p.diveT > 0) p.diveT = Math.max(0, p.diveT - dt);
   if (p.dashCd > 0) p.dashCd = Math.max(0, p.dashCd - dt);
 
-  clampToArena(p, opts.halfSize);
+  if (!opts.noClamp) clampToArena(p, opts.halfSize);
 }
 
 export function clampToArena(p: Player, halfSize: number) {

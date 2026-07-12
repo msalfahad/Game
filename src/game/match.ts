@@ -6,7 +6,8 @@ import { Player } from './player';
 import { buildWorld } from './world';
 import { Hazards } from './hazards';
 import { HEROES, type Hero } from '../data/characters';
-import { mapById } from '../data/maps';
+import { gameById, familyById } from '../data/maps';
+import { makeGame } from './games/index';
 import { DIFFICULTY, type Fx, type GameModule, type MatchContext } from './context';
 import * as HUD from '../ui/hud';
 
@@ -15,13 +16,13 @@ const ASBASE = 30;
 interface StartOpts {
   hero: Hero;
   diff: keyof typeof DIFFICULTY;
-  mapId: string;
-  makeGame: () => GameModule;
+  gameId: string;
   onFinish: (ranked: Player[], subtitle: string, youWon: boolean) => void;
 }
 
-// Orchestrates a single match: world + hazards + players + a game module, the
-// match loop, HUD wiring, particle FX, and hand-off to results.
+// Orchestrates a single match: resolves the catalog entry, builds the themed
+// world + hazards + roster + mechanic module, runs the loop, and hands the
+// ranking to the results screen.
 export class Match {
   private engine: Engine;
   input: Input;
@@ -83,16 +84,18 @@ export class Match {
   start(opts: StartOpts) {
     this.stop();
     this.onFinish = opts.onFinish;
-    const map = mapById(opts.mapId);
-    this.game = opts.makeGame();
-    const halfSize = this.game.title.includes('Hockey') ? ASBASE * 0.48 : ASBASE;
+    const game = gameById(opts.gameId);
+    const family = familyById(game.familyId);
+    this.game = makeGame(game);
+    const isGoal = game.mechanic === 'goal';
+    const halfSize = isGoal ? ASBASE * 0.48 : ASBASE;
 
     this.engine.clearScene();
     this.parts = [];
-    const world = buildWorld(this.engine.scene, map, halfSize);
-    const hazards = new Hazards(this.engine.scene, map, halfSize, this.fx);
+    const world = buildWorld(this.engine.scene, family, game, halfSize);
+    const hazards = new Hazards(this.engine.scene, game, family, halfSize, this.fx);
 
-    // Build the roster: local hero + three distinct random rivals (FFA).
+    // Roster: local hero + three distinct random rivals (FFA).
     const rivals = HEROES.filter((h) => h.key !== opts.hero.key);
     for (let i = rivals.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -111,8 +114,10 @@ export class Match {
       camera: this.engine.camera,
       world,
       hazards,
-      map,
+      game,
+      family,
       players,
+      decoys: [],
       input: this.input,
       diff: DIFFICULTY[opts.diff],
       fx: this.fx,
@@ -123,8 +128,7 @@ export class Match {
       finish: (ranked, subtitle) => this.finish(ranked, subtitle),
     };
 
-    // Frame camera: hockey pulls in tighter to fill the smaller rink.
-    this.engine.camera.frame(halfSize, this.game.title.includes('Hockey') ? 1.28 : 1.0);
+    this.engine.camera.frame(halfSize, isGoal ? 1.28 : 1.0);
 
     this.game.init(this.ctx);
     HUD.showHud(true);
@@ -134,7 +138,7 @@ export class Match {
     this.running = true;
     SFX.unlock();
     SFX.start();
-    HUD.banner(map.name + '!', '#' + new THREE.Color(map.theme.trim).getHexString());
+    HUD.banner(game.name + '!', '#' + new THREE.Color(family.theme.trim).getHexString());
 
     this.engine.start((dt, elapsed) => this.loop(dt, elapsed));
   }
@@ -172,5 +176,9 @@ export class Match {
     this.engine.stop();
     this.input.setEnabled(false);
     HUD.showHud(false);
+    if (this.ctx) {
+      for (const d of this.ctx.decoys) this.engine.scene.remove(d.sprite);
+      this.ctx.decoys = [];
+    }
   }
 }

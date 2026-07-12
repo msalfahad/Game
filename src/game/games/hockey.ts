@@ -4,6 +4,7 @@ import type { Player } from '../player';
 import { HITBOX_RADIUS } from '../player';
 import { speedMult, strengthMult, accuracyMult } from '../../data/characters';
 import { SFX } from '../../core/audio';
+import { matchTime } from '../../core/tuning';
 import { makeHeads } from '../../ui/hud';
 
 // Frostbite 1.1 — Ice Hockey Brawl. Four players guard the four walls of a
@@ -21,19 +22,22 @@ interface Puck {
 }
 
 export class HockeyGame implements GameModule {
-  readonly title = 'Ice Hockey Brawl';
+  title = 'Ice Hockey Brawl';
   readonly objective = 'Guard your wall · 20 pts each · 0 = OUT';
   readonly stickMode = 'hidden' as const;
 
   private ctx!: MatchContext;
   private balls: Puck[] = [];
   private timeLeft = 120;
+  private duration = 120;
   private half = 14;
 
   init(ctx: MatchContext) {
     this.ctx = ctx;
+    this.title = ctx.game.name;
     this.half = ctx.halfSize;
-    this.timeLeft = 120;
+    this.duration = this.timeLeft = matchTime(120);
+    this.finished = false;
     this.balls = [];
     for (const p of ctx.players) {
       p.pts = 20;
@@ -129,9 +133,9 @@ export class HockeyGame implements GameModule {
     if (this.timeLeft <= 0) { this.doFinish(); return; }
 
     // Escalation: add pucks over time; ramp hazards.
-    if (this.timeLeft < 85 && this.balls.length < 2) this.spawnBall();
-    if (this.timeLeft < 40 && this.balls.length < 3) this.spawnBall();
-    this.ctx.hazards.setProgress(1 - this.timeLeft / 120);
+    if (this.timeLeft < this.duration * 0.7 && this.balls.length < 2) this.spawnBall();
+    if (this.timeLeft < this.duration * 0.33 && this.balls.length < 3) this.spawnBall();
+    this.ctx.hazards.setProgress(1 - this.timeLeft / this.duration);
     this.ctx.hazards.tick(dt, this.ctx.players);
 
     this.controlLocal(dt);
@@ -150,7 +154,7 @@ export class HockeyGame implements GameModule {
     const you = this.ctx.players[0];
     if (you.dead) return;
     you.cd = Math.max(0, you.cd - dt);
-    if (you.diveT > 0) { you.diveT = Math.max(0, you.diveT - dt); return; } // frozen by hazard
+    if (you.freezeT > 0) { you.freezeT = Math.max(0, you.freezeT - dt); return; } // frozen by hazard
     if (this.ctx.input.hockeyDX !== 0) {
       you.pos += this.ctx.input.hockeyDX / (innerWidth * 0.75);
       this.ctx.input.hockeyDX = 0;
@@ -165,7 +169,7 @@ export class HockeyGame implements GameModule {
     const D = this.ctx.diff;
     for (const p of this.ctx.players.slice(1)) {
       if (p.dead) continue;
-      if (p.diveT > 0) { p.diveT = Math.max(0, p.diveT - dt); continue; }
+      if (p.freezeT > 0) { p.freezeT = Math.max(0, p.freezeT - dt); continue; }
       p.retarget -= dt;
       if (p.retarget <= 0) {
         p.retarget = D.lapse + Math.random() * D.lapse;

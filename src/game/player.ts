@@ -53,6 +53,18 @@ export class Player {
   dashCd = 0;
   diveT = 0; // >0 while diving; landing incurs a short recovery
 
+  // Status effects (power-ups / ultimates / hazards). Seconds remaining.
+  freezeT = 0; // rooted/stunned: no input control
+  speedT = 0; // speed boost
+  giantT = 0; // giant form: more mass & shove
+  shieldT = 0; // blocks damage / halves knockback
+  invulnT = 0; // respawn grace
+  held = false; // carrying a throwable
+
+  // Race state.
+  wp = 0; // next waypoint index
+  lap = 0;
+
   // AI scratch.
   retarget = 0;
   want = 0.5;
@@ -125,4 +137,30 @@ export class Player {
   setArmedGlow(on: boolean) {
     if (this.glow) (this.glow.material as THREE.MeshBasicMaterial).opacity = on ? 0.7 : 0.3;
   }
+
+  /** Tick down status-effect timers and reflect giant form on the mesh. */
+  tickEffects(dt: number) {
+    this.freezeT = Math.max(0, this.freezeT - dt);
+    this.speedT = Math.max(0, this.speedT - dt);
+    this.shieldT = Math.max(0, this.shieldT - dt);
+    this.invulnT = Math.max(0, this.invulnT - dt);
+    this.cd = Math.max(0, this.cd - dt);
+    const wasGiant = this.giantT > 0;
+    this.giantT = Math.max(0, this.giantT - dt);
+    const isGiant = this.giantT > 0;
+    if (wasGiant !== isGiant) this.group.scale.setScalar(isGiant ? 1.35 : 1);
+    if (this.sprite) {
+      const mat = this.sprite.material as THREE.SpriteMaterial;
+      mat.opacity = this.freezeT > 0 ? 0.55 : 1;
+      mat.color.setHex(this.shieldT > 0 ? 0xbfe8ff : 0xffffff);
+    }
+  }
+}
+
+/** Standalone decoy sprite (Phantom Clone). */
+export function makeDecoySprite(hero: Hero): THREE.Sprite {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: charTex(hero), transparent: true, opacity: 0.7 }));
+  const h = HITBOX_RADIUS * 2.15;
+  sp.scale.set(h * 0.82, h, 1);
+  return sp;
 }

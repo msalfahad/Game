@@ -1,23 +1,17 @@
 import { Engine } from './core/engine';
 import { Input } from './core/input';
 import { SFX } from './core/audio';
+import { loadTuning } from './core/tuning';
 import { Match } from './game/match';
-import { HockeyGame } from './game/games/hockey';
-import { SurfaceLabGame } from './game/games/surfacelab';
-import type { GameModule } from './game/context';
-import { buildScreens, show, hideScreens, showResults, type Selection } from './ui/screens';
+import { buildScreens, show, hideScreens, showResults } from './ui/screens';
 
-// Boot: build the engine + input + match controller, wire the screen flow, and
-// show the title. Each "start" tears down the previous match and runs the
-// chosen game module on the chosen map.
+// Boot: engine + input + match controller, screen flow, tuning, title.
+
+loadTuning();
 
 const engine = new Engine();
 const input = new Input();
 const match = new Match(engine, input);
-
-function makeGame(sel: Selection): () => GameModule {
-  return sel.gameId === 'hockey' ? () => new HockeyGame() : () => new SurfaceLabGame();
-}
 
 buildScreens({
   onStart: (sel) => {
@@ -25,8 +19,7 @@ buildScreens({
     match.start({
       hero: sel.hero,
       diff: sel.diff,
-      mapId: sel.mapId,
-      makeGame: makeGame(sel),
+      gameId: sel.gameId,
       onFinish: (ranked, subtitle, youWon) => showResults(ranked, subtitle, youWon),
     });
   },

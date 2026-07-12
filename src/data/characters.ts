@@ -43,7 +43,10 @@ export function heroByKey(key: string): Hero {
 }
 
 export function heroImg(h: Hero): string {
-  return `chars/${h.key}.webp`;
+  // The single-file preview build injects sprites as data URIs on
+  // window.__CHAR_IMG so nothing can get separated from the HTML.
+  const inline = (globalThis as any).__CHAR_IMG as Record<string, string> | undefined;
+  return inline?.[h.key] ?? `chars/${h.key}.webp`;
 }
 
 // --- Stat normalization -----------------------------------------------------

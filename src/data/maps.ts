@@ -1,122 +1,185 @@
 import type { SurfaceKind } from './surfaces';
 
-// A map family = shared skybox / floor / trim-light color / ambient particle
-// set + a hazard set, with difficulty ramping 1->4 (Learn, Adapt, Master,
-// Survive). This file defines the Frostbite family (SPEC sections 1, 6) as the
-// first family built end-to-end, plus a neutral greybox "Surface Lab" used to
-// exercise the movement + surface systems.
+// The full game catalog: 7 spec families x 4 games (SPEC section 5) + the
+// Classic Arena bonus family (the prototype's original modes) + the Surface
+// Lab greybox = 34 playable games. Each family shares a theme (floor style,
+// sky, trim light, ambient particles, surface) and a hazard ramp across its
+// four tiers (Learn -> Adapt -> Master -> Survive).
 
-export type HazardKind = 'blizzard' | 'icicles' | 'boulders' | 'cracks';
+export type FloorStyle =
+  | 'ice' | 'lava' | 'desert' | 'forest' | 'sky' | 'mech' | 'pirate' | 'neon' | 'greybox';
+
+// Generalized hazard kinds; each family flavors them (falling = icicles /
+// meteors / debris / cannonballs, rollers = boulders / logs / barrels, ...).
+export type HazardKind = 'wind' | 'falling' | 'rollers' | 'geysers' | 'lasers';
+
+export type Mechanic =
+  | 'goal' // puck/ball into rival walls (hockey & soccer variants)
+  | 'breaktiles' // floor breaks away, don't fall
+  | 'pushout' // shrinking platform, shove rivals off
+  | 'throwfight' // grab & hurl projectiles, drain HP
+  | 'race' // checkpoint laps around the arena
+  | 'dodge' // survive sweeping hazards, last standing
+  | 'collect' // grab the most pickups
+  | 'paint' // claim floor tiles
+  | 'mash' // smash pop-up targets
+  | 'lab'; // movement greybox
+
+export type AmbientKind = 'snow' | 'embers' | 'sand' | 'leaves' | 'stars' | 'bubbles' | 'none';
 
 export interface ThemeColors {
   skyTop: string;
   skyBot: string;
   fog: string;
-  ground: string; // surrounding ground plane
-  trim: number; // neon trim / rim light color
-  light: number; // ambient + sun tint
-  ambient: 'snow' | 'none';
+  ground: string;
+  trim: number;
+  light: number;
+  ambient: AmbientKind;
 }
 
-export type ArenaShape = 'square' | 'circle';
-
-export interface MapDef {
+export interface FamilyDef {
   id: string;
-  family: string;
   name: string;
-  tier: 1 | 2 | 3 | 4; // Learn / Adapt / Master / Survive
-  tierName: string;
-  shape: ArenaShape;
+  icon: string;
+  style: FloorStyle;
   surface: SurfaceKind;
   theme: ThemeColors;
-  hazards: HazardKind[];
   blurb: string;
 }
 
-const FROST_THEME: ThemeColors = {
-  skyTop: '#243A7E',
-  skyBot: '#0A1230',
-  fog: '#1E2E5E',
-  ground: '#12203E',
-  trim: 0x9ae8ff,
-  light: 0xd8ecff,
-  ambient: 'snow',
-};
+export interface GameDef {
+  id: string;
+  familyId: string;
+  name: string;
+  icon: string;
+  tier: 1 | 2 | 3 | 4;
+  tierName: string;
+  mechanic: Mechanic;
+  shape: 'square' | 'circle';
+  hazards: HazardKind[];
+  blurb: string;
+  // Mechanic flavor knobs (projectile type, edge hazard, decay pattern, ...).
+  mods?: Record<string, string | number | boolean>;
+}
 
-// Frostbite Arena family — ice surface, aurora sky, escalating winter hazards.
-export const FROSTBITE_MAPS: MapDef[] = [
+const TIER = ['', 'Learn', 'Adapt', 'Master', 'Survive'] as const;
+
+export const FAMILIES: FamilyDef[] = [
   {
-    id: 'frost-1',
-    family: 'Frostbite Arena',
-    name: 'Frozen Rink',
-    tier: 1,
-    tierName: 'Learn',
-    shape: 'square',
-    surface: 'ice',
-    theme: FROST_THEME,
-    hazards: [],
-    blurb: 'A clean sheet of ice. Learn the slide.',
+    id: 'frost', name: 'Frostbite Arena', icon: '❄️', style: 'ice', surface: 'ice',
+    theme: { skyTop: '#243A7E', skyBot: '#0A1230', fog: '#1E2E5E', ground: '#12203E', trim: 0x9ae8ff, light: 0xd8ecff, ambient: 'snow' },
+    blurb: 'Aurora skies, sliding ice, blizzards & icicles.',
   },
   {
-    id: 'frost-2',
-    family: 'Frostbite Arena',
-    name: 'Blizzard Rink',
-    tier: 2,
-    tierName: 'Adapt',
-    shape: 'square',
-    surface: 'ice',
-    theme: FROST_THEME,
-    hazards: ['blizzard'],
-    blurb: 'Gusting wind shoves everything downwind. Adapt.',
+    id: 'inferno', name: 'Inferno Arena', icon: '🌋', style: 'lava', surface: 'metal',
+    theme: { skyTop: '#7A2A1A', skyBot: '#1A0808', fog: '#4A160C', ground: '#1A0A08', trim: 0xff5e2e, light: 0xffb080, ambient: 'embers' },
+    blurb: 'Lava rivers, geysers and meteor strikes.',
   },
   {
-    id: 'frost-3',
-    family: 'Frostbite Arena',
-    name: 'Icefall Rink',
-    tier: 3,
-    tierName: 'Master',
-    shape: 'square',
-    surface: 'ice',
-    theme: FROST_THEME,
-    hazards: ['blizzard', 'icicles'],
-    blurb: 'Icicles crash from above. Master the chaos.',
+    id: 'dune', name: 'Dune Clash', icon: '🏜️', style: 'desert', surface: 'sand',
+    theme: { skyTop: '#F0B060', skyBot: '#B85A2E', fog: '#D08A4A', ground: '#9A6A34', trim: 0xffd23f, light: 0xffe8c0, ambient: 'sand' },
+    blurb: 'Drifting sand, sandstorms and sinkholes.',
   },
   {
-    id: 'frost-4',
-    family: 'Frostbite Arena',
-    name: 'Avalanche Rink',
-    tier: 4,
-    tierName: 'Survive',
-    shape: 'square',
-    surface: 'ice',
-    theme: FROST_THEME,
-    hazards: ['blizzard', 'icicles', 'boulders'],
-    blurb: 'Wind, ice, and sliding boulders. Just survive.',
+    id: 'wildwood', name: 'Wildwood Arena', icon: '🌲', style: 'forest', surface: 'metal',
+    theme: { skyTop: '#8AC4E8', skyBot: '#3E6438', fog: '#5A8A5A', ground: '#2E5A34', trim: 0xb6ff2e, light: 0xf0ffd0, ambient: 'leaves' },
+    blurb: 'Rune groves, rolling logs and poison ponds.',
+  },
+  {
+    id: 'sky', name: 'Sky Island Arena', icon: '☁️', style: 'sky', surface: 'metal',
+    theme: { skyTop: '#9ED4FF', skyBot: '#4A78C0', fog: '#7FA8DE', ground: '#4A78C0', trim: 0xcff0ff, light: 0xffffff, ambient: 'stars' },
+    blurb: 'Floating islands, wind gusts and falling debris.',
+  },
+  {
+    id: 'mech', name: 'Mech Factory', icon: '⚙️', style: 'mech', surface: 'metal',
+    theme: { skyTop: '#3A4256', skyBot: '#12161E', fog: '#2A3038', ground: '#1E2228', trim: 0x2ef2ff, light: 0xc0d0e0, ambient: 'none' },
+    blurb: 'Conveyors, gears, lasers and crushers.',
+  },
+  {
+    id: 'pirate', name: 'Pirate Cove', icon: '🏴‍☠️', style: 'pirate', surface: 'metal',
+    theme: { skyTop: '#6FB6E8', skyBot: '#1E5E8E', fog: '#3A78A8', ground: '#123A5E', trim: 0xffd23f, light: 0xe8f4ff, ambient: 'bubbles' },
+    blurb: 'Ship decks, cannon fire and rolling barrels.',
+  },
+  {
+    id: 'classic', name: 'Classic Arena', icon: '🎪', style: 'neon', surface: 'metal',
+    theme: { skyTop: '#2A2E58', skyBot: '#0D1026', fog: '#1A1F3D', ground: '#151A38', trim: 0x2ef2ff, light: 0xbfc8ff, ambient: 'stars' },
+    blurb: 'The original neon-night party modes.',
+  },
+  {
+    id: 'lab', name: 'The Lab', icon: '🧪', style: 'greybox', surface: 'metal',
+    theme: { skyTop: '#2A2E58', skyBot: '#0D1026', fog: '#1A1F3D', ground: '#151A38', trim: 0x2ef2ff, light: 0xbfc8ff, ambient: 'none' },
+    blurb: 'Greybox testing ground for movement & surfaces.',
   },
 ];
 
-// Neutral greybox used by the Surface Lab movement test. Not part of the 28.
-export const GREYBOX_MAP: MapDef = {
-  id: 'greybox',
-  family: 'Lab',
-  name: 'Surface Lab',
-  tier: 1,
-  tierName: 'Greybox',
-  shape: 'square',
-  surface: 'metal',
-  theme: {
-    skyTop: '#2A2E58',
-    skyBot: '#0D1026',
-    fog: '#1A1F3D',
-    ground: '#151A38',
-    trim: 0x2ef2ff,
-    light: 0xbfc8ff,
-    ambient: 'none',
-  },
-  hazards: [],
-  blurb: 'Quadrant floor: metal · ice · mud · sand, with a conveyor strip. Roam and feel each surface.',
-};
+function g(
+  id: string, familyId: string, name: string, icon: string, tier: 1 | 2 | 3 | 4,
+  mechanic: Mechanic, shape: 'square' | 'circle', hazards: HazardKind[], blurb: string,
+  mods?: GameDef['mods'],
+): GameDef {
+  return { id, familyId, name, icon, tier, tierName: TIER[tier], mechanic, shape, hazards, blurb, mods };
+}
 
-export function mapById(id: string): MapDef {
-  return [...FROSTBITE_MAPS, GREYBOX_MAP].find((m) => m.id === id) ?? FROSTBITE_MAPS[0];
+export const GAMES: GameDef[] = [
+  // 1. Frostbite Arena
+  g('frost-1', 'frost', 'Ice Hockey Brawl', '🏒', 1, 'goal', 'square', [], 'Guard your wall. Deflect the puck. 0 pts = OUT.'),
+  g('frost-2', 'frost', 'Slip & Slide', '🧊', 2, 'breaktiles', 'square', ['wind'], 'The ice cracks under you. Keep moving, don’t fall.', { decay: 'ring' }),
+  g('frost-3', 'frost', 'Snowball Smash', '☃️', 3, 'throwfight', 'square', ['wind', 'falling'], 'Grab snowballs, pelt your rivals out.', { proj: 'snowball' }),
+  g('frost-4', 'frost', 'Avalanche Run', '🏔️', 4, 'race', 'square', ['wind', 'falling', 'rollers'], 'Race the gates while the mountain comes down.', { laps: 2 }),
+
+  // 2. Inferno Arena
+  g('inferno-1', 'inferno', 'Lava Hockey', '🔥', 1, 'goal', 'square', [], 'Hockey on obsidian. The ember puck burns.'),
+  g('inferno-2', 'inferno', 'Floor Is Lava', '🌋', 2, 'breaktiles', 'square', ['geysers'], 'Platforms crumble into lava. Stay on top.', { decay: 'ring' }),
+  g('inferno-3', 'inferno', 'Blast Zone', '💣', 3, 'throwfight', 'square', ['geysers', 'falling'], 'Grab bombs. Big blasts, big knockback.', { proj: 'bomb' }),
+  g('inferno-4', 'inferno', 'Volcano Rush', '🌪️', 4, 'race', 'square', ['geysers', 'falling', 'rollers'], 'Race the crater while it erupts.', { laps: 2 }),
+
+  // 3. Dune Clash
+  g('dune-1', 'dune', 'Sand Soccer', '⚽', 1, 'goal', 'square', [], 'Soccer on drifting sand. Guard your goal line.'),
+  g('dune-2', 'dune', 'Shifting Sands', '⏳', 2, 'breaktiles', 'square', ['wind'], 'Tiles sink into the dunes... then resurface.', { decay: 'respawn' }),
+  g('dune-3', 'dune', 'Cactus Chaos', '🌵', 3, 'pushout', 'circle', ['wind', 'falling'], 'Shove rivals into the cactus ring.', { edge: 'cacti' }),
+  g('dune-4', 'dune', 'Oasis Dash', '🏝️', 4, 'race', 'square', ['wind', 'falling', 'rollers'], 'Sprint gate to gate through the sandstorm.', { laps: 2 }),
+
+  // 4. Wildwood Arena
+  g('wild-1', 'wildwood', 'Tree Top Tumble', '🍃', 1, 'pushout', 'circle', [], 'Push rivals off the shrinking canopy platform.'),
+  g('wild-2', 'wildwood', 'Rolling Logs', '🪵', 2, 'dodge', 'square', [], 'Logs sweep the grove. Jump or be flattened.', { hz: 'logs' }),
+  g('wild-3', 'wildwood', 'Poison Pond', '🐸', 3, 'breaktiles', 'square', ['falling'], 'Lilypads rot away over the poison pond.', { decay: 'ring', pond: true }),
+  g('wild-4', 'wildwood', 'Jungle Race', '🦜', 4, 'race', 'square', ['falling', 'rollers'], 'Race the ruins as branches crash down.', { laps: 2 }),
+
+  // 5. Sky Island Arena
+  g('sky-1', 'sky', 'Cloud Soccer', '🥅', 1, 'goal', 'square', [], 'Soccer above the clouds. Light, floaty ball.'),
+  g('sky-2', 'sky', 'Falling Platform', '🪂', 2, 'breaktiles', 'square', ['wind'], 'Sky tiles drop into the void one by one.', { decay: 'ring' }),
+  g('sky-3', 'sky', 'Wind Gauntlet', '💨', 3, 'dodge', 'square', ['falling'], 'Gale-force wind drags you toward the edge.', { hz: 'wind' }),
+  g('sky-4', 'sky', 'Sky Race', '🕊️', 4, 'race', 'square', ['wind', 'falling'], 'Gate to gate across the floating island.', { laps: 2 }),
+
+  // 6. Mech Factory
+  g('mech-1', 'mech', 'Gear Bash', '🔩', 1, 'pushout', 'circle', [], 'Rotating gear arms sweep the platform.', { edge: 'gears' }),
+  g('mech-2', 'mech', 'Laser Dodge', '🔴', 2, 'dodge', 'square', [], 'Sweeping factory lasers. Don’t get tagged.', { hz: 'lasers' }),
+  g('mech-3', 'mech', 'Robot Rumble', '🤖', 3, 'mash', 'square', ['lasers'], 'Smash the scurrying repair-bots for points.', { robots: true }),
+  g('mech-4', 'mech', 'Conveyor Chaos', '🏭', 4, 'dodge', 'square', ['lasers'], 'Belts drag you into the crushers. Fight the flow.', { hz: 'conveyor' }),
+
+  // 7. Pirate Cove
+  g('pirate-1', 'pirate', 'Cannon Blast', '💥', 1, 'throwfight', 'square', [], 'Grab cannonballs, sink your rivals.', { proj: 'cannon' }),
+  g('pirate-2', 'pirate', 'Sinking Ship', '🚢', 2, 'breaktiles', 'square', ['falling'], 'The deck breaks from the bow. Find safe planks.', { decay: 'side' }),
+  g('pirate-3', 'pirate', 'Treasure Scramble', '🪙', 3, 'collect', 'square', ['falling'], 'Doubloons rain down. Grab the most.', { coin: true }),
+  g('pirate-4', 'pirate', 'Pirate Race', '⛵', 4, 'race', 'square', ['falling', 'rollers'], 'Race the cove through cannon fire and barrels.', { laps: 2 }),
+
+  // Classic Arena (the original prototype modes, kept as a bonus family)
+  g('classic-1', 'classic', 'Ring Rumble', '💥', 1, 'pushout', 'circle', [], 'Bump rivals off a shrinking neon ring.'),
+  g('classic-2', 'classic', 'Gem Grab', '💎', 1, 'collect', 'square', [], 'Gems rain in. Grab the most in 60 seconds.'),
+  g('classic-3', 'classic', 'Paint Panic', '🎨', 1, 'paint', 'square', [], 'Claim floor tiles in your color.'),
+  g('classic-4', 'classic', 'Crate Brawl', '📦', 2, 'throwfight', 'square', [], 'Grab & hurl crates. Last basher standing.', { proj: 'crate' }),
+  g('classic-5', 'classic', 'Mallet Mash', '🔨', 1, 'mash', 'square', [], 'Smash pop-up targets. Golden ones score big.'),
+
+  // Lab
+  g('lab-1', 'lab', 'Surface Lab', '🧪', 1, 'lab', 'square', [], 'Metal · ice · mud · sand quadrants + a conveyor strip.'),
+];
+
+export function gameById(id: string): GameDef {
+  return GAMES.find((x) => x.id === id) ?? GAMES[0];
+}
+export function familyById(id: string): FamilyDef {
+  return FAMILIES.find((f) => f.id === id) ?? FAMILIES[0];
+}
+export function familyGames(familyId: string): GameDef[] {
+  return GAMES.filter((x) => x.familyId === familyId);
 }

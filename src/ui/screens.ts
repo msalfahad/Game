@@ -1,18 +1,18 @@
 import { HEROES, heroImg, type Hero } from '../data/characters';
-import { FROSTBITE_MAPS, GREYBOX_MAP, type MapDef } from '../data/maps';
+import { FAMILIES, familyGames, gameById, type GameDef } from '../data/maps';
 import type { Player } from '../game/player';
+import { TUNING, saveTuning, resetTuning } from '../core/tuning';
 
-// Front-end screen flow (SPEC section 8): title -> character select ->
-// game/map picker -> versus -> results. Screens are injected into #screens and
-// toggled by id. Gameplay selection is reported back through callbacks.
+// Screen flow (SPEC section 8): title -> hero select -> FAMILY picker ->
+// game picker (4 per family) -> versus -> results, plus a live tuning drawer
+// for balancing the game before release.
 
 export type Diff = 'easy' | 'normal' | 'hard' | 'expert';
 
 export interface Selection {
   hero: Hero;
   diff: Diff;
-  mapId: string;
-  gameId: 'hockey' | 'surfacelab';
+  gameId: string;
 }
 
 interface Hooks {
@@ -24,10 +24,9 @@ interface Hooks {
 const root = document.getElementById('screens')!;
 let sel: Hero = HEROES[0];
 let diff: Diff = 'normal';
-let chosenMapId = FROSTBITE_MAPS[0].id;
-let chosenGame: Selection['gameId'] = 'hockey';
+let chosenGameId = 'frost-1';
 
-const ids = ['scrTitle', 'scrChar', 'scrGames', 'scrVs', 'scrOver'];
+const ids = ['scrTitle', 'scrChar', 'scrFamilies', 'scrGames', 'scrVs', 'scrOver'];
 export function show(id: string) {
   for (const s of ids) document.getElementById(s)?.classList.add('hidden');
   document.getElementById(id)?.classList.remove('hidden');
@@ -41,8 +40,9 @@ export function buildScreens(hooks: Hooks) {
   root.innerHTML = `
   <div id="scrTitle" class="screen hidden">
     <h1>BASH<br>ARENA</h1>
-    <p class="tag">Original 2-4 player arcade brawler. Themed 3D arenas, invisible-stick controls, you vs 3 bots. Touch the left side to move, tap the right for your ultimate ⚡. Keyboard: WASD/arrows, Space = ⚡, Shift = jump. Gamepad supported.</p>
+    <p class="tag">Original 2-4 player arcade brawler · ${countGames()} mini-games across ${FAMILIES.length - 1} themed worlds. Touch left side to move, tap right for ⚡. Keyboard: WASD/arrows · Space = ⚡ · Shift = jump. Gamepad supported.</p>
     <button class="big" data-go="scrChar">PLAY</button>
+    <button class="alt" id="tuneBtn">⚙️ TUNING</button>
     <div class="settingRow"><span>CAMERA SHAKE</span><input id="shakeSlider" type="range" min="0" max="100" value="100"></div>
     <div class="settingRow"><span>QUALITY</span>
       <select id="qualitySel">
@@ -62,13 +62,20 @@ export function buildScreens(hooks: Hooks) {
       <div class="diff" data-d="hard">HARD</div>
       <div class="diff" data-d="expert">EXPERT</div>
     </div>
-    <button class="big" data-go="scrGames">NEXT ▶</button>
+    <button class="big" data-go="scrFamilies">NEXT ▶</button>
+  </div>
+
+  <div id="scrFamilies" class="screen hidden">
+    <h2>PICK A WORLD</h2>
+    <div class="famGrid" id="famGrid"></div>
+    <button class="alt" data-go="scrChar">◀ BACK</button>
   </div>
 
   <div id="scrGames" class="screen hidden">
-    <h2>PICK A GAME</h2>
+    <h2 id="famTitle">GAMES</h2>
+    <p class="tag" id="famBlurb"></p>
     <div class="gameRow" id="gameRow"></div>
-    <button class="alt" data-go="scrChar">◀ BACK</button>
+    <button class="alt" data-go="scrFamilies">◀ WORLDS</button>
   </div>
 
   <div id="scrVs" class="screen hidden">
@@ -76,7 +83,7 @@ export function buildScreens(hooks: Hooks) {
     <div class="vsRow" id="vsRow"></div>
     <p class="tag" id="vsMap"></p>
     <button class="big" id="startBtn">START ▶</button>
-    <button class="alt" data-go="scrGames">◀ BACK</button>
+    <button class="alt" id="vsBack">◀ BACK</button>
   </div>
 
   <div id="scrOver" class="screen hidden">
@@ -84,14 +91,30 @@ export function buildScreens(hooks: Hooks) {
     <p class="tag" id="overSub"></p>
     <div id="resList"></div>
     <button class="big" id="rematchBtn">REMATCH</button>
-    <button class="alt" data-go="scrGames">OTHER GAMES</button>
+    <button class="alt" id="overGames">OTHER GAMES</button>
+  </div>
+
+  <div id="tuneDrawer" class="hidden">
+    <h3>⚙️ LIVE TUNING</h3>
+    <p class="tinyTag">Balance the game — applies to the next match. Saved on this device.</p>
+    <div class="tuneRow"><span>MATCH LENGTH</span><input data-k="timeScale" type="range" min="50" max="150" step="5"><em></em></div>
+    <div class="tuneRow"><span>HAZARDS</span><input data-k="hazardScale" type="range" min="0" max="200" step="10"><em></em></div>
+    <div class="tuneRow"><span>POWER-UPS</span><input data-k="powerupScale" type="range" min="0" max="200" step="10"><em></em></div>
+    <div class="tuneRow"><span>MOVE SPEED</span><input data-k="speedScale" type="range" min="80" max="130" step="5"><em></em></div>
+    <div class="tuneRow"><span>BOT SKILL</span><input data-k="botScale" type="range" min="50" max="130" step="5"><em></em></div>
+    <div style="display:flex;gap:8px;justify-content:center">
+      <button class="alt" id="tuneReset">RESET</button>
+      <button id="tuneClose">DONE</button>
+    </div>
   </div>`;
 
   // Title settings.
   const shake = document.getElementById('shakeSlider') as HTMLInputElement;
   shake.addEventListener('input', () => hooks.onShakeChange(Number(shake.value) / 100));
   const quality = document.getElementById('qualitySel') as HTMLSelectElement;
-  quality.addEventListener('change', () => hooks.onQualityChange(quality.value as any));
+  quality.addEventListener('change', () => hooks.onQualityChange(quality.value as 'low' | 'medium' | 'high' | 'ultra'));
+
+  buildTuning();
 
   // Character grid.
   const grid = document.getElementById('charGrid')!;
@@ -117,20 +140,72 @@ export function buildScreens(hooks: Hooks) {
     }),
   );
 
-  // Game / map picker.
-  buildGameRow();
+  // Family cards.
+  const fam = document.getElementById('famGrid')!;
+  for (const f of FAMILIES) {
+    if (f.id === 'lab') continue;
+    const d = document.createElement('div');
+    d.className = 'famCard';
+    d.innerHTML = `<div class="fi">${f.icon}</div><div class="fn">${f.name.toUpperCase()}</div><div class="fd">${familyGames(f.id).length} games</div>`;
+    d.onclick = () => openFamily(f.id);
+    fam.appendChild(d);
+  }
+  // Lab as a slim extra card.
+  const lab = document.createElement('div');
+  lab.className = 'famCard lab';
+  lab.innerHTML = `<div class="fi">🧪</div><div class="fn">SURFACE LAB</div><div class="fd">movement test</div>`;
+  lab.onclick = () => {
+    chosenGameId = 'lab-1';
+    toVersus();
+  };
+  fam.appendChild(lab);
 
   // Nav buttons.
   root.querySelectorAll('[data-go]').forEach((b) =>
     b.addEventListener('click', () => show((b as HTMLElement).dataset.go!)),
   );
+  document.getElementById('vsBack')!.addEventListener('click', () => openFamily(gameById(chosenGameId).familyId));
+  document.getElementById('overGames')!.addEventListener('click', () => openFamily(gameById(chosenGameId).familyId));
 
   document.getElementById('startBtn')!.addEventListener('click', () =>
-    hooks.onStart({ hero: sel, diff, mapId: chosenMapId, gameId: chosenGame }),
+    hooks.onStart({ hero: sel, diff, gameId: chosenGameId }),
   );
   document.getElementById('rematchBtn')!.addEventListener('click', () =>
-    hooks.onStart({ hero: sel, diff, mapId: chosenMapId, gameId: chosenGame }),
+    hooks.onStart({ hero: sel, diff, gameId: chosenGameId }),
   );
+}
+
+function countGames(): number {
+  return FAMILIES.filter((f) => f.id !== 'lab').reduce((n, f) => n + familyGames(f.id).length, 0);
+}
+
+function buildTuning() {
+  const drawer = document.getElementById('tuneDrawer')!;
+  document.getElementById('tuneBtn')!.addEventListener('click', () => drawer.classList.toggle('hidden'));
+  document.getElementById('tuneClose')!.addEventListener('click', () => drawer.classList.add('hidden'));
+  const rows = Array.from(drawer.querySelectorAll('.tuneRow')) as HTMLElement[];
+  const sync = () => {
+    for (const row of rows) {
+      const input = row.querySelector('input') as HTMLInputElement;
+      const k = input.dataset.k as keyof typeof TUNING;
+      input.value = String(Math.round((TUNING[k] as number) * 100));
+      (row.querySelector('em') as HTMLElement).textContent = input.value + '%';
+    }
+  };
+  for (const row of rows) {
+    const input = row.querySelector('input') as HTMLInputElement;
+    const k = input.dataset.k as keyof typeof TUNING;
+    input.addEventListener('input', () => {
+      (TUNING[k] as number) = Number(input.value) / 100;
+      (row.querySelector('em') as HTMLElement).textContent = input.value + '%';
+      saveTuning();
+    });
+  }
+  document.getElementById('tuneReset')!.addEventListener('click', () => {
+    resetTuning();
+    sync();
+  });
+  sync();
 }
 
 function updInfo() {
@@ -139,42 +214,23 @@ function updInfo() {
     `${sel.name.toUpperCase()} · ${sel.role} — SPD ${sel.spd} · STR ${sel.str} · ACC ${sel.acc} · DEF ${sel.def} · ULT: ${sel.ultName}`;
 }
 
-function gameButton(icon: string, name: string, desc: string, onClick: () => void, locked = false) {
-  const d = document.createElement('div');
-  d.className = 'gameBtn' + (locked ? ' locked' : '');
-  d.innerHTML = `<div class="ico">${icon}</div><div><div class="nm">${name}</div><div class="ds">${desc}</div></div>`;
-  if (!locked) d.addEventListener('click', onClick);
-  return d;
-}
-
-function buildGameRow() {
+function openFamily(familyId: string) {
+  const f = FAMILIES.find((x) => x.id === familyId)!;
+  document.getElementById('famTitle')!.textContent = `${f.icon} ${f.name.toUpperCase()}`;
+  document.getElementById('famBlurb')!.textContent = f.blurb;
   const row = document.getElementById('gameRow')!;
   row.innerHTML = '';
-
-  // Surface Lab (movement greybox).
-  row.appendChild(
-    gameButton('🧪', 'SURFACE LAB', GREYBOX_MAP.blurb, () => {
-      chosenGame = 'surfacelab';
-      chosenMapId = GREYBOX_MAP.id;
+  for (const gm of familyGames(familyId)) {
+    const d = document.createElement('div');
+    d.className = 'gameBtn';
+    d.innerHTML = `<div class="ico">${gm.icon}</div><div><div class="nm">${gm.name.toUpperCase()} <span class="tier">T${gm.tier} · ${gm.tierName}</span></div><div class="ds">${gm.blurb}</div></div>`;
+    d.addEventListener('click', () => {
+      chosenGameId = gm.id;
       toVersus();
-    }),
-  );
-
-  // Frostbite family — Ice Hockey Brawl across the 4 difficulty-ramp maps.
-  FROSTBITE_MAPS.forEach((m) => {
-    row.appendChild(
-      gameButton('🏒', `HOCKEY · ${m.name.toUpperCase()}`, `${m.tierName} (tier ${m.tier}) — ${m.blurb}`, () => {
-        chosenGame = 'hockey';
-        chosenMapId = m.id;
-        toVersus();
-      }),
-    );
-  });
-
-  // Signposts for the rest of the family / other families (SPEC scope).
-  ['Slip & Slide', 'Snowball Smash', 'Avalanche Run'].forEach((n) =>
-    row.appendChild(gameButton('❄️', n.toUpperCase(), 'Frostbite family — coming next', () => {}, true)),
-  );
+    });
+    row.appendChild(d);
+  }
+  show('scrGames');
 }
 
 function toVersus() {
@@ -197,9 +253,10 @@ function toVersus() {
     d.innerHTML = `<img src="${heroImg(p.hero)}"><div class="n" style="color:${p.hero.col}">${p.hero.name.toUpperCase()}${p.you ? '<br>(YOU)' : ''}</div>`;
     row.appendChild(d);
   });
-  const map = [GREYBOX_MAP, ...FROSTBITE_MAPS].find((m) => m.id === chosenMapId) as MapDef;
-  document.getElementById('vsTitle')!.textContent = chosenGame === 'hockey' ? 'ICE HOCKEY BRAWL' : 'SURFACE LAB';
-  document.getElementById('vsMap')!.textContent = `📍 ${map.family} · ${map.name} · ${map.tierName}`;
+  const gm: GameDef = gameById(chosenGameId);
+  const f = FAMILIES.find((x) => x.id === gm.familyId)!;
+  document.getElementById('vsTitle')!.textContent = gm.name.toUpperCase();
+  document.getElementById('vsMap')!.textContent = `📍 ${f.name} · Tier ${gm.tier} (${gm.tierName}) · ${gm.blurb}`;
   show('scrVs');
 }
 

@@ -1,7 +1,7 @@
 import type * as THREE from 'three';
 import type { Player } from './player';
 import type { World } from './world';
-import type { MapDef } from '../data/maps';
+import type { FamilyDef, GameDef } from '../data/maps';
 import type { Input } from '../core/input';
 import type { IsoCamera } from '../core/camera';
 import type { Hazards } from './hazards';
@@ -29,14 +29,24 @@ export const DIFFICULTY: Record<string, DiffParams> = {
   expert: { cap: 0.95, err: 0.03, lapse: 0.08 },
 };
 
+/** A Phantom Clone decoy bots will chase while it lasts. */
+export interface Decoy {
+  x: number;
+  z: number;
+  t: number;
+  sprite: THREE.Sprite;
+}
+
 // Everything a game module needs from the match.
 export interface MatchContext {
   scene: THREE.Scene;
   camera: IsoCamera;
   world: World;
   hazards: Hazards;
-  map: MapDef;
+  game: GameDef;
+  family: FamilyDef;
   players: Player[];
+  decoys: Decoy[];
   input: Input;
   diff: DiffParams;
   fx: Fx;
