@@ -1,7 +1,8 @@
 # Deploy Bash Arena to GitHub Pages so you can preview the game from any
 # device (phone/tablet/desktop) at your Pages URL.
 #
-# One-time setup: repo Settings -> Pages -> Source: "GitHub Actions".
+# The configure-pages step provisions the Pages site automatically on first
+# run (Settings -> Pages will show Source: "GitHub Actions" afterwards).
 
 name: Deploy to GitHub Pages
 
@@ -24,6 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/setup-node@v4
         with:
           node-version: 20
