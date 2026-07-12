@@ -4,6 +4,8 @@ import { SFX } from './core/audio';
 import { loadTuning } from './core/tuning';
 import { Match } from './game/match';
 import { buildScreens, show, hideScreens, showResults } from './ui/screens';
+import { buildOnlineScreens, enterOnline, showOnlineResults } from './ui/online';
+import { OnlineMatch } from './net/onlinematch';
 
 // Boot: engine + input + match controller, screen flow, tuning, title.
 
@@ -26,6 +28,18 @@ buildScreens({
   onShakeChange: (v) => match.setShakeScale(v),
   onQualityChange: (t) => match.setQuality(t),
 });
+
+// Online play: sign in once, then quick play or party rooms.
+let online: OnlineMatch | null = null;
+buildOnlineScreens({
+  onMatchStart: (m) => {
+    match.stop();
+    online?.stop();
+    online = new OnlineMatch(engine, input, (end, youSlot) => showOnlineResults(end, youSlot));
+    online.start(m);
+  },
+});
+document.getElementById('onlineBtn')!.addEventListener('click', () => enterOnline());
 
 // Mute toggle.
 const muteBtn = document.getElementById('mute')!;

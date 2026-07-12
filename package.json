@@ -12,6 +12,7 @@
     "build:single": "npm run build && node scripts/build-single.mjs"
   },
   "dependencies": {
+    "socket.io-client": "^4.8.3",
     "three": "^0.160.0"
   },
   "devDependencies": {

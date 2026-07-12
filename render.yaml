@@ -1,0 +1,19 @@
+# One-click deploy blueprint for Render (https://render.com).
+# Creates a single web service that runs the multiplayer server AND serves
+# the game client, so the whole thing lives at one URL.
+#
+# How to use: push this repo, then in Render choose "New +" -> "Blueprint",
+# pick this repo, and deploy. Free plan works for playtesting (the instance
+# sleeps after idle periods and account data resets on redeploy).
+
+services:
+  - type: web
+    name: bash-arena
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build && cd server && npm ci && npm run build
+    startCommand: node server/dist/index.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: '20'

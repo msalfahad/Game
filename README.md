@@ -63,6 +63,38 @@ npm run build:single  # dist/bash-arena-single.html — ONE self-contained file,
 push. One-time setup: repo **Settings → Pages → Source: GitHub Actions**. Then
 play at `https://<user>.github.io/<repo>/` from any phone/tablet/desktop.
 
+## Multiplayer (online play)
+
+The `server/` folder is a Node + Socket.IO multiplayer server:
+
+- **Accounts** — pick a username once; a private device token stored in the
+  browser is your sign-in. XP / games / wins tracked per account.
+- **Quick Play** — press 🌐 PLAY ONLINE → QUICK PLAY: you join a queue; when 4
+  players gather (or after 12 s) a match starts on a random online map, with
+  **bots filling empty seats**. A dropped player's seat becomes a bot.
+- **Party rooms** — CREATE PARTY gives a 4-letter code; friends JOIN PARTY
+  with the code; the host starts the match.
+- **Netcode** — the server runs an authoritative 20 Hz simulation; clients
+  send inputs at 30 Hz, predict their own hero locally, and interpolate
+  rivals ~120 ms behind. Online v1 covers the pushout games (Ring Rumble,
+  Tree Top Tumble); the other mechanics come next.
+
+Run it locally (serves the game AND the server on one port):
+
+```bash
+npm run build            # build the client
+cd server && npm install && npm run build && npm start
+# open http://localhost:3001
+```
+
+Deploy for friends: push to GitHub, then on [Render](https://render.com) choose
+**New + → Blueprint** and pick this repo (`render.yaml` configures everything;
+free plan works for playtesting). You get a URL like
+`https://bash-arena.onrender.com` — share that link and everyone plays there.
+Playing from GitHub Pages instead? Open the Pages URL once as
+`https://<user>.github.io/Game/?server=https://your-app.onrender.com` — the
+server address is remembered on that device.
+
 ## Path to the app stores
 
 The game is a standard web app, so the proven route is:
