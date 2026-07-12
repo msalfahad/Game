@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Bash Arena</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/ui/styles.css" />
+</head>
+<body>
+  <div id="loading">LOADING ARENA…</div>
+
+  <!-- In-match HUD -->
+  <div id="hudHeads" class="hidden"></div>
+  <div id="clock" class="hidden">2:00</div>
+  <div id="objective" class="hidden"></div>
+  <div id="mute" class="hidden">🔊</div>
+  <div id="banner"></div>
+  <div id="abilityHint">⚡</div>
+
+  <!-- Invisible / floating analog stick -->
+  <div id="stickBase"></div>
+  <div id="stickKnob"></div>
+
+  <!-- Screens are injected by src/ui/screens.ts -->
+  <div id="screens"></div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

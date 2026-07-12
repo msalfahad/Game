@@ -1,0 +1,21 @@
+{
+  "name": "bash-arena",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Bash Arena — original 2-4 player arcade party game. Greybox foundation: core movement, surfaces, isometric camera, and the Frostbite family (Ice Hockey Brawl) end-to-end vs bots.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.160.0",
+    "typescript": "^5.4.0",
+    "vite": "^5.2.0"
+  }
+}
