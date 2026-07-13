@@ -20,15 +20,19 @@ export interface QueueUpdateMsg {
   botFillInSec: number;
 }
 
+export type MatchMode = 'ffa' | '2v2';
+
 export interface RoomPlayerInfo {
   name: string;
   heroKey: string;
   host: boolean;
   bot: boolean;
+  team: number;
   you?: boolean;
 }
 export interface RoomUpdateMsg {
   code: string;
+  mode: MatchMode;
   players: RoomPlayerInfo[];
 }
 
@@ -37,9 +41,11 @@ export interface MatchPlayerInfo {
   name: string;
   heroKey: string;
   bot: boolean;
+  team: number;
 }
 export interface MatchStartMsg {
   gameId: string;
+  mode: MatchMode;
   players: MatchPlayerInfo[];
   youSlot: number;
   duration: number;
@@ -71,5 +77,7 @@ export interface StateMsg {
 }
 
 export interface MatchEndMsg {
-  ranking: { slot: number; name: string; heroKey: string; lives: number; dead: boolean }[];
+  mode: MatchMode;
+  winnerTeam: number; // -1 in FFA
+  ranking: { slot: number; name: string; heroKey: string; lives: number; dead: boolean; team: number }[];
 }

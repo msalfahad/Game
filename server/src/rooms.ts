@@ -2,7 +2,7 @@ import type { Socket } from 'socket.io';
 import { MatchSim, type MatchSeat } from './sim.js';
 import { recordResult, type Account } from './accounts.js';
 import { HEROES } from './heroes.js';
-import { MAX_PLAYERS, ONLINE_GAMES, type MatchStartMsg, type QueueUpdateMsg, type RoomUpdateMsg } from './protocol.js';
+import { MAX_PLAYERS, ONLINE_GAMES, type MatchMode, type MatchStartMsg, type QueueUpdateMsg, type RoomUpdateMsg } from './protocol.js';
 
 // Party rooms (4-letter codes) + the quick-play queue. Both feed the same
 // match starter; empty seats are filled with bots (SPEC section 2). A match
@@ -14,6 +14,7 @@ interface Session {
   socket: Socket;
   account: Account;
   heroKey: string;
+  team: number; // 0 | 1, used when the room is in 2v2 mode
   roomCode: string | null;
   inQueue: boolean;
   match: MatchSim | null;
@@ -23,6 +24,7 @@ interface Room {
   code: string;
   hostId: string; // socket id
   members: string[]; // socket ids, insertion order
+  mode: MatchMode;
   started: boolean;
 }
 
@@ -40,6 +42,7 @@ export class Lobby {
       socket,
       account,
       heroKey: HEROES[0].key,
+      team: 0,
       roomCode: null,
       inQueue: false,
       match: null,
@@ -115,8 +118,9 @@ export class Lobby {
     do {
       code = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random() * 24)]).join('');
     } while (this.rooms.has(code));
-    this.rooms.set(code, { code, hostId: socketId, members: [socketId], started: false });
+    this.rooms.set(code, { code, hostId: socketId, members: [socketId], mode: 'ffa', started: false });
     s.roomCode = code;
+    s.team = 0;
     this.broadcastRoom(code);
     return code;
   }
@@ -130,8 +134,34 @@ export class Lobby {
     this.leaveRoom(socketId);
     room.members.push(socketId);
     s.roomCode = code;
+    // Alternate default teams so a fresh 2v2 lobby is already balanced.
+    s.team = (room.members.length - 1) % 2;
     this.broadcastRoom(code);
     return code;
+  }
+
+  /** Host switches the room between free-for-all and 2v2. */
+  setRoomMode(socketId: string, mode: MatchMode) {
+    const s = this.sessions.get(socketId);
+    if (!s || !s.roomCode) return;
+    const room = this.rooms.get(s.roomCode);
+    if (!room || room.hostId !== socketId || room.started) return;
+    if (mode !== 'ffa' && mode !== '2v2') return;
+    room.mode = mode;
+    this.broadcastRoom(room.code);
+  }
+
+  /** A member hops to the other team (if it has space). */
+  toggleTeam(socketId: string) {
+    const s = this.sessions.get(socketId);
+    if (!s || !s.roomCode) return;
+    const room = this.rooms.get(s.roomCode);
+    if (!room || room.started) return;
+    const target = s.team === 0 ? 1 : 0;
+    const onTarget = room.members.filter((id) => this.sessions.get(id)?.team === target).length;
+    if (onTarget >= 2) return; // team is full
+    s.team = target;
+    this.broadcastRoom(room.code);
   }
 
   leaveRoom(socketId: string) {
@@ -156,13 +186,14 @@ export class Lobby {
     if (!room || room.hostId !== socketId || room.started) return;
     room.started = true;
     const members = [...room.members];
+    const mode = room.mode;
     // The room is consumed; players return to a fresh lobby after the match.
     for (const id of members) {
       const m = this.sessions.get(id);
       if (m) m.roomCode = null;
     }
     this.rooms.delete(room.code);
-    this.startMatch(members);
+    this.startMatch(members, mode);
   }
 
   private broadcastRoom(code: string) {
@@ -171,6 +202,7 @@ export class Lobby {
     for (const viewerId of room.members) {
       const msg: RoomUpdateMsg = {
         code,
+        mode: room.mode,
         players: room.members.map((id) => {
           const m = this.sessions.get(id)!;
           return {
@@ -178,6 +210,7 @@ export class Lobby {
             heroKey: m.heroKey,
             host: id === room.hostId,
             bot: false,
+            team: m.team,
             you: id === viewerId,
           };
         }),
@@ -187,7 +220,7 @@ export class Lobby {
   }
 
   // --- match lifecycle --------------------------------------------------------
-  private startMatch(socketIds: string[]) {
+  private startMatch(socketIds: string[], mode: MatchMode = 'ffa') {
     const humans = socketIds
       .map((id) => this.sessions.get(id))
       .filter((s): s is Session => !!s);
@@ -198,11 +231,12 @@ export class Lobby {
       s.roomCode = null;
     }
 
-    // Seats: humans first, bots (distinct heroes) fill the rest.
+    // Seats: humans first (keeping their chosen teams), bots fill the rest.
     const seats: MatchSeat[] = humans.map((s) => ({
       socketId: s.socket.id,
       name: s.account.name,
       heroKey: s.heroKey,
+      team: mode === '2v2' ? s.team : 0,
     }));
     const usedHeroes = new Set(seats.map((s) => s.heroKey));
     const botPool = HEROES.filter((h) => !usedHeroes.has(h.key));
@@ -212,13 +246,34 @@ export class Lobby {
     }
     while (seats.length < MAX_PLAYERS) {
       const h = botPool.pop() ?? HEROES[Math.floor(Math.random() * HEROES.length)];
-      seats.push({ socketId: null, name: h.name + ' (bot)', heroKey: h.key });
+      // 2v2: each bot joins whichever team is currently smaller.
+      const team0 = seats.filter((s) => s.team === 0).length;
+      seats.push({
+        socketId: null,
+        name: h.name + ' (bot)',
+        heroKey: h.key,
+        team: mode === '2v2' ? (team0 <= seats.length - team0 ? 0 : 1) : 0,
+      });
+    }
+    if (mode === '2v2') {
+      // Safety: exactly two per team, even if humans stacked one side.
+      let t0 = seats.filter((s) => s.team === 0).length;
+      for (const seat of [...seats].reverse()) {
+        if (t0 <= 2) break;
+        if (seat.team === 0 && seat.socketId === null) { seat.team = 1; t0--; }
+      }
+      let t1 = seats.filter((s) => s.team === 1).length;
+      for (const seat of [...seats].reverse()) {
+        if (t1 <= 2) break;
+        if (seat.team === 1 && seat.socketId === null) { seat.team = 0; t1--; }
+      }
     }
 
     const gameId = ONLINE_GAMES[Math.floor(Math.random() * ONLINE_GAMES.length)];
 
     const sim = new MatchSim(
       seats,
+      mode,
       (socketId, msg) => this.sessions.get(socketId)?.socket.emit('state', msg),
       (endMsg) => {
         const winnerSlot = endMsg.ranking[0]?.slot;
@@ -229,7 +284,8 @@ export class Lobby {
           sess.match = null;
           sess.socket.emit('match:end', endMsg);
           const mySlot = seats.indexOf(seat);
-          recordResult(sess.account.token, mySlot === winnerSlot);
+          const won = mode === '2v2' ? seat.team === endMsg.winnerTeam : mySlot === winnerSlot;
+          recordResult(sess.account.token, won);
         }
       },
     );
@@ -240,9 +296,16 @@ export class Lobby {
       if (!seat.socketId) return;
       const msg: MatchStartMsg = {
         gameId,
+        mode,
         youSlot: slot,
         duration: 90,
-        players: seats.map((s2, i) => ({ slot: i, name: s2.name, heroKey: s2.heroKey, bot: s2.socketId === null })),
+        players: seats.map((s2, i) => ({
+          slot: i,
+          name: s2.name,
+          heroKey: s2.heroKey,
+          bot: s2.socketId === null,
+          team: mode === '2v2' ? s2.team : i,
+        })),
       };
       this.sessions.get(seat.socketId)?.socket.emit('match:start', msg);
     });

@@ -140,6 +140,14 @@ button.big { width: 100%; max-width: 280px; }
 .famCard.lab { opacity: .8; }
 .gameBtn .tier { font-size: 9px; color: var(--aqua); opacity: .9; margin-left: 4px; }
 
+/* Party team columns (2v2) */
+.teamCols { display: flex; gap: 14px; justify-content: center; }
+.teamCol { background: var(--panel); border-radius: 16px; padding: 10px 14px; min-width: 140px; min-height: 130px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.teamCol .teamName { font-family: 'Bungee', cursive; font-size: 12px; }
+#teamCol0 { border: 2px solid #4DC3FF55; }
+#teamCol1 { border: 2px solid #FF4D4D55; }
+
 /* Tuning drawer */
 #tuneDrawer { position: fixed; right: 12px; top: 12px; bottom: 12px; width: min(320px, 86vw); z-index: 40;
   background: rgba(13,16,38,.96); border: 2px solid var(--panel2); border-radius: 18px; padding: 16px;

@@ -105,6 +105,12 @@ export class Net {
   leaveRoom() {
     this.socket?.emit('room:leave');
   }
+  setRoomMode(mode: 'ffa' | '2v2') {
+    this.socket?.emit('room:mode', mode);
+  }
+  toggleTeam() {
+    this.socket?.emit('room:team');
+  }
   startRoom() {
     this.socket?.emit('room:start');
   }

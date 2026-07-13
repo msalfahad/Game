@@ -1,5 +1,5 @@
 import { heroByKey, speedMult, strengthMult, defenseMult, type HeroDef } from './heroes.js';
-import { TICK_RATE, type InputMsg, type MatchEndMsg, type PlayerState, type SimEvent, type StateMsg } from './protocol.js';
+import { TICK_RATE, type InputMsg, type MatchEndMsg, type MatchMode, type PlayerState, type SimEvent, type StateMsg } from './protocol.js';
 
 // Authoritative pushout simulation (Ring Rumble / Tree Top Tumble) at 20Hz.
 // Physics constants mirror the client's src/game/physics.ts + pushout.ts so
@@ -18,6 +18,7 @@ export interface SimPlayer {
   slot: number;
   socketId: string | null; // null = bot
   name: string;
+  team: number; // 0|1 in 2v2, slot in FFA (everyone their own team)
   hero: HeroDef;
   x: number; z: number; vx: number; vz: number; y: number; vy: number;
   face: { x: number; z: number };
@@ -38,6 +39,7 @@ export interface MatchSeat {
   socketId: string | null;
   name: string;
   heroKey: string;
+  team: number;
 }
 
 export class MatchSim {
@@ -51,15 +53,20 @@ export class MatchSim {
 
   constructor(
     seats: MatchSeat[],
+    private mode: MatchMode,
     private broadcast: (socketId: string, msg: StateMsg) => void,
     private onEnd: (msg: MatchEndMsg) => void,
   ) {
     this.players = seats.map((s, i) => {
-      const a = (i * Math.PI) / 2 + Math.PI / 4;
+      // 2v2 spawns teammates on the same side of the ring.
+      const a = this.mode === '2v2'
+        ? (s.team === 0 ? Math.PI * 0.75 : -Math.PI * 0.25) + (i % 2) * (Math.PI / 5)
+        : (i * Math.PI) / 2 + Math.PI / 4;
       return {
         slot: i,
         socketId: s.socketId,
         name: s.name,
+        team: this.mode === '2v2' ? s.team : i,
         hero: heroByKey(s.heroKey),
         x: Math.cos(a) * HALF * 0.5,
         z: Math.sin(a) * HALF * 0.5,
@@ -139,7 +146,8 @@ export class MatchSim {
     this.events = [];
 
     const alive = this.players.filter((p) => !p.dead);
-    if (this.timeLeft <= 0 || alive.length <= 1) this.finish();
+    const aliveTeams = new Set(alive.map((p) => p.team));
+    if (this.timeLeft <= 0 || aliveTeams.size <= 1) this.finish();
   }
 
   private move(p: SimPlayer, dt: number) {
@@ -187,7 +195,9 @@ export class MatchSim {
         if (rel < 0) {
           const powA = strengthMult(a.hero), powB = strengthMult(b.hero);
           const massA = defenseMult(a.hero), massB = defenseMult(b.hero);
-          const imp = -rel * 1.5;
+          // Teammates separate but barely shove each other (no friendly knockouts).
+          const friendly = a.team === b.team;
+          const imp = -rel * (friendly ? 0.2 : 1.5);
           const dampA = a.shieldT > 0 ? 0.5 : 1;
           const dampB = b.shieldT > 0 ? 0.5 : 1;
           a.vx -= (nx * imp * powB * dampA) / massA;
@@ -202,7 +212,8 @@ export class MatchSim {
   private fireUlt(p: SimPlayer) {
     if (p.cd > 0 || p.freezeT > 0) return;
     p.cd = ULT_CD;
-    const rivals = this.players.filter((q) => q !== p && !q.dead);
+    // Offensive ultimates only affect enemies (matters in 2v2).
+    const rivals = this.players.filter((q) => q !== p && !q.dead && q.team !== p.team);
     const near = (r: number) => rivals.filter((q) => Math.hypot(q.x - p.x, q.z - p.z) < r);
     const knock = (targets: SimPlayer[], impulse: number) => {
       const str = strengthMult(p.hero);
@@ -267,7 +278,7 @@ export class MatchSim {
       if (edge > this.ring * 0.72) {
         p.tx = 0; p.tz = 0;
       } else {
-        const foes = this.players.filter((q) => q !== p && !q.dead);
+        const foes = this.players.filter((q) => q !== p && !q.dead && q.team !== p.team);
         const t = foes[Math.floor(Math.random() * foes.length)];
         p.tx = t ? t.x : 0;
         p.tz = t ? t.z : 0;
@@ -312,9 +323,30 @@ export class MatchSim {
     if (this.ended) return;
     this.ended = true;
     this.stop();
+
+    // 2v2: the winning team is the one with living members, or (at timeout)
+    // the one with the most total remaining lives.
+    let winnerTeam = -1;
+    if (this.mode === '2v2') {
+      const score = (team: number) =>
+        this.players
+          .filter((p) => p.team === team)
+          .reduce((n, p) => n + (p.dead ? 0 : 100 + Math.max(p.lives, 0)), 0);
+      winnerTeam = score(0) >= score(1) ? 0 : 1;
+    }
+
+    const value = (p: SimPlayer) =>
+      (this.mode === '2v2' && p.team === winnerTeam ? 1000 : 0) + (p.dead ? -1 : p.lives);
     const ranking = [...this.players]
-      .sort((a, b) => (b.dead ? -1 : b.lives) - (a.dead ? -1 : a.lives))
-      .map((p) => ({ slot: p.slot, name: p.name, heroKey: p.hero.key, lives: Math.max(p.lives, 0), dead: p.dead }));
-    this.onEnd({ ranking });
+      .sort((a, b) => value(b) - value(a))
+      .map((p) => ({
+        slot: p.slot,
+        name: p.name,
+        heroKey: p.hero.key,
+        lives: Math.max(p.lives, 0),
+        dead: p.dead,
+        team: p.team,
+      }));
+    this.onEnd({ mode: this.mode, winnerTeam, ranking });
   }
 }

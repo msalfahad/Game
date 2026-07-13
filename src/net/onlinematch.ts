@@ -63,19 +63,33 @@ export class OnlineMatch {
     this.world = buildWorld(this.engine.scene, family, game, this.half);
     this.engine.camera.frame(this.half, 1.0);
 
+    const is2v2 = msg.mode === '2v2';
+    const TEAM_COLS = [0x4dc3ff, 0xff4d4d];
     this.players = msg.players.map((pi) => {
-      const p = new Player(heroByKey(pi.heroKey), pi.slot === msg.youSlot, pi.slot, 0);
-      const a = (pi.slot * Math.PI) / 2 + Math.PI / 4;
+      const p = new Player(heroByKey(pi.heroKey), pi.slot === msg.youSlot, pi.slot, (pi.team % 2) as 0 | 1);
+      const a = is2v2
+        ? (pi.team === 0 ? Math.PI * 0.75 : -Math.PI * 0.25) + (pi.slot % 2) * (Math.PI / 5)
+        : (pi.slot * Math.PI) / 2 + Math.PI / 4;
       p.x = Math.cos(a) * this.half * 0.5;
       p.z = Math.sin(a) * this.half * 0.5;
       p.lives = 3;
       p.buildRider(this.engine.scene);
+      if (is2v2) {
+        // Team colors on the ring + glow so sides read instantly.
+        (p.ring.material as THREE.MeshBasicMaterial).color.setHex(TEAM_COLS[pi.team]);
+        (p.glow.material as THREE.MeshBasicMaterial).color.setHex(TEAM_COLS[pi.team]);
+      }
       return p;
     });
 
     HUD.makeHeads(this.players, 3);
+    if (is2v2) {
+      for (const p of this.players) {
+        if (p.headEl) p.headEl.style.borderColor = '#' + TEAM_COLS[p.team].toString(16).padStart(6, '0');
+      }
+    }
     HUD.showHud(true);
-    HUD.setObjective(`${game.name} · ONLINE · shove them off!`);
+    HUD.setObjective(is2v2 ? `${game.name} · 2 VS 2 · knock the other team off!` : `${game.name} · ONLINE · shove them off!`);
     this.input.setEnabled(true);
     this.input.setMode('float');
 
@@ -85,7 +99,7 @@ export class OnlineMatch {
     this.running = true;
     // Debug/testing hook: current player positions as plain data.
     (window as any).__ONLINE_DEBUG = () =>
-      this.players.map((p) => ({ slot: p.index, x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10, dead: p.dead }));
+      this.players.map((p) => ({ slot: p.index, team: p.team, x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10, dead: p.dead }));
     SFX.unlock();
     SFX.start();
     HUD.banner(game.name + '!', '#' + new THREE.Color(family.theme.trim).getHexString());

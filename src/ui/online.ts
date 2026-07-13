@@ -54,7 +54,16 @@ export function buildOnlineScreens(h: OnlineHooks) {
     <h2>🎉 PARTY ROOM</h2>
     <h1 id="partyCode" style="letter-spacing:12px"></h1>
     <p class="tag">Share this code — friends tap JOIN PARTY and type it in. Empty seats become bots.</p>
+    <div class="diffRow" id="modeRow">
+      <div class="diff sel" data-mode="ffa">⚔️ FREE-FOR-ALL</div>
+      <div class="diff" data-mode="2v2">🤝 2 VS 2</div>
+    </div>
+    <div id="teamCols" class="teamCols hidden">
+      <div class="teamCol" id="teamCol0"><div class="teamName" style="color:#4DC3FF">TEAM BLUE</div></div>
+      <div class="teamCol" id="teamCol1"><div class="teamName" style="color:#FF4D4D">TEAM RED</div></div>
+    </div>
     <div class="vsRow" id="partyList"></div>
+    <button class="alt" id="teamSwitch" style="display:none">🔁 SWITCH TEAM</button>
     <button class="big" id="partyStart">START MATCH ▶</button>
     <button class="alt" id="partyLeave">LEAVE</button>
   </div>
@@ -115,6 +124,10 @@ export function buildOnlineScreens(h: OnlineHooks) {
     }
   });
   document.getElementById('partyStart')!.addEventListener('click', () => net.startRoom());
+  document.getElementById('teamSwitch')!.addEventListener('click', () => net.toggleTeam());
+  document.querySelectorAll('#modeRow .diff').forEach((d) =>
+    d.addEventListener('click', () => net.setRoomMode((d as HTMLElement).dataset.mode as 'ffa' | '2v2')),
+  );
   document.getElementById('partyLeave')!.addEventListener('click', () => {
     net.leaveRoom();
     showOnline('scrOnlineHome');
@@ -131,17 +144,43 @@ export function buildOnlineScreens(h: OnlineHooks) {
   };
   net.cb.onRoom = (m) => {
     document.getElementById('partyCode')!.textContent = m.code;
-    const list = document.getElementById('partyList')!;
-    list.innerHTML = '';
-    for (const p of m.players) {
+    const is2v2 = m.mode === '2v2';
+    const meHost = m.players.some((p) => p.you && p.host);
+
+    // Mode toggle: reflect server state; only the host can click it.
+    document.querySelectorAll('#modeRow .diff').forEach((d) => {
+      const el = d as HTMLElement;
+      el.classList.toggle('sel', el.dataset.mode === m.mode);
+      el.style.pointerEvents = meHost ? '' : 'none';
+      el.style.opacity = meHost || el.dataset.mode === m.mode ? '1' : '.4';
+    });
+
+    const makeCard = (p: (typeof m.players)[0]) => {
       const hh = HEROES.find((x) => x.key === p.heroKey) ?? HEROES[0];
       const d = document.createElement('div');
       d.className = 'vsCard' + (p.you ? ' you' : '');
       d.innerHTML = `<img src="${heroImg(hh)}"><div class="n" style="color:${hh.col}">${p.name}${p.host ? ' 👑' : ''}${p.you ? '<br>(YOU)' : ''}</div>`;
-      list.appendChild(d);
+      return d;
+    };
+
+    const flat = document.getElementById('partyList')!;
+    const cols = document.getElementById('teamCols')!;
+    flat.innerHTML = '';
+    cols.classList.toggle('hidden', !is2v2);
+    flat.classList.toggle('hidden', is2v2);
+    (document.getElementById('teamSwitch') as HTMLElement).style.display = is2v2 ? '' : 'none';
+
+    if (is2v2) {
+      for (const t of [0, 1]) {
+        const col = document.getElementById('teamCol' + t)!;
+        col.querySelectorAll('.vsCard').forEach((e) => e.remove());
+        for (const p of m.players.filter((q) => q.team === t)) col.appendChild(makeCard(p));
+      }
+    } else {
+      for (const p of m.players) flat.appendChild(makeCard(p));
     }
+
     const start = document.getElementById('partyStart') as HTMLButtonElement;
-    const meHost = m.players.some((p) => p.you && p.host);
     start.style.display = meHost ? '' : 'none';
   };
   net.cb.onMatchStart = (m) => {
@@ -198,10 +237,19 @@ function refreshWho() {
   if (el && net.me) el.textContent = `Signed in as ${net.me.name} · ${net.me.xp} XP · ${net.me.wins} wins in ${net.me.games} games`;
 }
 
+const TEAM_NAMES = ['TEAM BLUE', 'TEAM RED'];
+const TEAM_COLS = ['#4DC3FF', '#FF4D4D'];
+
 /** Results screen for online matches. */
 export function showOnlineResults(m: MatchEndMsg, youSlot: number) {
-  const youWon = m.ranking[0]?.slot === youSlot;
-  document.getElementById('onlineOverTitle')!.textContent = youWon ? '🏆 YOU WIN!' : 'RESULTS';
+  const youEntry = m.ranking.find((r) => r.slot === youSlot);
+  const youWon = m.mode === '2v2' ? youEntry?.team === m.winnerTeam : m.ranking[0]?.slot === youSlot;
+  const title = m.mode === '2v2'
+    ? (youWon ? '🏆 ' : '') + TEAM_NAMES[m.winnerTeam] + ' WINS!'
+    : youWon ? '🏆 YOU WIN!' : 'RESULTS';
+  const titleEl = document.getElementById('onlineOverTitle')!;
+  titleEl.textContent = title;
+  (titleEl as HTMLElement).style.color = m.mode === '2v2' ? TEAM_COLS[m.winnerTeam] : '';
   const list = document.getElementById('onlineResList')!;
   list.className = '';
   list.innerHTML = '';
@@ -209,7 +257,10 @@ export function showOnlineResults(m: MatchEndMsg, youSlot: number) {
     const hh = HEROES.find((x) => x.key === r.heroKey) ?? HEROES[0];
     const d = document.createElement('div');
     d.className = 'resRow' + (i === 0 ? ' first' : '');
-    d.innerHTML = `<img src="${heroImg(hh)}"><div class="rn" style="color:${hh.col}">${i + 1}. ${r.name}${r.slot === youSlot ? ' (YOU)' : ''}</div><div class="rs">${r.dead ? 'OUT' : r.lives + ' lives'}</div>`;
+    const teamChip = m.mode === '2v2'
+      ? `<span style="color:${TEAM_COLS[r.team]};font-size:10px"> ${TEAM_NAMES[r.team]}</span>`
+      : '';
+    d.innerHTML = `<img src="${heroImg(hh)}"><div class="rn" style="color:${hh.col}">${i + 1}. ${r.name}${r.slot === youSlot ? ' (YOU)' : ''}${teamChip}</div><div class="rs">${r.dead ? 'OUT' : r.lives + ' lives'}</div>`;
     list.appendChild(d);
   });
   (list as HTMLElement).style.display = 'flex';

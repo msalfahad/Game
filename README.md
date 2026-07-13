@@ -74,6 +74,10 @@ The `server/` folder is a Node + Socket.IO multiplayer server:
   **bots filling empty seats**. A dropped player's seat becomes a bot.
 - **Party rooms** — CREATE PARTY gives a 4-letter code; friends JOIN PARTY
   with the code; the host starts the match.
+- **Modes** — the host picks ⚔️ Free-for-all (1v1v1v1, everyone against
+  everyone) or 🤝 2 vs 2 (Team Blue vs Team Red). In 2v2 players can switch
+  sides in the lobby (max 2 per team), bots balance uneven teams, teammates
+  can't knock each other out, and ultimates only hit the enemy team.
 - **Netcode** — the server runs an authoritative 20 Hz simulation; clients
   send inputs at 30 Hz, predict their own hero locally, and interpolate
   rivals ~120 ms behind. Online v1 covers the pushout games (Ring Rumble,
