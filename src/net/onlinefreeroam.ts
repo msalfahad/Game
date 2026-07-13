@@ -74,7 +74,7 @@ export class OnlineFreeRoam {
 
     this.engine.clearScene();
     this.world = buildWorld(this.engine.scene, family, this.game, this.half);
-    this.engine.camera.frame(this.half, this.game.mechanic === 'throwfight' ? 0.85 : 1.0);
+    this.engine.camera.frame(this.half, 1.0);
 
     const is2v2 = msg.mode === '2v2';
     this.players = msg.players.map((pi) => {

@@ -29,10 +29,13 @@ export class IsoCamera {
     this.cam.aspect = aspect;
     this.cam.updateProjectionMatrix();
 
-    // Portrait screens need extra pullback to keep all four corners visible.
+    // Portrait screens need extra pullback to keep all four corners visible;
+    // very wide (landscape phone) screens come in closer so the arena fills
+    // the view instead of floating in empty sky.
     const portrait = Math.max(1, 0.6 / aspect);
-    const dist = halfSize * 2.25 * portrait * zoom;
-    const height = halfSize * 1.5 * portrait * zoom;
+    const wide = aspect > 1.8 ? 1 / 1.14 : 1;
+    const dist = halfSize * 2.25 * portrait * zoom * wide;
+    const height = halfSize * 1.5 * portrait * zoom * wide;
     this.base.set(0, height, dist);
     this.cam.position.copy(this.base);
     this.cam.lookAt(0, -2, -halfSize * 0.06);
