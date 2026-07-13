@@ -113,6 +113,9 @@ export class Net {
   setRoomMode(mode: 'ffa' | '2v2') {
     this.socket?.emit('room:mode', mode);
   }
+  setRoomGame(gameId: string) {
+    this.socket?.emit('room:game', gameId);
+  }
   toggleTeam() {
     this.socket?.emit('room:team');
   }

@@ -304,6 +304,8 @@ export class MatchSim {
       Math.round(p.freezeT * 100) / 100,
       Math.round(p.shieldT * 100) / 100,
       Math.round(p.cd * 10) / 10,
+      0, // score (unused in pushout)
+      0, // flags
     ]);
     for (const p of this.players) {
       if (!p.socketId) continue;

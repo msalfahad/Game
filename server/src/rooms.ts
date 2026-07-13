@@ -1,9 +1,11 @@
 import type { Socket } from 'socket.io';
 import { MatchSim, type GameSim, type MatchSeat } from './sim.js';
 import { HockeySim } from './hockeysim.js';
+import { FreeSim } from './freesim.js';
+import { onlineGame, poolFor } from './catalog.js';
 import { recordResult, type Account } from './accounts.js';
 import { HEROES } from './heroes.js';
-import { MAX_PLAYERS, ONLINE_GAMES_2V2, ONLINE_GAMES_FFA, type MatchMode, type MatchStartMsg, type QueueUpdateMsg, type RoomUpdateMsg } from './protocol.js';
+import { MAX_PLAYERS, type MatchMode, type MatchStartMsg, type QueueUpdateMsg, type RoomUpdateMsg } from './protocol.js';
 
 // Party rooms (4-letter codes) + the quick-play queue. Both feed the same
 // match starter; empty seats are filled with bots (SPEC section 2). A match
@@ -26,6 +28,7 @@ interface Room {
   hostId: string; // socket id
   members: string[]; // socket ids, insertion order
   mode: MatchMode;
+  gameId: string; // 'random' or a catalog id
   started: boolean;
 }
 
@@ -119,7 +122,7 @@ export class Lobby {
     do {
       code = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random() * 24)]).join('');
     } while (this.rooms.has(code));
-    this.rooms.set(code, { code, hostId: socketId, members: [socketId], mode: 'ffa', started: false });
+    this.rooms.set(code, { code, hostId: socketId, members: [socketId], mode: 'ffa', gameId: 'random', started: false });
     s.roomCode = code;
     s.team = 0;
     this.broadcastRoom(code);
@@ -149,6 +152,19 @@ export class Lobby {
     if (!room || room.hostId !== socketId || room.started) return;
     if (mode !== 'ffa' && mode !== '2v2') return;
     room.mode = mode;
+    // A game picked for the other mode may be invalid now.
+    if (room.gameId !== 'random' && !poolFor(mode).some((g) => g.id === room.gameId)) room.gameId = 'random';
+    this.broadcastRoom(room.code);
+  }
+
+  /** Host picks a specific map (or 'random') for the room. */
+  setRoomGame(socketId: string, gameId: string) {
+    const s = this.sessions.get(socketId);
+    if (!s || !s.roomCode) return;
+    const room = this.rooms.get(s.roomCode);
+    if (!room || room.hostId !== socketId || room.started) return;
+    if (gameId !== 'random' && !poolFor(room.mode).some((g) => g.id === gameId)) return;
+    room.gameId = gameId;
     this.broadcastRoom(room.code);
   }
 
@@ -188,13 +204,14 @@ export class Lobby {
     room.started = true;
     const members = [...room.members];
     const mode = room.mode;
+    const gameChoice = room.gameId;
     // The room is consumed; players return to a fresh lobby after the match.
     for (const id of members) {
       const m = this.sessions.get(id);
       if (m) m.roomCode = null;
     }
     this.rooms.delete(room.code);
-    this.startMatch(members, mode);
+    this.startMatch(members, mode, gameChoice);
   }
 
   private broadcastRoom(code: string) {
@@ -204,6 +221,7 @@ export class Lobby {
       const msg: RoomUpdateMsg = {
         code,
         mode: room.mode,
+        gameId: room.gameId,
         players: room.members.map((id) => {
           const m = this.sessions.get(id)!;
           return {
@@ -221,7 +239,7 @@ export class Lobby {
   }
 
   // --- match lifecycle --------------------------------------------------------
-  private startMatch(socketIds: string[], mode: MatchMode = 'ffa') {
+  private startMatch(socketIds: string[], mode: MatchMode = 'ffa', gameChoice = 'random') {
     const humans = socketIds
       .map((id) => this.sessions.get(id))
       .filter((s): s is Session => !!s);
@@ -270,30 +288,35 @@ export class Lobby {
       }
     }
 
-    const pool = mode === '2v2' ? ONLINE_GAMES_2V2 : ONLINE_GAMES_FFA;
+    const pool = poolFor(mode);
     // FORCE_GAME pins the map for testing (e.g. FORCE_GAME=frost-1 npm start).
-    const gameId = process.env.FORCE_GAME ?? pool[Math.floor(Math.random() * pool.length)];
-    const isHockey = gameId === 'frost-1' || gameId === 'inferno-1';
+    const gameId =
+      process.env.FORCE_GAME ??
+      (gameChoice !== 'random' && pool.some((g) => g.id === gameChoice)
+        ? gameChoice
+        : pool[Math.floor(Math.random() * pool.length)].id);
+    const def = onlineGame(gameId) ?? pool[0];
 
-    const SimCtor = isHockey ? HockeySim : MatchSim;
-    const sim: GameSim = new SimCtor(
-      seats,
-      mode,
-      (socketId, msg) => this.sessions.get(socketId)?.socket.emit('state', msg),
-      (endMsg) => {
-        const winnerSlot = endMsg.ranking[0]?.slot;
-        for (const seat of seats) {
-          if (!seat.socketId) continue;
-          const sess = this.sessions.get(seat.socketId);
-          if (!sess) continue;
-          sess.match = null;
-          sess.socket.emit('match:end', endMsg);
-          const mySlot = seats.indexOf(seat);
-          const won = mode === '2v2' ? seat.team === endMsg.winnerTeam : mySlot === winnerSlot;
-          recordResult(sess.account.token, won);
-        }
-      },
-    );
+    const makeSim = (): GameSim => {
+      if (def.mechanic === 'goal') return new HockeySim(seats, mode, sendState, endMatch);
+      if (def.mechanic === 'pushout') return new MatchSim(seats, mode, sendState, endMatch);
+      return new FreeSim(seats, def, mode, sendState, endMatch);
+    };
+    const sendState = (socketId: string, msg: any) => this.sessions.get(socketId)?.socket.emit('state', msg);
+    const endMatch = (endMsg: any) => {
+      const winnerSlot = endMsg.ranking[0]?.slot;
+      for (const seat of seats) {
+        if (!seat.socketId) continue;
+        const sess = this.sessions.get(seat.socketId);
+        if (!sess) continue;
+        sess.match = null;
+        sess.socket.emit('match:end', endMsg);
+        const mySlot = seats.indexOf(seat);
+        const won = mode === '2v2' ? seat.team === endMsg.winnerTeam : mySlot === winnerSlot;
+        recordResult(sess.account.token, won);
+      }
+    };
+    const sim: GameSim = makeSim();
 
     for (const s of humans) s.match = sim;
 
@@ -303,7 +326,7 @@ export class Lobby {
         gameId,
         mode,
         youSlot: slot,
-        duration: 90,
+        duration: def.duration,
         players: seats.map((s2, i) => ({
           slot: i,
           name: s2.name,

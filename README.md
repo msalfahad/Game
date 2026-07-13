@@ -80,8 +80,13 @@ The `server/` folder is a Node + Socket.IO multiplayer server:
   can't knock each other out, and ultimates only hit the enemy team.
 - **Netcode** — the server runs an authoritative 20 Hz simulation; clients
   send inputs at 30 Hz, predict their own hero locally, and interpolate
-  rivals ~120 ms behind. Online v1 covers the pushout games (Ring Rumble,
-  Tree Top Tumble); the other mechanics come next.
+  rivals ~120 ms behind. **All 33 games are playable online**: pushout,
+  hockey, break-tiles, throw-fights, races, dodge arenas, collect, paint and
+  mash all run server-side (entities, tile grids, lasers and pucks are
+  synced to clients).
+- **Party map picker** — the host chooses 🎲 RANDOM or any specific game,
+  grouped by world; the list adapts to the selected mode (2v2 offers the
+  team-viable games).
 
 Run it locally (serves the game AND the server on one port):
 

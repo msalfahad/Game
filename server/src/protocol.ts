@@ -44,6 +44,7 @@ export interface RoomPlayerInfo {
 export interface RoomUpdateMsg {
   code: string;
   mode: MatchMode;
+  gameId: string; // 'random' or a catalog id chosen by the host
   players: RoomPlayerInfo[];
 }
 
@@ -72,13 +73,19 @@ export interface InputMsg {
   ult?: boolean;
 }
 
-// Per-player state in a snapshot: [slot, x, z, vx, vz, y, lives, dead, freezeT, shieldT, cd]
-export type PlayerState = [number, number, number, number, number, number, number, number, number, number, number];
+// Per-player state: [slot, x, z, vx, vz, y, lives, dead, freezeT, shieldT, cd, score, flags]
+// `lives` doubles as HP in throw-fights and points in hockey; `score` carries
+// gems/tiles/gates/survival-seconds; flags bit0 = holding a throwable.
+export type PlayerState = [number, number, number, number, number, number, number, number, number, number, number, number, number];
 
 export interface SimEvent {
-  t: 'ult' | 'fall' | 'out' | 'goal' | 'power';
+  t: 'ult' | 'fall' | 'out' | 'goal' | 'power' | 'pick' | 'hit';
   slot: number;
 }
+
+// Synced world entity: [id, type, x, z, y, extra]
+export const ET = { LOOT: 0, TARGET: 1, ITEM: 2, MISSILE: 3, LOG: 4 } as const;
+export type EntityState = [number, number, number, number, number, number];
 
 export interface StateMsg {
   tick: number;
@@ -90,6 +97,13 @@ export interface StateMsg {
   // Hockey-only channel: paddle positions (0..1 per slot), points per slot,
   // and pucks as [x, z, y, powered].
   hockey?: { pos: number[]; pts: number[]; balls: [number, number, number, number][] };
+  // Free-roam channels: world entities, tile grid (paint owners / breaktile
+  // states), laser beam angles, and a mechanic-specific scalar (wind angle,
+  // conveyor direction).
+  entities?: EntityState[];
+  tiles?: number[];
+  beams?: number[];
+  aux?: number;
 }
 
 export interface MatchEndMsg {

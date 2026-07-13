@@ -1,7 +1,14 @@
 import { HEROES, heroImg, type Hero } from '../data/characters';
+import { GAMES, FAMILIES } from '../data/maps';
 import { net, resolveServerUrl, rememberServerUrl, savedName } from '../net/client';
 import type { MatchEndMsg, MatchStartMsg } from '../net/protocol';
 import { show, hideScreens } from './screens';
+
+// Which catalog games each online mode offers (mirrors server/src/catalog.ts).
+const TEAM_MECHANICS = new Set(['pushout', 'throwfight', 'breaktiles', 'dodge']);
+function onlinePool(mode: 'ffa' | '2v2') {
+  return GAMES.filter((g) => g.familyId !== 'lab' && (mode === 'ffa' || TEAM_MECHANICS.has(g.mechanic)));
+}
 
 // Online screens: sign-in (once), quick-play queue, and party rooms with
 // 4-letter codes. Kept separate from the local-play flow in screens.ts.
@@ -58,6 +65,7 @@ export function buildOnlineScreens(h: OnlineHooks) {
       <div class="diff sel" data-mode="ffa">⚔️ FREE-FOR-ALL</div>
       <div class="diff" data-mode="2v2">🤝 2 VS 2</div>
     </div>
+    <div class="settingRow" id="mapRow"><span>MAP</span><select id="partyGameSel"></select></div>
     <div id="teamCols" class="teamCols hidden">
       <div class="teamCol" id="teamCol0"><div class="teamName" style="color:#4DC3FF">TEAM BLUE</div></div>
       <div class="teamCol" id="teamCol1"><div class="teamName" style="color:#FF4D4D">TEAM RED</div></div>
@@ -128,6 +136,9 @@ export function buildOnlineScreens(h: OnlineHooks) {
   document.querySelectorAll('#modeRow .diff').forEach((d) =>
     d.addEventListener('click', () => net.setRoomMode((d as HTMLElement).dataset.mode as 'ffa' | '2v2')),
   );
+  document.getElementById('partyGameSel')!.addEventListener('change', (e) =>
+    net.setRoomGame((e.target as HTMLSelectElement).value),
+  );
   document.getElementById('partyLeave')!.addEventListener('click', () => {
     net.leaveRoom();
     showOnline('scrOnlineHome');
@@ -154,6 +165,26 @@ export function buildOnlineScreens(h: OnlineHooks) {
       el.style.pointerEvents = meHost ? '' : 'none';
       el.style.opacity = meHost || el.dataset.mode === m.mode ? '1' : '.4';
     });
+
+    // Map picker: host chooses RANDOM or a specific game, grouped by world.
+    const sel2 = document.getElementById('partyGameSel') as HTMLSelectElement;
+    sel2.disabled = !meHost;
+    sel2.innerHTML = '<option value="random">🎲 RANDOM</option>';
+    for (const f of FAMILIES) {
+      const games = onlinePool(m.mode).filter((g) => g.familyId === f.id);
+      if (!games.length) continue;
+      const og = document.createElement('optgroup');
+      og.label = `${f.icon} ${f.name}`;
+      for (const g of games) {
+        const o = document.createElement('option');
+        o.value = g.id;
+        o.textContent = `${g.icon} ${g.name}`;
+        og.appendChild(o);
+      }
+      sel2.appendChild(og);
+    }
+    sel2.value = m.gameId ?? 'random';
+    if (sel2.selectedIndex < 0) sel2.value = 'random';
 
     const makeCard = (p: (typeof m.players)[0]) => {
       const hh = HEROES.find((x) => x.key === p.heroKey) ?? HEROES[0];
