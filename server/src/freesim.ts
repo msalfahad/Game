@@ -18,6 +18,8 @@ const ULT_CD = 14;
 const WPS = 8; // race gates (matches the client's RaceGame)
 const PAINT_N = 9;
 const BREAK_N = 11;
+const R_ICE = 21; // Slip & Slide round rink radius
+const ICE_SEGS = 16;
 
 interface FPlayer {
   slot: number;
@@ -145,9 +147,11 @@ export class FreeSim {
     } else if (this.mech === 'dodge' && this.mods.hz === 'lasers') {
       this.beams = [Math.random() * 6, Math.random() * 6 + Math.PI];
     } else if (this.mech === 'icepush') {
-      // 8 breakable ice-wall segments per side (state 1 intact, 0 shattered).
-      this.tiles = new Int8Array(32).fill(1);
+      // 16 breakable arc segments around the round rink (1 intact, 0 shattered).
+      this.tiles = new Int8Array(ICE_SEGS).fill(1);
       this.spawnT = 10; // first thunder box
+      // Spawn inside the smaller round rink.
+      for (const p of this.players) { p.x *= 0.55; p.z *= 0.55; }
     } else if (this.mech === 'climb') {
       this.players.forEach((p, i) => {
         p.x = (i - 1.5) * 7;
@@ -467,53 +471,55 @@ export class FreeSim {
   }
 
   private tickIcePush(dt: number) {
-    // ⚡ thunder box every 10s; grabbing it freezes everyone else for 2s.
+    // ⚡ thunder box every 10s; the grabber strikes everyone else with
+    // lightning: 3s stun (clients render victims blacked out).
     this.spawnT -= dt;
     if (this.spawnT <= 0) {
       this.spawnT = 10;
       for (const e of this.ents.values()) if (e.type === ET.LOOT) this.ents.delete(e.id);
-      this.addEnt(ET.LOOT, (Math.random() - 0.5) * HALF * 1.4, (Math.random() - 0.5) * HALF * 1.4, 1.3, 3);
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * R_ICE * 0.7;
+      this.addEnt(ET.LOOT, Math.cos(a) * r, Math.sin(a) * r, 1.3, 3);
     }
     for (const e of this.ents.values()) {
       if (e.type !== ET.LOOT) continue;
       for (const p of this.players) {
-        if (p.dead) continue;
+        if (p.dead || p.freezeT > 0) continue;
         if (Math.hypot(e.x - p.x, e.z - p.z) < HITBOX + 2) {
           this.ents.delete(e.id);
           this.events.push({ t: 'power', slot: p.slot });
           for (const q of this.players) {
             if (q === p || q.dead || q.team === p.team) continue;
-            q.freezeT = Math.max(q.freezeT, 2);
+            q.freezeT = Math.max(q.freezeT, 3);
+            q.vx *= 0.1;
+            q.vz *= 0.1;
           }
           break;
         }
       }
     }
-    // Breakable walls: a segment saves you once, then shatters.
+    // Breakable round wall: an arc segment saves you once, then shatters.
     if (!this.tiles) return;
-    const segLen = (HALF * 2) / 8;
     const segAt = (x: number, z: number): number => {
-      const idx = (along: number) => Math.max(0, Math.min(7, Math.floor((along + HALF) / segLen)));
-      if (z >= HALF - 1) return 0 + idx(x);
-      if (z <= -HALF + 1) return 8 + idx(x);
-      if (x <= -HALF + 1) return 16 + idx(z);
-      if (x >= HALF - 1) return 24 + idx(z);
-      return -1;
+      const a = (Math.atan2(z, x) + Math.PI * 2) % (Math.PI * 2);
+      return Math.min(ICE_SEGS - 1, Math.floor((a / (Math.PI * 2)) * ICE_SEGS));
     };
     for (const p of this.players) {
       if (p.dead || p.invulnT > 0) continue;
-      if (Math.abs(p.x) < HALF - 1 && Math.abs(p.z) < HALF - 1) continue;
+      const r = Math.hypot(p.x, p.z);
+      if (r < R_ICE - 1) continue;
       const seg = segAt(p.x, p.z);
-      if (seg >= 0 && this.tiles[seg] === 1) {
+      if (this.tiles[seg] === 1 && r < R_ICE + 1.5) {
         this.tiles[seg] = 0;
         this.events.push({ t: 'hit', slot: p.slot }); // wall shatter cue
-        const nx = Math.abs(p.x) > Math.abs(p.z) ? -Math.sign(p.x) : 0;
-        const nz = nx === 0 ? -Math.sign(p.z) : 0;
-        p.vx = nx * 22 + (nx === 0 ? p.vx * 0.4 : 0);
-        p.vz = nz * 22 + (nz === 0 ? p.vz * 0.4 : 0);
-        p.x = Math.max(-(HALF - 1.4), Math.min(HALF - 1.4, p.x));
-        p.z = Math.max(-(HALF - 1.4), Math.min(HALF - 1.4, p.z));
-      } else if (Math.abs(p.x) > HALF + 1 || Math.abs(p.z) > HALF + 1) {
+        const nx = -p.x / (r || 1);
+        const nz = -p.z / (r || 1);
+        p.vx = nx * 22;
+        p.vz = nz * 22;
+        const rr = R_ICE - 1.6;
+        p.x = (p.x / (r || 1)) * rr;
+        p.z = (p.z / (r || 1)) * rr;
+      } else if (this.tiles[seg] === 0 && r > R_ICE + 1) {
         this.loseLife(p);
       }
     }

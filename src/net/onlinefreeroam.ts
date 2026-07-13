@@ -9,6 +9,7 @@ import { heroByKey, speedMult } from '../data/characters';
 import * as HUD from '../ui/hud';
 import { net } from './client';
 import { ET, INPUT_RATE, type MatchEndMsg, type MatchStartMsg, type StateMsg } from './protocol';
+import { spawnBolt, tickBolts, type Bolt } from '../game/boltfx';
 
 // Universal online controller for the free-roam mechanics (collect, mash,
 // paint, breaktiles, throwfight, race, dodge). The server owns all game
@@ -47,6 +48,7 @@ export class OnlineFreeRoam {
   private running = false;
   private youScoreShown = -1;
   private parts: { m: THREE.Mesh; vx: number; vy: number; vz: number; life: number }[] = [];
+  private bolts: Bolt[] = [];
   private onFinish: (end: MatchEndMsg, youSlot: number) => void;
 
   constructor(engine: Engine, input: Input, onFinish: (end: MatchEndMsg, youSlot: number) => void) {
@@ -59,7 +61,7 @@ export class OnlineFreeRoam {
     this.game = gameById(msg.gameId);
     const family = familyById(this.game.familyId);
     this.youSlot = msg.youSlot;
-    this.half = 30;
+    this.half = this.game.mechanic === 'icepush' ? 21 : 30; // ice push = small round rink
     this.snaps = [];
     this.seq = 0;
     this.parts = [];
@@ -67,6 +69,7 @@ export class OnlineFreeRoam {
     this.tileMeshes = [];
     this.beamMeshes = [];
     this.gateMeshes = [];
+    this.bolts = [];
     this.youScoreShown = -1;
 
     this.engine.clearScene();
@@ -181,27 +184,23 @@ export class OnlineFreeRoam {
         this.beamMeshes.push(pivot);
       }
     } else if (mech === 'icepush') {
-      // 8 breakable ice-wall segments per side; indexes match the server.
-      const segLen = (this.half * 2) / 8;
-      for (let side = 0; side < 4; side++) {
-        for (let i = 0; i < 8; i++) {
-          const along = -this.half + segLen * (i + 0.5);
-          const horiz = side < 2;
-          const m = new THREE.Mesh(
-            new THREE.BoxGeometry(horiz ? segLen * 0.96 : 1.6, 3.4, horiz ? 1.6 : segLen * 0.96),
-            new THREE.MeshStandardMaterial({
-              color: 0x9adfff, roughness: 0.15, metalness: 0.2,
-              transparent: true, opacity: 0.65, emissive: 0x1a4a7a,
-            }),
-          );
-          m.position.set(
-            horiz ? along : side === 2 ? -this.half : this.half,
-            1.7,
-            horiz ? (side === 0 ? this.half : -this.half) : along,
-          );
-          this.engine.scene.add(m);
-          this.tileMeshes.push(m);
-        }
+      // 16 breakable arc segments around the round rink; indexes match the server.
+      const R = this.half;
+      const segArc = (2 * Math.PI) / 16;
+      const segLen = 2 * R * Math.sin(segArc / 2) * 1.04;
+      for (let i = 0; i < 16; i++) {
+        const a = (i + 0.5) * segArc;
+        const m = new THREE.Mesh(
+          new THREE.BoxGeometry(segLen, 3.4, 1.6),
+          new THREE.MeshStandardMaterial({
+            color: 0x9adfff, roughness: 0.15, metalness: 0.2,
+            transparent: true, opacity: 0.65, emissive: 0x1a4a7a,
+          }),
+        );
+        m.position.set(Math.cos(a) * R, 1.7, Math.sin(a) * R);
+        m.rotation.y = -a + Math.PI / 2;
+        this.engine.scene.add(m);
+        this.tileMeshes.push(m);
       }
     } else if (mech === 'climb') {
       const line = new THREE.Mesh(
@@ -352,6 +351,7 @@ export class OnlineFreeRoam {
         HUD.banner(p.you ? 'YOU ARE OUT!' : p.hero.name + ' IS OUT!', '#FF4D4D');
       }
       p.freezeT = freezeT;
+      if (mech === 'icepush' && freezeT > 0) p.zapped = true;
       p.shieldT = shieldT;
       // Held item display.
       const held = (flags & 1) === 1;
@@ -438,7 +438,16 @@ export class OnlineFreeRoam {
         this.burst(p.x, p.z, '#FF4D4D', 12);
         this.engine.camera.shake(1.2);
       } else if (ev.t === 'power') {
-        SFX.power();
+        const isZap = this.game.mechanic === 'icepush';
+        if (isZap) {
+          SFX.zap();
+          for (const q of this.players) {
+            if (q === p || q.dead) continue;
+            this.bolts.push(spawnBolt(this.engine.scene, q.x, q.z));
+          }
+        } else {
+          SFX.power();
+        }
         this.engine.camera.shake(2);
         const freeze = this.game.mechanic === 'climb';
         HUD.banner(
@@ -506,6 +515,7 @@ export class OnlineFreeRoam {
     HUD.setAbilityHint(you.dead ? '' : you.cd <= 0 ? 'ready' : '');
     this.world.tick(dt);
     this.tickParts(dt);
+    this.bolts = tickBolts(this.engine.scene, this.bolts, dt);
   }
 
   private predictLocal(dt: number) {

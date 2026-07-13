@@ -88,7 +88,8 @@ export class Match {
     const family = familyById(game.familyId);
     this.game = makeGame(game);
     const isGoal = game.mechanic === 'goal';
-    const halfSize = isGoal ? ASBASE * 0.48 : ASBASE;
+    // Ice push plays on a small round rink.
+    const halfSize = isGoal ? ASBASE * 0.48 : game.mechanic === 'icepush' ? ASBASE * 0.7 : ASBASE;
 
     this.engine.clearScene();
     this.parts = [];

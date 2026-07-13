@@ -70,6 +70,7 @@ class AudioEngine {
   tick() { this.tone(1000, 1000, 0.05, 'square', 0.15); }
   gem() { this.tone(880, 1320, 0.12, 'sine', 0.25); this.tone(1320, 1760, 0.1, 'sine', 0.15, 0.06); }
   crack() { this.tone(180, 90, 0.14, 'triangle', 0.3); this.noise(0.12, 0.35, 1500); }
+  zap() { this.tone(1600, 120, 0.28, 'sawtooth', 0.32); this.noise(0.22, 0.3, 4000); }
   win() { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, f, 0.18, 'square', 0.25, i * 0.13)); }
   lose() { [400, 350, 300, 200].forEach((f, i) => this.tone(f, f * 0.9, 0.2, 'sawtooth', 0.25, i * 0.15)); }
   start() { this.tone(440, 440, 0.12, 'square', 0.25, 0); this.tone(660, 660, 0.12, 'square', 0.25, 0.4); this.tone(880, 880, 0.3, 'square', 0.3, 0.8); }

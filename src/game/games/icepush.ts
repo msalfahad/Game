@@ -4,30 +4,33 @@ import type { Player } from '../player';
 import { HITBOX_RADIUS } from '../player';
 import { setupRoster, localMove, botMove, collidePlayers, tickRoster, localJump, rankBy } from '../freeroam';
 import { fireUltimate, botMaybeUltimate, tickDecoys } from '../ultimates';
+import { spawnBolt, tickBolts, type Bolt } from '../boltfx';
 import { matchTime } from '../../core/tuning';
 import { SFX } from '../../core/audio';
 import { setScore, markDead } from '../../ui/hud';
 
-// ICE PUSH — Slip & Slide. A slippery brawl on solid ice: smash rivals
-// through the ice walls around the rink. Each wall segment SAVES you once
-// (you bounce off and it shatters) — fall through the gap next time. A ⚡
-// thunder box appears every 10 seconds; whoever grabs it zaps everyone else.
+// ICE PUSH — Slip & Slide. A small ROUND rink of slippery ice: smash rivals
+// through the ice wall around the rim. Each wall segment saves you once (you
+// bounce off and it shatters) — fall through the gap next time. A ⚡ thunder
+// box appears every 10 seconds; whoever grabs it strikes the other three with
+// lightning: they turn black and stand stunned for 3 seconds.
 // 3 lives · 2 minutes · last basher standing.
 
-const SEGS = 8; // wall segments per side
+const SEGS = 16; // wall segments around the rim
 
 interface ThunderBox { m: THREE.Group; x: number; z: number; }
 
 export class IcePushGame implements GameModule {
   readonly stickMode = 'float' as const;
   title = 'Slip & Slide';
-  objective = 'Slippery! Smash rivals through the ice walls · 3 lives';
+  objective = 'Slippery! Smash rivals through the ice wall · 3 lives';
 
   private ctx!: MatchContext;
   private timeLeft = 120;
   private walls: { m: THREE.Mesh; alive: boolean }[] = [];
   private box: ThunderBox | null = null;
   private boxT = 10;
+  private bolts: Bolt[] = [];
   private finished = false;
 
   init(ctx: MatchContext) {
@@ -38,44 +41,35 @@ export class IcePushGame implements GameModule {
     this.box = null;
     this.boxT = 10;
     this.walls = [];
+    this.bolts = [];
 
     setupRoster(ctx, 3, 0.45);
 
-    // 8 ice-wall segments per side, translucent and glowing.
-    const half = ctx.halfSize;
-    const segLen = (half * 2) / SEGS;
-    const mat = () =>
-      new THREE.MeshStandardMaterial({
-        color: 0x9adfff, roughness: 0.15, metalness: 0.2,
-        transparent: true, opacity: 0.65, emissive: 0x1a4a7a,
-      });
-    for (let side = 0; side < 4; side++) {
-      for (let i = 0; i < SEGS; i++) {
-        const along = -half + segLen * (i + 0.5);
-        const horiz = side < 2; // 0 bottom(z+), 1 top(z-), 2 left(x-), 3 right(x+)
-        const m = new THREE.Mesh(new THREE.BoxGeometry(horiz ? segLen * 0.96 : 1.6, 3.4, horiz ? 1.6 : segLen * 0.96), mat());
-        m.position.set(
-          horiz ? along : side === 2 ? -half : half,
-          1.7,
-          horiz ? (side === 0 ? half : -half) : along,
-        );
-        m.castShadow = true;
-        ctx.scene.add(m);
-        this.walls.push({ m, alive: true });
-      }
+    // Ice wall: 16 arc segments around the rim of the round rink.
+    const R = ctx.halfSize;
+    const segArc = (2 * Math.PI) / SEGS;
+    const segLen = 2 * R * Math.sin(segArc / 2) * 1.04;
+    for (let i = 0; i < SEGS; i++) {
+      const a = (i + 0.5) * segArc;
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(segLen, 3.4, 1.6),
+        new THREE.MeshStandardMaterial({
+          color: 0x9adfff, roughness: 0.15, metalness: 0.2,
+          transparent: true, opacity: 0.65, emissive: 0x1a4a7a,
+        }),
+      );
+      m.position.set(Math.cos(a) * R, 1.7, Math.sin(a) * R);
+      m.rotation.y = -a + Math.PI / 2; // tangent to the circle
+      m.castShadow = true;
+      ctx.scene.add(m);
+      this.walls.push({ m, alive: true });
     }
   }
 
-  /** Wall segment index for a position beyond the rink edge, or -1. */
   private segAt(x: number, z: number): number {
-    const half = this.ctx.halfSize;
-    const segLen = (half * 2) / SEGS;
-    const idx = (along: number) => Math.max(0, Math.min(SEGS - 1, Math.floor((along + half) / segLen)));
-    if (z >= half - 1) return 0 * SEGS + idx(x);
-    if (z <= -half + 1) return 1 * SEGS + idx(x);
-    if (x <= -half + 1) return 2 * SEGS + idx(z);
-    if (x >= half - 1) return 3 * SEGS + idx(z);
-    return -1;
+    const a = Math.atan2(z, x);
+    const norm = (a + Math.PI * 2) % (Math.PI * 2);
+    return Math.min(SEGS - 1, Math.floor((norm / (Math.PI * 2)) * SEGS));
   }
 
   ability() {
@@ -90,7 +84,7 @@ export class IcePushGame implements GameModule {
       this.ctx.scene.remove(this.box.m);
       this.box = null;
     }
-    const half = this.ctx.halfSize;
+    const R = this.ctx.halfSize;
     const grp = new THREE.Group();
     const crate = new THREE.Mesh(
       new THREE.BoxGeometry(2.6, 2.6, 2.6),
@@ -98,14 +92,13 @@ export class IcePushGame implements GameModule {
     );
     crate.castShadow = true;
     grp.add(crate);
-    const bolt = new THREE.Mesh(
-      new THREE.ConeGeometry(0.8, 2.2, 4),
-      new THREE.MeshBasicMaterial({ color: 0xfff7aa }),
-    );
+    const bolt = new THREE.Mesh(new THREE.ConeGeometry(0.8, 2.2, 4), new THREE.MeshBasicMaterial({ color: 0xfff7aa }));
     bolt.position.y = 2.6;
     grp.add(bolt);
-    const x = (Math.random() - 0.5) * half * 1.4;
-    const z = (Math.random() - 0.5) * half * 1.4;
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.random() * R * 0.7;
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
     grp.position.set(x, 1.3, z);
     this.ctx.scene.add(grp);
     this.box = { m: grp, x, z };
@@ -117,12 +110,17 @@ export class IcePushGame implements GameModule {
     if (!this.box) return;
     this.ctx.scene.remove(this.box.m);
     this.box = null;
-    SFX.power();
-    this.ctx.fx.shake(2.5);
+    SFX.zap();
+    this.ctx.fx.shake(3);
     this.ctx.fx.banner(p.you ? '⚡ ZAP THEM ALL!' : `⚡ ${p.hero.name} GOT THE BOX!`, '#FFD23F');
     for (const q of this.ctx.players) {
       if (q === p || q.dead) continue;
-      q.freezeT = Math.max(q.freezeT, 2);
+      // Lightning strikes each rival: blacked out + stunned for 3 seconds.
+      q.freezeT = Math.max(q.freezeT, 3);
+      q.zapped = true;
+      q.vx *= 0.1;
+      q.vz *= 0.1;
+      this.bolts.push(spawnBolt(this.ctx.scene, q.x, q.z));
       this.ctx.fx.burst(q.x, q.z, '#FFF7AA', 14);
     }
   }
@@ -134,6 +132,7 @@ export class IcePushGame implements GameModule {
     ctx.setClock(this.timeLeft);
     if (this.timeLeft <= 0) return this.doFinish();
     tickDecoys(ctx, dt);
+    this.bolts = tickBolts(ctx.scene, this.bolts, dt);
 
     // ⚡ box every 10s.
     this.boxT -= dt;
@@ -144,7 +143,7 @@ export class IcePushGame implements GameModule {
     if (this.box) {
       this.box.m.rotation.y += dt * 2;
       for (const p of ctx.players) {
-        if (p.dead) continue;
+        if (p.dead || p.freezeT > 0) continue;
         if (Math.hypot(p.x - this.box.x, p.z - this.box.z) < HITBOX_RADIUS + 2) {
           this.grabBox(p);
           break;
@@ -152,8 +151,6 @@ export class IcePushGame implements GameModule {
       }
     }
 
-    // Slippery movement: the family surface is ice, so localMove/botMove pick
-    // it up automatically. Edges are open — the walls do the saving.
     localMove(ctx, dt, { noClamp: true });
     for (const p of ctx.players.slice(1)) {
       if (p.dead) continue;
@@ -180,14 +177,14 @@ export class IcePushGame implements GameModule {
 
   private checkWalls() {
     const ctx = this.ctx;
-    const half = ctx.halfSize;
+    const R = ctx.halfSize;
     for (const p of ctx.players) {
       if (p.dead || p.invulnT > 0) continue;
-      const inside = Math.abs(p.x) < half - 1 && Math.abs(p.z) < half - 1;
-      if (inside) continue;
+      const r = Math.hypot(p.x, p.z);
+      if (r < R - 1) continue;
       const seg = this.segAt(p.x, p.z);
-      const wall = seg >= 0 ? this.walls[seg] : null;
-      if (wall && wall.alive) {
+      const wall = this.walls[seg];
+      if (wall && wall.alive && r < R + 1.5) {
         // The ice wall saves you once — bounce back in, wall shatters.
         wall.alive = false;
         wall.m.visible = false;
@@ -195,14 +192,15 @@ export class IcePushGame implements GameModule {
         ctx.fx.burst(p.x, p.z, '#9ADFFF', 16);
         ctx.fx.shake(1.5);
         if (p.you) ctx.fx.banner('THE ICE SAVED YOU!', '#9ADFFF');
-        const nx = Math.abs(p.x) > Math.abs(p.z) ? -Math.sign(p.x) : 0;
-        const nz = nx === 0 ? -Math.sign(p.z) : 0;
-        p.vx = nx * 22 + (nx === 0 ? p.vx * 0.4 : 0);
-        p.vz = nz * 22 + (nz === 0 ? p.vz * 0.4 : 0);
-        p.x = Math.max(-(half - 1.4), Math.min(half - 1.4, p.x));
-        p.z = Math.max(-(half - 1.4), Math.min(half - 1.4, p.z));
-      } else if (Math.abs(p.x) > half + 1 || Math.abs(p.z) > half + 1) {
-        // No wall left here: down you go.
+        const nx = -p.x / (r || 1);
+        const nz = -p.z / (r || 1);
+        p.vx = nx * 22;
+        p.vz = nz * 22;
+        const rr = R - 1.6;
+        p.x = (p.x / (r || 1)) * rr;
+        p.z = (p.z / (r || 1)) * rr;
+      } else if (!wall?.alive && r > R + 1) {
+        // No wall here anymore: down you go.
         p.lives--;
         setScore(p, Math.max(p.lives, 0));
         SFX.fall();
@@ -216,8 +214,8 @@ export class IcePushGame implements GameModule {
           const alive = ctx.players.filter((q) => !q.dead);
           if (p.you || alive.length <= 1) setTimeout(() => this.doFinish(), 900);
         } else {
-          p.x = (Math.random() - 0.5) * half * 0.3;
-          p.z = (Math.random() - 0.5) * half * 0.3;
+          p.x = (Math.random() - 0.5) * R * 0.3;
+          p.z = (Math.random() - 0.5) * R * 0.3;
           p.vx = 0;
           p.vz = 0;
           p.invulnT = 1;
