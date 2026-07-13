@@ -18,6 +18,7 @@ export interface MoveOpts {
   halfSize: number;
   sprint?: boolean;
   noClamp?: boolean; // open-edge arenas (pushout / breaktiles / dodge) handle falls themselves
+  speedMul?: number; // per-game pace scale (e.g. the slow mountain climb)
 }
 
 /**
@@ -34,7 +35,7 @@ export function moveFreeRoam(
 ) {
   const topSpeed =
     BASE_SPEED * speedMult(p.hero) * (opts.sprint ? SPRINT : 1) *
-    (p.speedT > 0 ? 1.35 : 1) * TUNING.speedScale;
+    (p.speedT > 0 ? 1.35 : 1) * TUNING.speedScale * (opts.speedMul ?? 1);
   const accel = topSpeed * 2.6 * surf.accel;
 
   // Direct acceleration from intent (frozen players get no control).

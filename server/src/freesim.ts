@@ -20,6 +20,9 @@ const PAINT_N = 9;
 const BREAK_N = 11;
 const R_ICE = 21; // Slip & Slide round rink radius
 const ICE_SEGS = 16;
+const CLIMB_W = 12; // Avalanche Run corridor half-width
+const CLIMB_L = 45; // Avalanche Run slope half-length
+const CLIMB_PACE = 0.7;
 
 interface FPlayer {
   slot: number;
@@ -154,8 +157,8 @@ export class FreeSim {
       for (const p of this.players) { p.x *= 0.55; p.z *= 0.55; }
     } else if (this.mech === 'climb') {
       this.players.forEach((p, i) => {
-        p.x = (i - 1.5) * 7;
-        p.z = HALF - 4;
+        p.x = (i - 1.5) * 5.5;
+        p.z = CLIMB_L - 4;
       });
       this.spawnT = 10; // first freeze box
       this.decayT = 1; // rock timer reuse
@@ -282,7 +285,7 @@ export class FreeSim {
   }
 
   private move(p: FPlayer, dt: number) {
-    const top = BASE_SPEED * speedMult(p.hero) * (p.speedT > 0 ? 1.35 : 1);
+    const top = BASE_SPEED * speedMult(p.hero) * (p.speedT > 0 ? 1.35 : 1) * (this.mech === 'climb' ? CLIMB_PACE : 1);
     const accel = top * 2.6;
     if (p.freezeT <= 0) {
       p.vx += p.input.ax * accel * dt;
@@ -305,7 +308,13 @@ export class FreeSim {
       p.vy -= GRAVITY * dt;
       if (p.y <= 0) { p.y = 0; p.vy = 0; }
     }
-    if (!this.openEdges()) {
+    if (this.mech === 'climb') {
+      const w = CLIMB_W - 1;
+      if (p.x < -w) { p.x = -w; p.vx = Math.abs(p.vx) * 0.3; }
+      if (p.x > w) { p.x = w; p.vx = -Math.abs(p.vx) * 0.3; }
+      if (p.z > CLIMB_L - 1) { p.z = CLIMB_L - 1; p.vz = -Math.abs(p.vz) * 0.3; }
+      if (p.z < -(CLIMB_L - 1)) p.z = -(CLIMB_L - 1);
+    } else if (!this.openEdges()) {
       const m = HALF - 1;
       if (p.x < -m) { p.x = -m; p.vx = Math.abs(p.vx) * 0.3; }
       if (p.x > m) { p.x = m; p.vx = -Math.abs(p.vx) * 0.3; }
@@ -530,8 +539,8 @@ export class FreeSim {
     this.decayT -= dt;
     if (this.decayT <= 0) {
       this.decayT = Math.max(0.55, 1.3 - prog * 0.6);
-      const e = this.addEnt(ET.LOG, (Math.random() - 0.5) * HALF * 1.8, -(HALF + 4), 2, 2);
-      e.vz = 15 + prog * 8 + Math.random() * 6;
+      const e = this.addEnt(ET.LOG, (Math.random() - 0.5) * (CLIMB_W - 2) * 2, -(CLIMB_L + 4), 2, 2);
+      e.vz = 13 + prog * 7 + Math.random() * 5;
     }
     for (const e of this.ents.values()) {
       if (e.type !== ET.LOG) continue;
@@ -545,14 +554,22 @@ export class FreeSim {
           this.events.push({ t: 'hit', slot: p.slot });
         }
       }
-      if (e.z > HALF + 6) this.ents.delete(e.id);
+      if (e.z > CLIMB_L + 6) this.ents.delete(e.id);
     }
     // ❄ freeze box every 10s.
     this.spawnT -= dt;
     if (this.spawnT <= 0) {
       this.spawnT = 10;
       for (const e of this.ents.values()) if (e.type === ET.LOOT) this.ents.delete(e.id);
-      this.addEnt(ET.LOOT, (Math.random() - 0.5) * HALF * 1.5, (Math.random() - 0.5) * HALF * 1.2, 1.2, 2);
+      const alive = this.players.filter((p) => !p.dead);
+      const leadZ = alive.length ? Math.min(...alive.map((p) => p.z)) : 0;
+      this.addEnt(
+        ET.LOOT,
+        (Math.random() - 0.5) * (CLIMB_W - 3) * 2,
+        Math.max(-(CLIMB_L - 6), leadZ - 8 - Math.random() * 10),
+        1.2,
+        2,
+      );
     }
     for (const e of this.ents.values()) {
       if (e.type !== ET.LOOT) continue;
@@ -572,8 +589,8 @@ export class FreeSim {
     // Progress + summit.
     for (const p of this.players) {
       if (p.dead) continue;
-      p.score = Math.max(0, Math.round(HALF - 4 - p.z));
-      if (p.z <= -(HALF - 3.5)) return this.finish();
+      p.score = Math.max(0, Math.round(CLIMB_L - 4 - p.z));
+      if (p.z <= -(CLIMB_L - 3.5)) return this.finish();
     }
   }
 
@@ -979,7 +996,7 @@ export class FreeSim {
           break;
         }
       }
-      p.tx = Math.max(-HALF + 3, Math.min(HALF - 3, p.x + dodge + (Math.random() - 0.5) * 4));
+      p.tx = Math.max(-CLIMB_W + 3, Math.min(CLIMB_W - 3, p.x + dodge + (Math.random() - 0.5) * 3));
       p.tz = p.z - 12;
     } else {
       // dodge: drift near center
@@ -1059,7 +1076,7 @@ export class FreeSim {
     const value = (p: FPlayer) =>
       (this.mode === '2v2' && p.team === winnerTeam ? 100000 : 0) +
       (this.mech === 'race' ? raceProg(p) * 100
-        : this.mech === 'climb' ? (HALF - p.z) * 100
+        : this.mech === 'climb' ? (CLIMB_L - p.z) * 100
         : scoreBased ? p.score * 100
         : (p.dead ? -1 : p.lives) * 100 + p.score);
     const label = this.mech === 'throwfight' ? 'HP' : this.mech === 'climb' ? 'm' : scoreBased ? 'pts' : 'lives';

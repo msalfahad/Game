@@ -14,7 +14,13 @@ export interface World {
   tick: (dt: number) => void;
 }
 
-export function buildWorld(scene: THREE.Scene, family: FamilyDef, game: GameDef, halfSize: number): World {
+export function buildWorld(
+  scene: THREE.Scene,
+  family: FamilyDef,
+  game: GameDef,
+  halfSize: number,
+  rect?: { w: number; l: number }, // rectangular arenas (the climb corridor)
+): World {
   const t = family.theme;
   const style = family.style;
 
@@ -69,10 +75,12 @@ export function buildWorld(scene: THREE.Scene, family: FamilyDef, game: GameDef,
     ringMesh.position.y = 0.4;
     scene.add(ringMesh);
   } else {
-    floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(halfSize * 2, halfSize * 2), fmat);
-    ([[0, halfSize], [0, -halfSize], [halfSize, 0], [-halfSize, 0]] as const).forEach((p, i) => {
+    const fw = rect ? rect.w : halfSize;
+    const fl = rect ? rect.l : halfSize;
+    floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(fw * 2, fl * 2), fmat);
+    ([[0, fl], [0, -fl], [fw, 0], [-fw, 0]] as const).forEach((p, i) => {
       const horiz = i < 2;
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(horiz ? halfSize * 2 : 1.4, 1.4, horiz ? 1.4 : halfSize * 2), trimMat);
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(horiz ? fw * 2 : 1.4, 1.4, horiz ? 1.4 : fl * 2), trimMat);
       bar.position.set(p[0], 0.5, p[1]);
       scene.add(bar);
     });
@@ -81,9 +89,9 @@ export function buildWorld(scene: THREE.Scene, family: FamilyDef, game: GameDef,
   floorMesh.receiveShadow = true;
   scene.add(floorMesh);
 
-  // Goal games skip the tall perimeter props — they blocked the view of
-  // players parked on the near wall.
-  if (game.mechanic !== 'goal') buildProps(scene, family, halfSize, trimMat);
+  // Goal games skip the tall perimeter props (they blocked the near wall);
+  // rectangular corridors skip them too (the ring layout doesn't fit).
+  if (game.mechanic !== 'goal' && !rect) buildProps(scene, family, halfSize, trimMat);
   const ambientPts = buildAmbient(scene, family, halfSize);
 
   const surfaceAt = (x: number, z: number): SurfaceKind => {

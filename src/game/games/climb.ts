@@ -7,10 +7,14 @@ import { matchTime } from '../../core/tuning';
 import { SFX } from '../../core/audio';
 import { setScore } from '../../ui/hud';
 
-// CLIMB — Avalanche Run. A one-minute vertical scramble: everyone starts at
-// the bottom, the summit line is at the top, and boulders tumble down the
-// slope. Getting hit knocks you back down. A ❄ freeze box appears every 10
-// seconds — grab it and everyone else is frozen for 3 seconds.
+// CLIMB — Avalanche Run. A one-minute scramble up a LONG NARROW mountain
+// corridor: the summit line is far up-slope, boulders tumble down, the pace
+// is deliberately slower, and the camera follows the climber. A ❄ freeze box
+// appears every 10 seconds — grab it and everyone else is frozen for 3s.
+
+export const CLIMB_W = 12; // corridor half-width
+export const CLIMB_L = 45; // slope half-length
+const CLIMB_PACE = 0.7; // everyone climbs slower
 
 interface Rock { m: THREE.Mesh; x: number; z: number; vz: number; }
 interface FreezeBox { m: THREE.Group; x: number; z: number; }
@@ -39,24 +43,23 @@ export class ClimbGame implements GameModule {
     this.boxT = 10;
 
     setupRoster(ctx, '0m', 0.45);
-    const half = ctx.halfSize;
-    // Line up at the bottom of the mountain.
+    // Line up at the bottom of the long slope.
     ctx.players.forEach((p, i) => {
-      p.x = (i - 1.5) * 7;
-      p.z = half - 4;
+      p.x = (i - 1.5) * 5.5;
+      p.z = CLIMB_L - 4;
     });
 
-    // Summit line: glowing finish strip across the top edge.
+    // Summit line: glowing finish strip far up the corridor.
     const line = new THREE.Mesh(
-      new THREE.BoxGeometry(half * 2, 0.5, 2),
+      new THREE.BoxGeometry(CLIMB_W * 2, 0.5, 2),
       new THREE.MeshBasicMaterial({ color: 0xffffff }),
     );
-    line.position.set(0, 0.3, -(half - 2.5));
+    line.position.set(0, 0.3, -(CLIMB_L - 2.5));
     ctx.scene.add(line);
     const flagMat = new THREE.MeshBasicMaterial({ color: 0xffd23f });
-    for (const fx of [-half + 2, half - 2]) {
+    for (const fx of [-CLIMB_W + 1.5, CLIMB_W - 1.5]) {
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 8, 8), flagMat);
-      pole.position.set(fx, 4, -(half - 2.5));
+      pole.position.set(fx, 4, -(CLIMB_L - 2.5));
       ctx.scene.add(pole);
     }
   }
@@ -70,16 +73,15 @@ export class ClimbGame implements GameModule {
   }
 
   private spawnRock(prog: number) {
-    const half = this.ctx.halfSize;
     const m = new THREE.Mesh(
       new THREE.DodecahedronGeometry(2.1 + Math.random() * 0.8),
       new THREE.MeshStandardMaterial({ color: 0x9db8cc, roughness: 0.8 }),
     );
     m.castShadow = true;
-    const x = (Math.random() - 0.5) * half * 1.8;
-    m.position.set(x, 2, -(half + 4));
+    const x = (Math.random() - 0.5) * (CLIMB_W - 2) * 2;
+    m.position.set(x, 2, -(CLIMB_L + 4));
     this.ctx.scene.add(m);
-    this.rocks.push({ m, x, z: -(half + 4), vz: 15 + prog * 8 + Math.random() * 6 });
+    this.rocks.push({ m, x, z: -(CLIMB_L + 4), vz: 13 + prog * 7 + Math.random() * 5 });
   }
 
   private spawnBox() {
@@ -87,7 +89,6 @@ export class ClimbGame implements GameModule {
       this.ctx.scene.remove(this.box.m);
       this.box = null;
     }
-    const half = this.ctx.halfSize;
     const grp = new THREE.Group();
     const crate = new THREE.Mesh(
       new THREE.BoxGeometry(2.4, 2.4, 2.4),
@@ -95,8 +96,11 @@ export class ClimbGame implements GameModule {
     );
     crate.castShadow = true;
     grp.add(crate);
-    const x = (Math.random() - 0.5) * half * 1.5;
-    const z = (Math.random() - 0.5) * half * 1.2;
+    // Drop it a little ahead of the leading climber, inside the corridor.
+    const alive = this.ctx.players.filter((p) => !p.dead);
+    const leadZ = alive.length ? Math.min(...alive.map((p) => p.z)) : 0;
+    const x = (Math.random() - 0.5) * (CLIMB_W - 3) * 2;
+    const z = Math.max(-(CLIMB_L - 6), leadZ - 8 - Math.random() * 10);
     grp.position.set(x, 1.2, z);
     this.ctx.scene.add(grp);
     this.box = { m: grp, x, z };
@@ -105,14 +109,12 @@ export class ClimbGame implements GameModule {
   }
 
   private progressM(p: Player): number {
-    const half = this.ctx.halfSize;
-    return Math.max(0, Math.round(half - 4 - p.z));
+    return Math.max(0, Math.round(CLIMB_L - 4 - p.z));
   }
 
   tick(dt: number, elapsed: number) {
     if (this.finished) return;
     const ctx = this.ctx;
-    const half = ctx.halfSize;
     this.timeLeft -= dt;
     ctx.setClock(this.timeLeft);
     if (this.timeLeft <= 0) return this.doFinish('Time! Highest climber wins.');
@@ -140,7 +142,7 @@ export class ClimbGame implements GameModule {
           if (p.you) ctx.fx.banner('KNOCKED DOWN!', '#9DB8CC');
         }
       }
-      if (r.z > half + 6) {
+      if (r.z > CLIMB_L + 6) {
         ctx.scene.remove(r.m);
         return false;
       }
@@ -172,7 +174,7 @@ export class ClimbGame implements GameModule {
       }
     }
 
-    localMove(ctx, dt);
+    localMove(ctx, dt, { speedMul: CLIMB_PACE });
     for (const p of ctx.players.slice(1)) {
       if (p.dead) continue;
       p.retarget -= dt;
@@ -182,20 +184,31 @@ export class ClimbGame implements GameModule {
         let dodge = 0;
         for (const r of this.rocks) {
           if (r.z < p.z && p.z - r.z < 14 && Math.abs(r.x - p.x) < 5) {
-            dodge = r.x > p.x ? -7 : 7;
+            dodge = r.x > p.x ? -6 : 6;
             break;
           }
         }
-        p.tx = Math.max(-half + 3, Math.min(half - 3, p.x + dodge + (Math.random() - 0.5) * 4));
+        p.tx = Math.max(-CLIMB_W + 3, Math.min(CLIMB_W - 3, p.x + dodge + (Math.random() - 0.5) * 3));
         p.tz = p.z - 12;
         if (this.box && Math.random() < ctx.diff.cap * 0.5) {
           p.tx = this.box.x;
           p.tz = this.box.z;
         }
       }
-      botMove(ctx, p, p.tx, p.tz, dt);
+      botMove(ctx, p, p.tx, p.tz, dt, { speedMul: CLIMB_PACE });
     }
     collidePlayers(ctx);
+
+    // Keep everyone inside the narrow corridor.
+    for (const p of ctx.players) {
+      const w = CLIMB_W - 1;
+      if (p.x < -w) { p.x = -w; p.vx = Math.abs(p.vx) * 0.3; }
+      if (p.x > w) { p.x = w; p.vx = -Math.abs(p.vx) * 0.3; }
+      if (p.z > CLIMB_L - 1) { p.z = CLIMB_L - 1; p.vz = -Math.abs(p.vz) * 0.3; }
+    }
+
+    // The camera climbs with you.
+    ctx.camera.follow(ctx.players[0].z, -(CLIMB_L - 13), CLIMB_L - 13);
 
     // Progress + summit check.
     for (const p of ctx.players) {
@@ -205,7 +218,7 @@ export class ClimbGame implements GameModule {
         p.score = m;
         setScore(p, m + 'm');
       }
-      if (p.z <= -(half - 3.5)) {
+      if (p.z <= -(CLIMB_L - 3.5)) {
         ctx.fx.banner(p.you ? '🏔️ YOU REACHED THE SUMMIT!' : `🏔️ ${p.hero.name} SUMMITS!`, p.hero.col);
         return this.doFinish(p.you ? 'You conquered the mountain!' : p.hero.name + ' got there first.');
       }

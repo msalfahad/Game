@@ -14,6 +14,7 @@ import { TUNING } from '../core/tuning';
 
 export interface RoamOpts {
   noClamp?: boolean;
+  speedMul?: number;
 }
 
 /** Reset + spawn the four players at diagonal-ish spots and build HUD heads. */
@@ -45,7 +46,7 @@ export function localMove(ctx: MatchContext, dt: number, opts: RoamOpts = {}) {
   you.vx += wind.x * dt;
   you.vz += wind.z * dt;
   const surf = surface(ctx.world.surfaceAt(you.x, you.z));
-  moveFreeRoam(you, ax, ay, surf, dt, { halfSize: ctx.halfSize, sprint, noClamp: opts.noClamp });
+  moveFreeRoam(you, ax, ay, surf, dt, { halfSize: ctx.halfSize, sprint, noClamp: opts.noClamp, speedMul: opts.speedMul });
 }
 
 /**
@@ -70,6 +71,7 @@ export function botMove(ctx: MatchContext, p: Player, tx: number, tz: number, dt
     halfSize: ctx.halfSize,
     sprint: cap > 0.85,
     noClamp: opts.noClamp,
+    speedMul: opts.speedMul,
   });
   // Confident bots occasionally dash toward far targets.
   if (cap > 0.7 && p.dashCd <= 0 && L > ctx.halfSize * 0.6 && Math.random() < dt * 0.3) {

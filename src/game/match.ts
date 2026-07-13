@@ -88,12 +88,13 @@ export class Match {
     const family = familyById(game.familyId);
     this.game = makeGame(game);
     const isGoal = game.mechanic === 'goal';
-    // Ice push plays on a small round rink.
-    const halfSize = isGoal ? ASBASE * 0.48 : game.mechanic === 'icepush' ? ASBASE * 0.7 : ASBASE;
+    // Ice push plays on a small round rink; the climb is a long narrow slope.
+    const isClimb = game.mechanic === 'climb';
+    const halfSize = isGoal ? ASBASE * 0.48 : game.mechanic === 'icepush' ? ASBASE * 0.7 : isClimb ? 45 : ASBASE;
 
     this.engine.clearScene();
     this.parts = [];
-    const world = buildWorld(this.engine.scene, family, game, halfSize);
+    const world = buildWorld(this.engine.scene, family, game, halfSize, isClimb ? { w: 12, l: 45 } : undefined);
     const hazards = new Hazards(this.engine.scene, game, family, halfSize, this.fx);
 
     // Roster: local hero + three distinct random rivals (FFA).
@@ -129,7 +130,7 @@ export class Match {
       finish: (ranked, subtitle) => this.finish(ranked, subtitle),
     };
 
-    this.engine.camera.frame(halfSize, isGoal ? 1.28 : 1.0);
+    this.engine.camera.frame(isClimb ? 17 : halfSize, isGoal ? 1.28 : 1.0);
 
     this.game.init(this.ctx);
     HUD.showHud(true);

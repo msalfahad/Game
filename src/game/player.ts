@@ -122,14 +122,19 @@ export class Player {
 
   // Three.js
   group = new THREE.Group();
-  sprite!: THREE.Sprite; // torso piece (kept as `sprite` for compatibility)
+  sprite!: THREE.Object3D; // torso piece (kept as `sprite` for compatibility)
   ring!: THREE.Mesh;
   glow!: THREE.Mesh;
-  private pieces: THREE.Sprite[] = [];
-  private legLS: THREE.Sprite | null = null;
-  private legRS: THREE.Sprite | null = null;
-  private armLS: THREE.Sprite | null = null;
-  private armRS: THREE.Sprite | null = null;
+  private charGroup = new THREE.Group();
+  private pieceMats: THREE.MeshBasicMaterial[] = [];
+  private torsoM: THREE.Mesh | null = null;
+  private legLM: THREE.Mesh | null = null;
+  private legRM: THREE.Mesh | null = null;
+  private armLM: THREE.Mesh | null = null;
+  private armRM: THREE.Mesh | null = null;
+  private legY = 0;
+  private armY = 0;
+  private torsoY = 0;
   private baseH = 0;
   private px = 0;
   private pz = 0;
@@ -176,38 +181,48 @@ export class Player {
     // Start as the plain full-art sprite; swap to the puppet when slices load.
     this.baseH = r * 2.15;
     const W = this.baseH * 0.82;
-    this.sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: charTex(this.hero), transparent: true, depthWrite: false }));
-    this.sprite.scale.set(W, this.baseH, 1);
-    this.sprite.position.y = this.baseH * 0.5 + 0.6;
-    grp.add(this.sprite);
-    this.pieces = [this.sprite];
+    const startSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: charTex(this.hero), transparent: true, depthWrite: false }));
+    startSprite.scale.set(W, this.baseH, 1);
+    startSprite.position.y = this.baseH * 0.5 + 0.6;
+    grp.add(startSprite);
+    this.sprite = startSprite;
+    this.charGroup = new THREE.Group();
+    grp.add(this.charGroup);
 
     loadPuppet(this.hero, (tex) => {
       if (!grp.parent) return; // rider was torn down before art loaded
-      grp.remove(this.sprite);
+      grp.remove(startSprite);
       const H = this.baseH;
       const bottom = 0.6;
       const legH = H * 0.34;
       const hipY = bottom + legH;
-      const mk = (map: THREE.CanvasTexture, w: number, h: number, cx: number, cy: number, x: number, y: number, order: number) => {
-        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map, transparent: true, depthWrite: false }));
-        sp.scale.set(w, h, 1);
-        sp.center.set(cx, cy);
-        sp.position.set(x, y, 0);
-        sp.renderOrder = order;
-        grp.add(sp);
-        return sp;
+      this.pieceMats = [];
+      // Plane pieces, pivoted at their joints (geometry shifted so rotation
+      // swings around hip/shoulder). The iso camera is fixed, so planes
+      // facing +z read exactly like the old billboard — but they can STEP.
+      const mk = (map: THREE.CanvasTexture, w: number, h: number, pivot: 'top' | 'bottom', x: number, y: number, order: number) => {
+        const geo = new THREE.PlaneGeometry(w, h);
+        geo.translate(0, pivot === 'top' ? -h / 2 : h / 2, 0);
+        const mat = new THREE.MeshBasicMaterial({ map, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+        this.pieceMats.push(mat);
+        const m = new THREE.Mesh(geo, mat);
+        m.position.set(x, y, 0);
+        m.renderOrder = order;
+        this.charGroup.add(m);
+        return m;
       };
-      // Legs: anchored at the hip (top of the slice), swing like scissors.
-      this.legLS = mk(tex.legL, W * 0.38, legH, 0.5, 1, -W * 0.09, hipY, 1);
-      this.legRS = mk(tex.legR, W * 0.38, legH, 0.5, 1, W * 0.09, hipY, 1);
-      // Torso: anchored at its bottom just below the hip (hides the seam).
-      this.sprite = mk(tex.torso, W, H * 0.74, 0.5, 0, 0, hipY - H * 0.08, 2);
-      // Arms: anchored at the shoulders, drawn in front.
+      this.legLM = mk(tex.legL, W * 0.38, legH, 'top', -W * 0.09, hipY, 1);
+      this.legRM = mk(tex.legR, W * 0.38, legH, 'top', W * 0.09, hipY, 1);
+      this.torsoM = mk(tex.torso, W, H * 0.74, 'bottom', 0, hipY - H * 0.08, 2);
       const shoulderY = hipY - H * 0.08 + H * 0.74 * 0.72;
-      this.armLS = mk(tex.armL, W * 0.24, H * 0.44, 0.5, 1, -W * 0.33, shoulderY, 3);
-      this.armRS = mk(tex.armR, W * 0.24, H * 0.44, 0.5, 1, W * 0.33, shoulderY, 3);
-      this.pieces = [this.sprite, this.legLS, this.legRS, this.armLS, this.armRS];
+      this.armLM = mk(tex.armL, W * 0.24, H * 0.44, 'top', -W * 0.33, shoulderY, 3);
+      this.armRM = mk(tex.armR, W * 0.24, H * 0.44, 'top', W * 0.33, shoulderY, 3);
+      this.armLM.position.z = 0.05;
+      this.armRM.position.z = 0.05;
+      this.legY = hipY;
+      this.armY = shoulderY;
+      this.torsoY = hipY - H * 0.08;
+      this.sprite = this.torsoM;
     });
 
     this.group = grp;
@@ -215,62 +230,78 @@ export class Player {
   }
 
   /**
-   * Walk cycle on the original art: legs scissor and arms counter-swing with
-   * speed, torso leans into sideways motion, pieces tuck mid-air, soft squash
-   * on landing. Feet stay planted — no bottom jitter.
+   * TRUE step cycle on the original art: legs alternately LIFT like real
+   * steps (with a small knee-bend shortening), arms counter-pump up and
+   * down, the body bounces on each footfall, pitches slightly forward and
+   * sways — pieces tuck mid-air, soft squash on landing. Planted foot never
+   * leaves the ground, so the base stays rock steady.
    */
   bob(elapsed: number, seed: number) {
-    if (!this.sprite) return;
     const dx = this.x - this.px;
     const dz = this.z - this.pz;
     this.px = this.x;
     this.pz = this.z;
     const speed = Math.min(1, (Math.hypot(dx, dz) * 60) / 16);
     const airborne = this.y > 0.4;
-    const t = elapsed * (4.5 + speed * 4.5) + seed;
-    const swing = Math.sin(t);
+    if (!this.torsoM || !this.legLM || !this.legRM || !this.armLM || !this.armRM) return;
 
     if (this.wasAirborne && !airborne) this.landSquash = 1;
     this.wasAirborne = airborne;
     this.landSquash = Math.max(0, this.landSquash - 0.1);
 
-    const rot = (sp: THREE.Sprite | null, target: number, snap = 0.3) => {
-      if (!sp) return;
-      const m = sp.material as THREE.SpriteMaterial;
-      m.rotation += (target - m.rotation) * snap;
+    const t = elapsed * (5 + speed * 6) + seed;
+    const phase = Math.sin(t); // +1 left step apex, -1 right step apex
+    const ease = (o: THREE.Object3D, px2: number, py: number, rz: number, k = 0.35) => {
+      o.position.y += (py - o.position.y) * k;
+      o.position.x += (px2 - o.position.x) * k;
+      o.rotation.z += (rz - o.rotation.z) * k;
     };
+    const W = this.baseH * 0.82;
+    const lean = Math.max(-0.12, Math.min(0.12, -dx * 60 * 0.008 * speed));
 
-    const lean = Math.max(-0.14, Math.min(0.14, -dx * 60 * 0.01 * speed));
     if (airborne) {
-      // Tucked jump: legs together and back, arms raised outward.
-      rot(this.legLS, 0.45);
-      rot(this.legRS, -0.45);
-      rot(this.armLS, 1.0);
-      rot(this.armRS, -1.0);
-      rot(this.sprite, lean + Math.sin(elapsed * 6 + seed) * 0.06);
+      // Tuck: both legs pulled up, arms thrown up.
+      ease(this.legLM, -W * 0.09, this.legY + 0.7, 0.25);
+      ease(this.legRM, W * 0.09, this.legY + 0.7, -0.25);
+      ease(this.armLM, -W * 0.33, this.armY + 0.35, 0.9);
+      ease(this.armRM, W * 0.33, this.armY + 0.35, -0.9);
+      ease(this.torsoM, 0, this.torsoY + 0.4, lean);
+      this.charGroup.rotation.y += (Math.sin(elapsed * 7 + seed) * 0.08 - this.charGroup.rotation.y) * 0.2;
     } else if (speed > 0.05) {
-      const amp = 0.32 + speed * 0.3;
-      rot(this.legLS, swing * amp, 0.5);
-      rot(this.legRS, -swing * amp, 0.5);
-      rot(this.armLS, -swing * amp * 1.15, 0.5);
-      rot(this.armRS, swing * amp * 1.15, 0.5);
-      rot(this.sprite, lean + swing * 0.045 * speed);
+      const lift = 0.55 + speed * 0.5;
+      const stepL = Math.max(0, phase); // left foot in the air
+      const stepR = Math.max(0, -phase);
+      // Legs: lift + slight knee swing; the grounded leg stays planted.
+      ease(this.legLM, -W * 0.09, this.legY + stepL * lift, phase * 0.1, 0.5);
+      ease(this.legRM, W * 0.09, this.legY + stepR * lift, -phase * 0.1, 0.5);
+      // Knee-bend illusion: the lifted leg shortens a touch.
+      this.legLM.scale.y = 1 - stepL * 0.22;
+      this.legRM.scale.y = 1 - stepR * 0.22;
+      // Arms: pump opposite to legs (right arm forward with left foot).
+      ease(this.armLM, -W * 0.33, this.armY + stepR * 0.3, -phase * 0.5, 0.5);
+      ease(this.armRM, W * 0.33, this.armY + stepL * 0.3, phase * 0.5, 0.5);
+      // Body: footfall bounce (two beats per cycle), forward pitch + sway.
+      const bounce = Math.abs(Math.cos(t)) * (0.35 + speed * 0.3);
+      ease(this.torsoM, phase * W * 0.02, this.torsoY + bounce, lean + phase * 0.05, 0.5);
+      this.charGroup.rotation.x += (-0.06 * speed - this.charGroup.rotation.x) * 0.2;
+      this.charGroup.rotation.y += (phase * 0.09 * speed - this.charGroup.rotation.y) * 0.3;
     } else {
-      // Idle: everything settles; gentle breathing on the torso only.
-      rot(this.legLS, 0, 0.12);
-      rot(this.legRS, 0, 0.12);
-      rot(this.armLS, Math.sin(elapsed * 2 + seed) * 0.06, 0.12);
-      rot(this.armRS, -Math.sin(elapsed * 2 + seed) * 0.06, 0.12);
-      rot(this.sprite, 0, 0.12);
+      // Idle: settle; gentle breathing (torso rises/falls), arms relax.
+      const breathe = Math.sin(elapsed * 2.2 + seed);
+      ease(this.legLM, -W * 0.09, this.legY, 0, 0.15);
+      ease(this.legRM, W * 0.09, this.legY, 0, 0.15);
+      this.legLM.scale.y += (1 - this.legLM.scale.y) * 0.15;
+      this.legRM.scale.y += (1 - this.legRM.scale.y) * 0.15;
+      ease(this.armLM, -W * 0.33, this.armY + breathe * 0.06, breathe * 0.05, 0.15);
+      ease(this.armRM, W * 0.33, this.armY + breathe * 0.06, -breathe * 0.05, 0.15);
+      ease(this.torsoM, 0, this.torsoY + breathe * 0.08, 0, 0.15);
+      this.charGroup.rotation.x += (0 - this.charGroup.rotation.x) * 0.1;
+      this.charGroup.rotation.y += (0 - this.charGroup.rotation.y) * 0.1;
     }
 
-    // Breathing/landing on the torso scale (bottom-anchored: grows upward,
-    // so the feet and the seam stay perfectly still).
-    if (this.pieces.length > 1) {
-      const breathe = 1 + Math.sin(elapsed * 2.4 + seed) * 0.015 * (1 - speed);
-      const squash = 1 - this.landSquash * 0.1;
-      this.sprite.scale.y = this.baseH * 0.74 * breathe * squash;
-    }
+    // Landing squash on the torso only (bottom-anchored, feet untouched).
+    this.torsoM.scale.y = (1 - this.landSquash * 0.12) * this.torsoM.scale.y + this.landSquash * 0; // keep simple
+    if (this.landSquash <= 0) this.torsoM.scale.y += (1 - this.torsoM.scale.y) * 0.2;
   }
 
   setArmedGlow(on: boolean) {
@@ -294,8 +325,12 @@ export class Player {
     else if (this.freezeT > 0) tint = 0x88ccff;
     else if (this.shieldT > 0) tint = 0xbfe8ff;
     const opacity = this.invulnT > 0 ? 0.55 : 1;
-    for (const sp of this.pieces) {
-      const m = sp.material as THREE.SpriteMaterial;
+    for (const m of this.pieceMats) {
+      m.color.setHex(tint);
+      m.opacity = opacity;
+    }
+    if (this.sprite instanceof THREE.Sprite) {
+      const m = this.sprite.material as THREE.SpriteMaterial;
       m.color.setHex(tint);
       m.opacity = opacity;
     }

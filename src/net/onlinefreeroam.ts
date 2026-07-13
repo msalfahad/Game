@@ -22,6 +22,9 @@ const GRAVITY = 60;
 const WPS = 8;
 const PAINT_N = 9;
 const BREAK_N = 11;
+const CLIMB_W = 12;
+const CLIMB_L = 45;
+const CLIMB_PACE = 0.7;
 
 interface Snap { at: number; msg: StateMsg; }
 
@@ -62,6 +65,7 @@ export class OnlineFreeRoam {
     const family = familyById(this.game.familyId);
     this.youSlot = msg.youSlot;
     this.half = this.game.mechanic === 'icepush' ? 21 : 30; // ice push = small round rink
+    const isClimb = this.game.mechanic === 'climb';
     this.snaps = [];
     this.seq = 0;
     this.parts = [];
@@ -73,15 +77,19 @@ export class OnlineFreeRoam {
     this.youScoreShown = -1;
 
     this.engine.clearScene();
-    this.world = buildWorld(this.engine.scene, family, this.game, this.half);
-    this.engine.camera.frame(this.half, 1.0);
+    this.world = buildWorld(
+      this.engine.scene, family, this.game,
+      isClimb ? CLIMB_L : this.half,
+      isClimb ? { w: CLIMB_W, l: CLIMB_L } : undefined,
+    );
+    this.engine.camera.frame(isClimb ? 17 : this.half, 1.0);
 
     const is2v2 = msg.mode === '2v2';
     this.players = msg.players.map((pi) => {
       const p = new Player(heroByKey(pi.heroKey), pi.slot === msg.youSlot, pi.slot, (pi.team % 2) as 0 | 1);
       if (this.game.mechanic === 'climb') {
-        p.x = (pi.slot - 1.5) * 7;
-        p.z = this.half - 4;
+        p.x = (pi.slot - 1.5) * 5.5;
+        p.z = CLIMB_L - 4;
       } else {
         const spots = [[-0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [0.5, 0.5]];
         p.x = spots[pi.slot][0] * this.half;
@@ -204,10 +212,10 @@ export class OnlineFreeRoam {
       }
     } else if (mech === 'climb') {
       const line = new THREE.Mesh(
-        new THREE.BoxGeometry(this.half * 2, 0.5, 2),
+        new THREE.BoxGeometry(CLIMB_W * 2, 0.5, 2),
         new THREE.MeshBasicMaterial({ color: 0xffffff }),
       );
-      line.position.set(0, 0.3, -(this.half - 2.5));
+      line.position.set(0, 0.3, -(CLIMB_L - 2.5));
       this.engine.scene.add(line);
     } else if (mech === 'dodge' && this.game.mods?.hz === 'conveyor') {
       for (const sx of [-1, 1]) {
@@ -512,6 +520,7 @@ export class OnlineFreeRoam {
     }
 
     const you = this.players[this.youSlot];
+    if (this.game.mechanic === 'climb') this.engine.camera.follow(you.z, -(CLIMB_L - 13), CLIMB_L - 13);
     HUD.setAbilityHint(you.dead ? '' : you.cd <= 0 ? 'ready' : '');
     this.world.tick(dt);
     this.tickParts(dt);
@@ -521,7 +530,7 @@ export class OnlineFreeRoam {
   private predictLocal(dt: number) {
     const p = this.players[this.youSlot];
     if (p.dead) return;
-    const top = BASE_SPEED * speedMult(p.hero);
+    const top = BASE_SPEED * speedMult(p.hero) * (this.game.mechanic === 'climb' ? CLIMB_PACE : 1);
     const accel = top * 2.6;
     if (p.freezeT <= 0) {
       p.vx += this.input.ax * accel * dt;
@@ -540,12 +549,18 @@ export class OnlineFreeRoam {
       if (p.y <= 0) { p.y = 0; p.vy = 0; }
     }
     if (this.jumpQueued && p.y <= 0 && p.freezeT <= 0) p.vy = JUMP_V;
-    const open = this.game.mechanic === 'icepush' ||
-      (this.game.mechanic === 'dodge' && (this.game.mods?.hz === 'logs' || this.game.mods?.hz === 'wind'));
-    if (!open) {
-      const m = this.half - 1;
-      p.x = Math.max(-m, Math.min(m, p.x));
-      p.z = Math.max(-m, Math.min(m, p.z));
+    if (this.game.mechanic === 'climb') {
+      const w = CLIMB_W - 1;
+      p.x = Math.max(-w, Math.min(w, p.x));
+      p.z = Math.max(-(CLIMB_L - 1), Math.min(CLIMB_L - 1, p.z));
+    } else {
+      const open = this.game.mechanic === 'icepush' ||
+        (this.game.mechanic === 'dodge' && (this.game.mods?.hz === 'logs' || this.game.mods?.hz === 'wind'));
+      if (!open) {
+        const m = this.half - 1;
+        p.x = Math.max(-m, Math.min(m, p.x));
+        p.z = Math.max(-m, Math.min(m, p.z));
+      }
     }
   }
 

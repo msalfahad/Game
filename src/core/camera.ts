@@ -12,6 +12,7 @@ export class IsoCamera {
   private shakeScale = 1; // accessibility multiplier, 0 disables shake
   private halfSize = 30;
   private zoom = 1;
+  private followZ = 0;
 
   constructor() {
     this.cam = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 600);
@@ -37,8 +38,20 @@ export class IsoCamera {
     const dist = halfSize * 2.25 * portrait * zoom * wide;
     const height = halfSize * 1.5 * portrait * zoom * wide;
     this.base.set(0, height, dist);
-    this.cam.position.copy(this.base);
-    this.cam.lookAt(0, -2, -halfSize * 0.06);
+    this.followZ = 0;
+    this.applyBase();
+  }
+
+  private applyBase() {
+    this.cam.position.set(this.base.x, this.base.y, this.base.z + this.followZ);
+    this.cam.lookAt(0, -2, -this.halfSize * 0.06 + this.followZ);
+  }
+
+  /** Track a world-z (the climb camera follows the local hero up the slope). */
+  follow(z: number, minZ: number, maxZ: number) {
+    const target = Math.max(minZ, Math.min(maxZ, z));
+    this.followZ += (target - this.followZ) * 0.12;
+    this.applyBase();
   }
 
   onResize() {
@@ -63,12 +76,12 @@ export class IsoCamera {
       this.cam.position.set(
         this.base.x + (Math.random() - 0.5) * s,
         this.base.y + (Math.random() - 0.5) * s,
-        this.base.z + (Math.random() - 0.5) * s,
+        this.base.z + this.followZ + (Math.random() - 0.5) * s,
       );
       this.shakeT *= 0.9;
       if (this.shakeT < 0.05) {
         this.shakeT = 0;
-        this.cam.position.copy(this.base);
+        this.applyBase();
       }
     }
   }
