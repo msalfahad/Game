@@ -325,7 +325,14 @@ export class Player {
       this.wasAirborne = airborne;
       this.landSquash = Math.max(0, this.landSquash - 0.08);
       // Face the way we move (sheet faces right); keep facing when idle.
-      if (Math.abs(dx) * 60 > 1.2) this.facing = dx > 0 ? 1 : -1;
+      // Use VELOCITY, not position deltas: online reconciliation nudges the
+      // local player's rendered position backwards while running, which made
+      // position-based facing point the wrong way. Velocity comes straight
+      // from input prediction (local) / server state (remote), so its sign is
+      // always the true heading. Fall back to deltas when velocity is unused
+      // (hockey paddles move via pos).
+      const headX = Math.abs(this.vx) > 0.6 ? this.vx : dx * 60;
+      if (Math.abs(headX) > 1.2) this.facing = headX > 0 ? 1 : -1;
       this.frameM.scale.x += (this.facing - this.frameM.scale.x) * 0.5;
 
       if (airborne) {
