@@ -16,6 +16,44 @@ function charTex(h: Hero): THREE.Texture {
   return t;
 }
 
+// --- real animation frames ---------------------------------------------------
+// Heroes with a sliced animation sheet (public/chars/anim/<key>.png) get REAL
+// frame-by-frame walk/run animation from their own art. Strip layout:
+// cell 0 = idle (front view), cells 1-8 = walk cycle, cells 9-16 = run cycle,
+// all side view facing RIGHT. Square cells, feet on the cell floor.
+export const ANIM_CELLS = 17;
+const IDLE_F = 0, WALK_F = 1, RUN_F = 9, JUMP_F = 12; // run "UP" pose for air
+const animCache: Record<string, THREE.Texture | null> = {};
+const animWaiters: Record<string, ((t: THREE.Texture | null) => void)[]> = {};
+
+function animBase(): string {
+  // Respect Vite's base path (game is served from a sub-path on Pages).
+  return (import.meta as any).env?.BASE_URL ?? './';
+}
+
+function loadAnim(hero: Hero, onReady: (t: THREE.Texture | null) => void) {
+  if (hero.key in animCache) return onReady(animCache[hero.key]);
+  if (animWaiters[hero.key]) return void animWaiters[hero.key].push(onReady);
+  animWaiters[hero.key] = [onReady];
+  const done = (t: THREE.Texture | null) => {
+    animCache[hero.key] = t;
+    for (const cb of animWaiters[hero.key] ?? []) cb(t);
+    delete animWaiters[hero.key];
+  };
+  const img = new Image();
+  img.src = animBase() + 'chars/anim/' + hero.key + '.png';
+  img.onload = () => {
+    const t = new THREE.Texture(img);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.magFilter = THREE.LinearFilter;
+    t.minFilter = THREE.LinearFilter;
+    t.generateMipmaps = false;
+    t.needsUpdate = true;
+    done(t);
+  };
+  img.onerror = () => done(null); // no sheet for this hero (yet) → puppet
+}
+
 // --- 2D puppet slices --------------------------------------------------------
 // The character art is cut into body / legs / arms pieces so the ORIGINAL art
 // walks: legs scissor, arms swing, torso leans — like a paper puppet. Slices
@@ -140,6 +178,12 @@ export class Player {
   private pz = 0;
   private wasAirborne = false;
   private landSquash = 0;
+  // Frame-animation mode (real sliced walk/run frames from the hero's sheet).
+  private frameM: THREE.Mesh | null = null;
+  private frameTex: THREE.Texture | null = null;
+  private frameIdx = -1;
+  private strideT = 0;
+  private facing = 1; // 1 = right (sheet frames face right)
 
   scoreEl: HTMLElement | null = null;
   headEl: HTMLElement | null = null;
@@ -189,8 +233,36 @@ export class Player {
     this.charGroup = new THREE.Group();
     grp.add(this.charGroup);
 
-    loadPuppet(this.hero, (tex) => {
-      if (!grp.parent) return; // rider was torn down before art loaded
+    // Prefer REAL animation frames when the hero has a sliced sheet; puppet
+    // otherwise. The plain sprite stands in while either loads.
+    this.frameM = null;
+    this.frameTex = null;
+    this.frameIdx = -1;
+    loadAnim(this.hero, (sheet) => {
+      if (!grp.parent) return;
+      if (sheet) {
+        grp.remove(startSprite);
+        const H = this.baseH * 1.06;
+        const geo = new THREE.PlaneGeometry(H, H); // square cells
+        geo.translate(0, H / 2, 0);
+        this.frameTex = sheet.clone();
+        this.frameTex.needsUpdate = true;
+        this.frameTex.repeat.set(1 / ANIM_CELLS, 1);
+        const mat = new THREE.MeshBasicMaterial({ map: this.frameTex, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+        this.pieceMats = [mat];
+        this.frameM = new THREE.Mesh(geo, mat);
+        this.frameM.position.y = 0.6;
+        this.frameM.renderOrder = 2;
+        this.charGroup.add(this.frameM);
+        this.sprite = this.frameM;
+        this.setFrame(IDLE_F);
+        return;
+      }
+      loadPuppetOnto();
+    });
+
+    const loadPuppetOnto = () => loadPuppet(this.hero, (tex) => {
+      if (!grp.parent || this.frameM) return; // rider torn down / frames won
       grp.remove(startSprite);
       const H = this.baseH;
       const bottom = 0.6;
@@ -241,8 +313,39 @@ export class Player {
     const dz = this.z - this.pz;
     this.px = this.x;
     this.pz = this.z;
-    const speed = Math.min(1, (Math.hypot(dx, dz) * 60) / 16);
+    const dist = Math.hypot(dx, dz);
+    const speed = Math.min(1, (dist * 60) / 16);
     const airborne = this.y > 0.4;
+
+    // --- REAL frame animation (sliced from the hero's own sheet) ---
+    if (this.frameM) {
+      if (this.wasAirborne && !airborne) this.landSquash = 1;
+      this.wasAirborne = airborne;
+      this.landSquash = Math.max(0, this.landSquash - 0.08);
+      // Face the way we move (sheet faces right); keep facing when idle.
+      if (Math.abs(dx) * 60 > 1.2) this.facing = dx > 0 ? 1 : -1;
+      this.frameM.scale.x += (this.facing - this.frameM.scale.x) * 0.5;
+
+      if (airborne) {
+        this.setFrame(JUMP_F); // run "UP" pose reads as a jump
+        this.frameM.scale.y += (1.04 - this.frameM.scale.y) * 0.2;
+      } else if (speed > 0.05) {
+        // Distance-driven stride so feet match the ground: ~1 full cycle
+        // every ~6 world units, 8 frames per cycle. Walk under ~55% speed,
+        // run above it.
+        this.strideT += dist * 0.17;
+        const f = Math.floor(this.strideT * 8) % 8;
+        this.setFrame((speed > 0.55 ? RUN_F : WALK_F) + f);
+        this.frameM.scale.y += (1 - this.landSquash * 0.12 - this.frameM.scale.y) * 0.35;
+      } else {
+        this.setFrame(IDLE_F);
+        // Idle breathing on the real front pose.
+        const breathe = Math.sin(elapsed * 2.2 + seed);
+        this.frameM.scale.y += (1 + breathe * 0.015 - this.landSquash * 0.12 - this.frameM.scale.y) * 0.15;
+      }
+      return;
+    }
+
     if (!this.torsoM || !this.legLM || !this.legRM || !this.armLM || !this.armRM) return;
 
     if (this.wasAirborne && !airborne) this.landSquash = 1;
@@ -302,6 +405,12 @@ export class Player {
     // Landing squash on the torso only (bottom-anchored, feet untouched).
     this.torsoM.scale.y = (1 - this.landSquash * 0.12) * this.torsoM.scale.y + this.landSquash * 0; // keep simple
     if (this.landSquash <= 0) this.torsoM.scale.y += (1 - this.torsoM.scale.y) * 0.2;
+  }
+
+  private setFrame(i: number) {
+    if (i === this.frameIdx || !this.frameTex) return;
+    this.frameIdx = i;
+    this.frameTex.offset.x = i / ANIM_CELLS;
   }
 
   setArmedGlow(on: boolean) {
