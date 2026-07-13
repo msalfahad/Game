@@ -104,6 +104,9 @@ export class HockeyGame implements GameModule {
     for (const p of this.ctx.players) {
       if (p.dead) { p.group.visible = false; continue; }
       const [x, z] = this.edgePos(p);
+      // Keep p.x/p.z in sync so the walk-frame animation sees the movement
+      // (bob() derives stride + facing from position deltas).
+      p.x = x; p.z = z;
       p.group.position.set(x, 0, z);
       p.setArmedGlow(p.armed);
     }

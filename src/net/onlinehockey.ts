@@ -119,6 +119,8 @@ export class OnlineHockey {
         continue;
       }
       const [x, z] = this.edgePos(p);
+      // Keep p.x/p.z in sync so the walk-frame animation sees the movement.
+      p.x = x; p.z = z;
       p.group.position.set(x, 0, z);
       p.setArmedGlow(p.armed);
     }

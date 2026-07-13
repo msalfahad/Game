@@ -13,7 +13,7 @@ import { setScore } from '../../ui/hud';
 // appears every 10 seconds — grab it and everyone else is frozen for 3s.
 
 export const CLIMB_W = 12; // corridor half-width
-export const CLIMB_L = 45; // slope half-length
+export const CLIMB_L = 62; // slope half-length — a proper mountain to climb
 const CLIMB_PACE = 0.7; // everyone climbs slower
 
 interface Rock { m: THREE.Mesh; x: number; z: number; vz: number; }

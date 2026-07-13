@@ -21,7 +21,7 @@ const BREAK_N = 11;
 const R_ICE = 21; // Slip & Slide round rink radius
 const ICE_SEGS = 16;
 const CLIMB_W = 12; // Avalanche Run corridor half-width
-const CLIMB_L = 45; // Avalanche Run slope half-length
+const CLIMB_L = 62; // Avalanche Run slope half-length (keep in sync with client)
 const CLIMB_PACE = 0.7;
 
 interface FPlayer {

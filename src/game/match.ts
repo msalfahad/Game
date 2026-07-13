@@ -8,6 +8,7 @@ import { Hazards } from './hazards';
 import { HEROES, type Hero } from '../data/characters';
 import { gameById, familyById } from '../data/maps';
 import { makeGame } from './games/index';
+import { CLIMB_W, CLIMB_L } from './games/climb';
 import { DIFFICULTY, type Fx, type GameModule, type MatchContext } from './context';
 import * as HUD from '../ui/hud';
 
@@ -90,11 +91,12 @@ export class Match {
     const isGoal = game.mechanic === 'goal';
     // Ice push plays on a small round rink; the climb is a long narrow slope.
     const isClimb = game.mechanic === 'climb';
-    const halfSize = isGoal ? ASBASE * 0.48 : game.mechanic === 'icepush' ? ASBASE * 0.7 : isClimb ? 45 : ASBASE;
+    const isIce = game.mechanic === 'icepush';
+    const halfSize = isGoal ? ASBASE * 0.48 : isIce ? ASBASE * 0.7 : isClimb ? CLIMB_L : ASBASE;
 
     this.engine.clearScene();
     this.parts = [];
-    const world = buildWorld(this.engine.scene, family, game, halfSize, isClimb ? { w: 12, l: 45 } : undefined);
+    const world = buildWorld(this.engine.scene, family, game, halfSize, isClimb ? { w: CLIMB_W, l: CLIMB_L } : undefined);
     const hazards = new Hazards(this.engine.scene, game, family, halfSize, this.fx);
 
     // Roster: local hero + three distinct random rivals (FFA).
@@ -130,7 +132,8 @@ export class Match {
       finish: (ranked, subtitle) => this.finish(ranked, subtitle),
     };
 
-    this.engine.camera.frame(isClimb ? 17 : halfSize, isGoal ? 1.28 : 1.0);
+    // Ice push pulls back a touch so the FULL circular rink fits on phones.
+    this.engine.camera.frame(isClimb ? 17 : halfSize, isGoal ? 1.28 : isIce ? 1.18 : 1.0);
 
     this.game.init(this.ctx);
     HUD.showHud(true);

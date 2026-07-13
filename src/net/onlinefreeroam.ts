@@ -82,7 +82,8 @@ export class OnlineFreeRoam {
       isClimb ? CLIMB_L : this.half,
       isClimb ? { w: CLIMB_W, l: CLIMB_L } : undefined,
     );
-    this.engine.camera.frame(isClimb ? 17 : this.half, 1.0);
+    // Ice push pulls back a touch so the FULL circular rink fits on phones.
+    this.engine.camera.frame(isClimb ? 17 : this.half, this.game.mechanic === 'icepush' ? 1.18 : 1.0);
 
     const is2v2 = msg.mode === '2v2';
     this.players = msg.players.map((pi) => {
