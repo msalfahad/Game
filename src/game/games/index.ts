@@ -1,6 +1,8 @@
 import type { GameDef } from '../../data/maps';
 import type { GameModule } from '../context';
 import { HockeyGame } from './hockey';
+import { IcePushGame } from './icepush';
+import { ClimbGame } from './climb';
 import { BreakTilesGame } from './breaktiles';
 import { PushoutGame } from './pushout';
 import { ThrowFightGame } from './throwfight';
@@ -16,6 +18,8 @@ import { SurfaceLabGame } from './surfacelab';
 export function makeGame(def: GameDef): GameModule {
   switch (def.mechanic) {
     case 'goal': return new HockeyGame();
+    case 'icepush': return new IcePushGame();
+    case 'climb': return new ClimbGame();
     case 'breaktiles': return new BreakTilesGame();
     case 'pushout': return new PushoutGame();
     case 'throwfight': return new ThrowFightGame();

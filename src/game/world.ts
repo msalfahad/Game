@@ -81,7 +81,9 @@ export function buildWorld(scene: THREE.Scene, family: FamilyDef, game: GameDef,
   floorMesh.receiveShadow = true;
   scene.add(floorMesh);
 
-  buildProps(scene, family, halfSize, trimMat);
+  // Goal games skip the tall perimeter props — they blocked the view of
+  // players parked on the near wall.
+  if (game.mechanic !== 'goal') buildProps(scene, family, halfSize, trimMat);
   const ambientPts = buildAmbient(scene, family, halfSize);
 
   const surfaceAt = (x: number, z: number): SurfaceKind => {

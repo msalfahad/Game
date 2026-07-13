@@ -144,6 +144,17 @@ export class FreeSim {
       });
     } else if (this.mech === 'dodge' && this.mods.hz === 'lasers') {
       this.beams = [Math.random() * 6, Math.random() * 6 + Math.PI];
+    } else if (this.mech === 'icepush') {
+      // 8 breakable ice-wall segments per side (state 1 intact, 0 shattered).
+      this.tiles = new Int8Array(32).fill(1);
+      this.spawnT = 10; // first thunder box
+    } else if (this.mech === 'climb') {
+      this.players.forEach((p, i) => {
+        p.x = (i - 1.5) * 7;
+        p.z = HALF - 4;
+      });
+      this.spawnT = 10; // first freeze box
+      this.decayT = 1; // rock timer reuse
     }
   }
 
@@ -180,6 +191,7 @@ export class FreeSim {
     return { x: Math.cos(a) * r, z: Math.sin(a) * r };
   }
   private openEdges(): boolean {
+    if (this.mech === 'icepush') return true;
     return this.mech === 'dodge' && (this.mods.hz === 'logs' || this.mods.hz === 'wind');
   }
   private tileIdx(n: number, x: number, z: number): number {
@@ -208,7 +220,10 @@ export class FreeSim {
     }
   }
   private dropItem() {
-    this.addEnt(ET.ITEM, (Math.random() - 0.5) * HALF * 1.6, (Math.random() - 0.5) * HALF * 1.6, 1.5, PROJ_IDX[String(this.mods.proj ?? 'crate')] ?? 3);
+    const kind = PROJ_IDX[String(this.mods.proj ?? 'crate')] ?? 3;
+    // Snowball fights mix in big snowballs (extra bit 4) that hit ~60% harder.
+    const big = kind === 0 && Math.random() < 0.35 ? 4 : 0;
+    this.addEnt(ET.ITEM, (Math.random() - 0.5) * HALF * 1.6, (Math.random() - 0.5) * HALF * 1.6, 1.5, kind | big);
   }
   private spawnLog(prog: number) {
     const axis = Math.random() < 0.5;
@@ -273,7 +288,8 @@ export class FreeSim {
         p.face = { x: p.input.ax / L, z: p.input.ay / L };
       }
     }
-    const retain = Math.pow(0.02, dt);
+    // Slip & Slide keeps momentum like real ice.
+    const retain = Math.pow(this.mech === 'icepush' ? 0.55 : 0.02, dt);
     p.vx *= retain;
     p.vz *= retain;
     const sp = Math.hypot(p.vx, p.vz);
@@ -324,6 +340,7 @@ export class FreeSim {
 
   private ability(p: FPlayer) {
     if (p.freezeT > 0) return;
+    if (this.mech === 'climb') return; // climbing is pure — the box is the power
     if (this.mech === 'throwfight' && p.held) return this.throwItem(p);
     if (this.mech === 'paint') {
       if (p.cd > 0) return;
@@ -399,8 +416,10 @@ export class FreeSim {
       dx = Math.cos(a); dz = Math.sin(a);
     }
     const kind = PROJ_IDX[String(this.mods.proj ?? 'crate')] ?? 3;
+    const big = (p as any)._heldBig ? 4 : 0;
+    (p as any)._heldBig = false;
     const s = PROJ[kind];
-    const e = this.addEnt(ET.MISSILE, p.x, p.z, 3, kind);
+    const e = this.addEnt(ET.MISSILE, p.x, p.z, 3, kind | big);
     e.vx = dx * s.speed;
     e.vz = dz * s.speed;
     e.vy = 6;
@@ -436,13 +455,120 @@ export class FreeSim {
 
   // --- per-mechanic tick ---------------------------------------------------------
   private tickMechanic(dt: number, prog: number) {
-    if (this.mech === 'collect') this.tickCollect(dt);
+    if (this.mech === 'icepush') this.tickIcePush(dt);
+    else if (this.mech === 'climb') this.tickClimb(dt, prog);
+    else if (this.mech === 'collect') this.tickCollect(dt);
     else if (this.mech === 'mash') this.tickMash(dt);
     else if (this.mech === 'paint') this.tickPaint();
     else if (this.mech === 'breaktiles') this.tickBreak(dt, prog);
     else if (this.mech === 'throwfight') this.tickThrow(dt);
     else if (this.mech === 'race') this.tickRace(dt);
     else if (this.mech === 'dodge') this.tickDodge(dt, prog);
+  }
+
+  private tickIcePush(dt: number) {
+    // ⚡ thunder box every 10s; grabbing it freezes everyone else for 2s.
+    this.spawnT -= dt;
+    if (this.spawnT <= 0) {
+      this.spawnT = 10;
+      for (const e of this.ents.values()) if (e.type === ET.LOOT) this.ents.delete(e.id);
+      this.addEnt(ET.LOOT, (Math.random() - 0.5) * HALF * 1.4, (Math.random() - 0.5) * HALF * 1.4, 1.3, 3);
+    }
+    for (const e of this.ents.values()) {
+      if (e.type !== ET.LOOT) continue;
+      for (const p of this.players) {
+        if (p.dead) continue;
+        if (Math.hypot(e.x - p.x, e.z - p.z) < HITBOX + 2) {
+          this.ents.delete(e.id);
+          this.events.push({ t: 'power', slot: p.slot });
+          for (const q of this.players) {
+            if (q === p || q.dead || q.team === p.team) continue;
+            q.freezeT = Math.max(q.freezeT, 2);
+          }
+          break;
+        }
+      }
+    }
+    // Breakable walls: a segment saves you once, then shatters.
+    if (!this.tiles) return;
+    const segLen = (HALF * 2) / 8;
+    const segAt = (x: number, z: number): number => {
+      const idx = (along: number) => Math.max(0, Math.min(7, Math.floor((along + HALF) / segLen)));
+      if (z >= HALF - 1) return 0 + idx(x);
+      if (z <= -HALF + 1) return 8 + idx(x);
+      if (x <= -HALF + 1) return 16 + idx(z);
+      if (x >= HALF - 1) return 24 + idx(z);
+      return -1;
+    };
+    for (const p of this.players) {
+      if (p.dead || p.invulnT > 0) continue;
+      if (Math.abs(p.x) < HALF - 1 && Math.abs(p.z) < HALF - 1) continue;
+      const seg = segAt(p.x, p.z);
+      if (seg >= 0 && this.tiles[seg] === 1) {
+        this.tiles[seg] = 0;
+        this.events.push({ t: 'hit', slot: p.slot }); // wall shatter cue
+        const nx = Math.abs(p.x) > Math.abs(p.z) ? -Math.sign(p.x) : 0;
+        const nz = nx === 0 ? -Math.sign(p.z) : 0;
+        p.vx = nx * 22 + (nx === 0 ? p.vx * 0.4 : 0);
+        p.vz = nz * 22 + (nz === 0 ? p.vz * 0.4 : 0);
+        p.x = Math.max(-(HALF - 1.4), Math.min(HALF - 1.4, p.x));
+        p.z = Math.max(-(HALF - 1.4), Math.min(HALF - 1.4, p.z));
+      } else if (Math.abs(p.x) > HALF + 1 || Math.abs(p.z) > HALF + 1) {
+        this.loseLife(p);
+      }
+    }
+  }
+
+  private tickClimb(dt: number, prog: number) {
+    // Boulders tumble down the slope; hits knock climbers back down.
+    this.decayT -= dt;
+    if (this.decayT <= 0) {
+      this.decayT = Math.max(0.55, 1.3 - prog * 0.6);
+      const e = this.addEnt(ET.LOG, (Math.random() - 0.5) * HALF * 1.8, -(HALF + 4), 2, 2);
+      e.vz = 15 + prog * 8 + Math.random() * 6;
+    }
+    for (const e of this.ents.values()) {
+      if (e.type !== ET.LOG) continue;
+      e.z += e.vz * dt;
+      for (const p of this.players) {
+        if (p.dead || p.hitCd > 0) continue;
+        if (Math.hypot(p.x - e.x, p.z - e.z) < HITBOX + 2.2) {
+          p.hitCd = 0.7;
+          p.vz += 30;
+          p.freezeT = Math.max(p.freezeT, 0.35);
+          this.events.push({ t: 'hit', slot: p.slot });
+        }
+      }
+      if (e.z > HALF + 6) this.ents.delete(e.id);
+    }
+    // ❄ freeze box every 10s.
+    this.spawnT -= dt;
+    if (this.spawnT <= 0) {
+      this.spawnT = 10;
+      for (const e of this.ents.values()) if (e.type === ET.LOOT) this.ents.delete(e.id);
+      this.addEnt(ET.LOOT, (Math.random() - 0.5) * HALF * 1.5, (Math.random() - 0.5) * HALF * 1.2, 1.2, 2);
+    }
+    for (const e of this.ents.values()) {
+      if (e.type !== ET.LOOT) continue;
+      for (const p of this.players) {
+        if (p.dead) continue;
+        if (Math.hypot(e.x - p.x, e.z - p.z) < HITBOX + 2) {
+          this.ents.delete(e.id);
+          this.events.push({ t: 'power', slot: p.slot });
+          for (const q of this.players) {
+            if (q === p || q.dead) continue;
+            q.freezeT = Math.max(q.freezeT, 3);
+          }
+          break;
+        }
+      }
+    }
+    // Progress + summit.
+    for (const p of this.players) {
+      if (p.dead) continue;
+      p.score = Math.max(0, Math.round(HALF - 4 - p.z));
+      if (p.z <= -(HALF - 3.5)) return this.finish();
+    }
   }
 
   private tickCollect(dt: number) {
@@ -586,6 +712,7 @@ export class FreeSim {
         if (!this.ents.has(e.id)) continue;
         if (Math.hypot(e.x - p.x, e.z - p.z) < HITBOX + 2) {
           p.held = true;
+          (p as any)._heldBig = (e.extra & 4) !== 0;
           this.ents.delete(e.id);
           this.events.push({ t: 'pick', slot: p.slot });
           break;
@@ -598,7 +725,8 @@ export class FreeSim {
       e.z += e.vz * dt;
       e.y += e.vy * dt;
       e.vy -= 30 * dt;
-      const s = PROJ[e.extra] ?? PROJ[3];
+      const s = PROJ[e.extra & 3] ?? PROJ[3];
+      const bigMul = (e.extra & 4) !== 0 ? 1.6 : 1;
       let boom = false;
       for (const q of this.players) {
         if (q.slot === e.owner || q.dead) continue;
@@ -608,7 +736,7 @@ export class FreeSim {
           if (s.aoe) boom = true;
           else {
             const ow2 = this.players[e.owner];
-            this.damage(q, s.dmg * (ow2 ? strengthMult(ow2.hero) : 1));
+            this.damage(q, s.dmg * bigMul * (ow2 ? strengthMult(ow2.hero) : 1));
             const L = Math.hypot(e.vx, e.vz) || 1;
             const damp = q.shieldT > 0 ? 0.5 : 1;
             q.vx += (e.vx / L) * 22 * damp;
@@ -824,6 +952,29 @@ export class FreeSim {
       const t = this.wpPos(p.wp);
       p.tx = t.x + (Math.random() - 0.5) * 8;
       p.tz = t.z + (Math.random() - 0.5) * 8;
+    } else if (this.mech === 'icepush') {
+      let box: Ent | null = null;
+      for (const e of this.ents.values()) if (e.type === ET.LOOT) box = e;
+      if (box) {
+        p.tx = box.x;
+        p.tz = box.z;
+      } else {
+        const foes = this.players.filter((q) => q !== p && !q.dead && q.team !== p.team);
+        const t = foes[Math.floor(Math.random() * foes.length)];
+        p.tx = t ? t.x : 0;
+        p.tz = t ? t.z : 0;
+      }
+    } else if (this.mech === 'climb') {
+      let dodge = 0;
+      for (const e of this.ents.values()) {
+        if (e.type !== ET.LOG) continue;
+        if (e.z < p.z && p.z - e.z < 14 && Math.abs(e.x - p.x) < 5) {
+          dodge = e.x > p.x ? -7 : 7;
+          break;
+        }
+      }
+      p.tx = Math.max(-HALF + 3, Math.min(HALF - 3, p.x + dodge + (Math.random() - 0.5) * 4));
+      p.tz = p.z - 12;
     } else {
       // dodge: drift near center
       p.tx = (Math.random() - 0.5) * HALF * 0.5;
@@ -886,7 +1037,7 @@ export class FreeSim {
     if (this.ended) return;
     this.ended = true;
     this.stop();
-    const scoreBased = this.mech === 'collect' || this.mech === 'mash' || this.mech === 'paint' || this.mech === 'race';
+    const scoreBased = this.mech === 'collect' || this.mech === 'mash' || this.mech === 'paint' || this.mech === 'race' || this.mech === 'climb';
     let winnerTeam = -1;
     if (this.mode === '2v2') {
       const teamScore = (team: number) =>
@@ -901,8 +1052,11 @@ export class FreeSim {
     };
     const value = (p: FPlayer) =>
       (this.mode === '2v2' && p.team === winnerTeam ? 100000 : 0) +
-      (this.mech === 'race' ? raceProg(p) * 100 : scoreBased ? p.score * 100 : (p.dead ? -1 : p.lives) * 100 + p.score);
-    const label = this.mech === 'throwfight' ? 'HP' : scoreBased ? 'pts' : 'lives';
+      (this.mech === 'race' ? raceProg(p) * 100
+        : this.mech === 'climb' ? (HALF - p.z) * 100
+        : scoreBased ? p.score * 100
+        : (p.dead ? -1 : p.lives) * 100 + p.score);
+    const label = this.mech === 'throwfight' ? 'HP' : this.mech === 'climb' ? 'm' : scoreBased ? 'pts' : 'lives';
     const shown = (p: FPlayer) =>
       this.mech === 'race' ? p.lap * WPS + p.wp : scoreBased ? Math.round(p.score) : Math.max(Math.round(p.lives), 0);
     const ranking = [...this.players]

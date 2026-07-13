@@ -23,7 +23,7 @@ interface Puck {
 
 export class HockeyGame implements GameModule {
   title = 'Ice Hockey Brawl';
-  readonly objective = 'Guard your wall · 20 pts each · 0 = OUT';
+  readonly objective = 'Guard your wall · 10 pts each · 0 = OUT';
   readonly stickMode = 'hidden' as const;
 
   private ctx!: MatchContext;
@@ -40,7 +40,7 @@ export class HockeyGame implements GameModule {
     this.finished = false;
     this.balls = [];
     for (const p of ctx.players) {
-      p.pts = 20;
+      p.pts = 10;
       p.pos = 0.5;
       p.dead = false;
       p.cd = 0;
@@ -50,7 +50,8 @@ export class HockeyGame implements GameModule {
       p.vx = 0; p.vz = 0;
       p.buildRider(ctx.scene);
     }
-    makeHeads(ctx.players, 20);
+    makeHeads(ctx.players, 10);
+    this.buildSpawnPad();
     this.spawnBall();
     this.updateRiders();
   }
@@ -63,11 +64,29 @@ export class HockeyGame implements GameModule {
     return [this.half, P];
   }
 
+  /** Glowing center pad — the clear place every puck comes out of. */
+  private buildSpawnPad() {
+    const pad = new THREE.Mesh(
+      new THREE.CircleGeometry(2.6, 28),
+      new THREE.MeshBasicMaterial({ color: 0x0a1230, transparent: true, opacity: 0.85 }),
+    );
+    pad.rotation.x = -Math.PI / 2;
+    pad.position.y = 0.12;
+    this.ctx.scene.add(pad);
+    const rim = new THREE.Mesh(
+      new THREE.TorusGeometry(2.6, 0.22, 8, 32),
+      new THREE.MeshBasicMaterial({ color: 0xff8a2e }),
+    );
+    rim.rotation.x = -Math.PI / 2;
+    rim.position.y = 0.2;
+    this.ctx.scene.add(rim);
+  }
+
   private spawnBall() {
     const a = Math.random() * Math.PI * 2;
     const m = new THREE.Mesh(
-      new THREE.SphereGeometry(1.4, 16, 16),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x223344, roughness: 0.3, metalness: 0.3 }),
+      new THREE.SphereGeometry(0.9, 16, 16),
+      new THREE.MeshStandardMaterial({ color: 0xff8a2e, emissive: 0x7a3000, roughness: 0.3, metalness: 0.3 }),
     );
     m.castShadow = true;
     this.ctx.scene.add(m);
@@ -138,8 +157,10 @@ export class HockeyGame implements GameModule {
     this.ctx.hazards.setProgress(1 - this.timeLeft / this.duration);
     this.ctx.hazards.tick(dt, this.ctx.players);
 
+    const prevPos = this.ctx.players.map((p) => p.pos);
     this.controlLocal(dt);
     this.controlBots(dt);
+    this.ctx.players.forEach((p, i) => ((p as any)._pvel = (p.pos - prevPos[i]) / Math.max(dt, 1e-4)));
     this.applyHazardShoves(dt);
     this.tickPucks(dt);
     this.updateRiders();
@@ -147,7 +168,7 @@ export class HockeyGame implements GameModule {
   }
 
   private paddleSpeed(p: Player) {
-    return 0.5 + speedMult(p.hero) * 0.9; // ~15% spread across heroes
+    return 0.85 + speedMult(p.hero) * 1.1; // quick, Crash-style paddles
   }
 
   private controlLocal(dt: number) {
@@ -246,8 +267,10 @@ export class HockeyGame implements GameModule {
         const deflect = (axis: 'x' | 'z') => {
           const powered = p.armed;
           const mult = dp * (powered ? 1.8 : 1);
-          if (axis === 'z') { b.vz = (p.side === 'bottom' ? -1 : 1) * Math.abs(b.vz) * mult; b.vx += (b.x - px) * 1.4; }
-          else { b.vx = (p.side === 'right' ? -1 : 1) * Math.abs(b.vx) * mult; b.vz += (b.z - pz) * 1.4; }
+          // Steer the puck: your paddle's motion flings it left/right.
+          const steer = ((p as any)._pvel ?? 0) * this.half * 2 * 0.85;
+          if (axis === 'z') { b.vz = (p.side === 'bottom' ? -1 : 1) * Math.abs(b.vz) * mult; b.vx += (b.x - px) * 0.9 + steer; }
+          else { b.vx = (p.side === 'right' ? -1 : 1) * Math.abs(b.vx) * mult; b.vz += (b.z - pz) * 0.9 + steer; }
           b.vy = 8;
           if (powered) {
             p.armed = false; p.cd = 6; b.power = 2.5;
@@ -274,8 +297,8 @@ export class HockeyGame implements GameModule {
       }
       b.m.position.set(b.x, b.y, b.z);
       const mat = b.m.material as THREE.MeshStandardMaterial;
-      mat.emissive.setHex(b.power > 0 ? 0xff4d4d : 0x223344);
-      mat.color.setHex(b.power > 0 ? 0xff8866 : 0xffffff);
+      mat.emissive.setHex(b.power > 0 ? 0xff2020 : 0x7a3000);
+      mat.color.setHex(b.power > 0 ? 0xff4d4d : 0xff8a2e);
     }
   }
 }

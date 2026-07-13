@@ -60,7 +60,7 @@ export class HockeySim {
       hero: heroByKey(s.heroKey),
       side: SIDES[i],
       pos: 0.5,
-      pts: 20,
+      pts: 10,
       dead: false,
       armed: false,
       cd: 0,
@@ -118,7 +118,7 @@ export class HockeySim {
   }
 
   private paddleSpeed(p: HPlayer): number {
-    return 0.5 + speedMult(p.hero) * 0.9;
+    return 0.85 + speedMult(p.hero) * 1.1;
   }
 
   private step(dt: number) {
@@ -129,6 +129,7 @@ export class HockeySim {
     if (this.timeLeft < DURATION * 0.33 && this.balls.length < 3) this.spawnBall();
 
     const R = HITBOX / HALF / 2 + 0.02;
+    const prevPos = this.players.map((p) => p.pos);
     for (const p of this.players) {
       if (p.dead) continue;
       p.cd = Math.max(0, p.cd - dt);
@@ -137,7 +138,7 @@ export class HockeySim {
         // Humans steer toward their requested absolute position (1:1 drag on
         // the client), rate-limited so nobody teleports across the wall.
         const target = p.input.pos ?? p.pos + p.input.ax * this.paddleSpeed(p) * dt;
-        const maxMove = this.paddleSpeed(p) * 2.5 * dt;
+        const maxMove = this.paddleSpeed(p) * 3 * dt;
         p.pos += Math.max(-maxMove, Math.min(maxMove, target - p.pos));
       }
       p.pos = Math.max(R, Math.min(1 - R, p.pos));
@@ -150,6 +151,7 @@ export class HockeySim {
       }
       p.ackSeq = p.input.seq;
     }
+    this.players.forEach((p, i) => ((p as any)._pvel = (p.pos - prevPos[i]) / dt));
 
     this.tickBalls(dt);
     this.sendState();
@@ -221,8 +223,9 @@ export class HockeySim {
         const deflect = (axis: 'x' | 'z') => {
           const powered = p.armed;
           const mult = dp * (powered ? 1.8 : 1);
-          if (axis === 'z') { b.vz = (p.side === 'bottom' ? -1 : 1) * Math.abs(b.vz) * mult; b.vx += (b.x - px) * 1.4; }
-          else { b.vx = (p.side === 'right' ? -1 : 1) * Math.abs(b.vx) * mult; b.vz += (b.z - pz) * 1.4; }
+          const steer = ((p as any)._pvel ?? 0) * HALF * 2 * 0.85;
+          if (axis === 'z') { b.vz = (p.side === 'bottom' ? -1 : 1) * Math.abs(b.vz) * mult; b.vx += (b.x - px) * 0.9 + steer; }
+          else { b.vx = (p.side === 'right' ? -1 : 1) * Math.abs(b.vx) * mult; b.vz += (b.z - pz) * 0.9 + steer; }
           b.vy = 8;
           if (powered) {
             p.armed = false;

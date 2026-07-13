@@ -59,20 +59,36 @@ export class OnlineHockey {
     this.world = buildWorld(this.engine.scene, family, game, HALF);
     this.engine.camera.frame(HALF, 1.28);
 
+    // Center spawn pad — where every puck comes out.
+    const pad = new THREE.Mesh(
+      new THREE.CircleGeometry(2.6, 28),
+      new THREE.MeshBasicMaterial({ color: 0x0a1230, transparent: true, opacity: 0.85 }),
+    );
+    pad.rotation.x = -Math.PI / 2;
+    pad.position.y = 0.12;
+    this.engine.scene.add(pad);
+    const rim = new THREE.Mesh(
+      new THREE.TorusGeometry(2.6, 0.22, 8, 32),
+      new THREE.MeshBasicMaterial({ color: 0xff8a2e }),
+    );
+    rim.rotation.x = -Math.PI / 2;
+    rim.position.y = 0.2;
+    this.engine.scene.add(rim);
+
     const sides = ['bottom', 'top', 'left', 'right'] as const;
     this.players = msg.players.map((pi) => {
       const p = new Player(heroByKey(pi.heroKey), pi.slot === msg.youSlot, pi.slot, 0);
       p.side = sides[pi.slot];
       p.pos = 0.5;
-      p.pts = 20;
+      p.pts = 10;
       p.buildRider(this.engine.scene);
       return p;
     });
     this.placePaddles();
 
-    HUD.makeHeads(this.players, 20);
+    HUD.makeHeads(this.players, 10);
     HUD.showHud(true);
-    HUD.setObjective(`${game.name} · ONLINE · guard your wall · 0 = OUT`);
+    HUD.setObjective(`${game.name} · ONLINE · guard your wall · 10 pts · 0 = OUT`);
     this.input.setEnabled(true);
     this.input.setMode('hidden');
 
@@ -175,7 +191,7 @@ export class OnlineHockey {
         this.input.hockeyDX = 0;
       } else {
         const axis = you.side === 'left' || you.side === 'right' ? this.input.ay : this.input.ax;
-        this.localPos += axis * (0.5 + speedMult(you.hero) * 0.9) * dt;
+        this.localPos += axis * (0.85 + speedMult(you.hero) * 1.1) * dt;
       }
       const R = HITBOX_RADIUS / HALF / 2 + 0.02;
       this.localPos = Math.max(R, Math.min(1 - R, this.localPos));
@@ -225,8 +241,8 @@ export class OnlineHockey {
     const n = b.balls.length;
     while (this.ballMeshes.length < n) {
       const m = new THREE.Mesh(
-        new THREE.SphereGeometry(1.4, 16, 16),
-        new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x223344, roughness: 0.3, metalness: 0.3 }),
+        new THREE.SphereGeometry(0.9, 16, 16),
+        new THREE.MeshStandardMaterial({ color: 0xff8a2e, emissive: 0x7a3000, roughness: 0.3, metalness: 0.3 }),
       );
       m.castShadow = true;
       this.engine.scene.add(m);
@@ -246,8 +262,8 @@ export class OnlineHockey {
         ba[1] + (bb[1] - ba[1]) * t,
       );
       const mat = mesh.material as THREE.MeshStandardMaterial;
-      mat.emissive.setHex(bb[3] ? 0xff4d4d : 0x223344);
-      mat.color.setHex(bb[3] ? 0xff8866 : 0xffffff);
+      mat.emissive.setHex(bb[3] ? 0xff2020 : 0x7a3000);
+      mat.color.setHex(bb[3] ? 0xff4d4d : 0xff8a2e);
     }
   }
 

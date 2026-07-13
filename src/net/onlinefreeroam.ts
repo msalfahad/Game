@@ -71,14 +71,19 @@ export class OnlineFreeRoam {
 
     this.engine.clearScene();
     this.world = buildWorld(this.engine.scene, family, this.game, this.half);
-    this.engine.camera.frame(this.half, 1.0);
+    this.engine.camera.frame(this.half, this.game.mechanic === 'throwfight' ? 0.85 : 1.0);
 
     const is2v2 = msg.mode === '2v2';
     this.players = msg.players.map((pi) => {
       const p = new Player(heroByKey(pi.heroKey), pi.slot === msg.youSlot, pi.slot, (pi.team % 2) as 0 | 1);
-      const spots = [[-0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [0.5, 0.5]];
-      p.x = spots[pi.slot][0] * this.half;
-      p.z = spots[pi.slot][1] * this.half;
+      if (this.game.mechanic === 'climb') {
+        p.x = (pi.slot - 1.5) * 7;
+        p.z = this.half - 4;
+      } else {
+        const spots = [[-0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [0.5, 0.5]];
+        p.x = spots[pi.slot][0] * this.half;
+        p.z = spots[pi.slot][1] * this.half;
+      }
       p.buildRider(this.engine.scene);
       if (is2v2) {
         (p.ring.material as THREE.MeshBasicMaterial).color.setHex(TEAM_COLS[pi.team]);
@@ -90,7 +95,10 @@ export class OnlineFreeRoam {
     this.buildMechanicScenery();
 
     const mech = this.game.mechanic;
-    const init = mech === 'throwfight' ? 100 : mech === 'breaktiles' || mech === 'dodge' ? 3 : mech === 'race' ? `0/${WPS * Number(this.game.mods?.laps ?? 2)}` : 0;
+    const init = mech === 'throwfight' ? 100
+      : mech === 'breaktiles' || mech === 'dodge' || mech === 'icepush' ? 3
+      : mech === 'race' ? `0/${WPS * Number(this.game.mods?.laps ?? 2)}`
+      : mech === 'climb' ? '0m' : 0;
     HUD.makeHeads(this.players, init);
     if (is2v2) {
       for (const p of this.players) {
@@ -172,6 +180,36 @@ export class OnlineFreeRoam {
         this.engine.scene.add(pivot);
         this.beamMeshes.push(pivot);
       }
+    } else if (mech === 'icepush') {
+      // 8 breakable ice-wall segments per side; indexes match the server.
+      const segLen = (this.half * 2) / 8;
+      for (let side = 0; side < 4; side++) {
+        for (let i = 0; i < 8; i++) {
+          const along = -this.half + segLen * (i + 0.5);
+          const horiz = side < 2;
+          const m = new THREE.Mesh(
+            new THREE.BoxGeometry(horiz ? segLen * 0.96 : 1.6, 3.4, horiz ? 1.6 : segLen * 0.96),
+            new THREE.MeshStandardMaterial({
+              color: 0x9adfff, roughness: 0.15, metalness: 0.2,
+              transparent: true, opacity: 0.65, emissive: 0x1a4a7a,
+            }),
+          );
+          m.position.set(
+            horiz ? along : side === 2 ? -this.half : this.half,
+            1.7,
+            horiz ? (side === 0 ? this.half : -this.half) : along,
+          );
+          this.engine.scene.add(m);
+          this.tileMeshes.push(m);
+        }
+      }
+    } else if (mech === 'climb') {
+      const line = new THREE.Mesh(
+        new THREE.BoxGeometry(this.half * 2, 0.5, 2),
+        new THREE.MeshBasicMaterial({ color: 0xffffff }),
+      );
+      line.position.set(0, 0.3, -(this.half - 2.5));
+      this.engine.scene.add(line);
     } else if (mech === 'dodge' && this.game.mods?.hz === 'conveyor') {
       for (const sx of [-1, 1]) {
         const wall = new THREE.Mesh(
@@ -186,6 +224,32 @@ export class OnlineFreeRoam {
 
   // --- entity rendering --------------------------------------------------------
   private makeEntMesh(type: number, extra: number): THREE.Object3D {
+    if (type === ET.LOOT && extra >= 2) {
+      // Power boxes: 2 = freeze (climb), 3 = thunder (icepush).
+      const freeze = extra === 2;
+      const grp = new THREE.Group();
+      const crate = new THREE.Mesh(
+        new THREE.BoxGeometry(2.5, 2.5, 2.5),
+        new THREE.MeshStandardMaterial({
+          color: freeze ? 0x9adfff : 0xffd23f,
+          emissive: freeze ? 0x2a6a9a : 0xaa7700,
+          emissiveIntensity: 0.55, roughness: 0.35,
+        }),
+      );
+      grp.add(crate);
+      if (!freeze) {
+        const bolt = new THREE.Mesh(new THREE.ConeGeometry(0.8, 2.2, 4), new THREE.MeshBasicMaterial({ color: 0xfff7aa }));
+        bolt.position.y = 2.5;
+        grp.add(bolt);
+      }
+      return grp;
+    }
+    if (type === ET.LOG && this.game.mechanic === 'climb') {
+      return new THREE.Mesh(
+        new THREE.DodecahedronGeometry(2.3),
+        new THREE.MeshStandardMaterial({ color: 0x9db8cc, roughness: 0.8 }),
+      );
+    }
     if (type === ET.LOOT) {
       if (extra === 1) {
         const m = new THREE.Mesh(
@@ -225,7 +289,11 @@ export class OnlineFreeRoam {
         }),
       );
     }
-    if (type === ET.ITEM || type === ET.MISSILE) return this.makeProjMesh(extra);
+    if (type === ET.ITEM || type === ET.MISSILE) {
+      const m = this.makeProjMesh(extra & 3);
+      if (extra & 4) m.scale.setScalar(1.5); // big snowball
+      return m;
+    }
     if (type === ET.LOG) {
       const m = new THREE.Mesh(
         new THREE.CylinderGeometry(1.6, 1.6, this.half * 1.1, 10),
@@ -268,8 +336,9 @@ export class OnlineFreeRoam {
       if (!p) continue;
       // HUD value per mechanic.
       const shown = mech === 'throwfight' ? Math.max(lives, 0)
-        : mech === 'breaktiles' || mech === 'dodge' ? Math.max(lives, 0)
+        : mech === 'breaktiles' || mech === 'dodge' || mech === 'icepush' ? Math.max(lives, 0)
         : mech === 'race' ? `${score}/${WPS * Number(this.game.mods?.laps ?? 2)}`
+        : mech === 'climb' ? `${score}m`
         : score;
       if (p.lives !== lives || p.score !== score) {
         p.lives = lives;
@@ -314,7 +383,13 @@ export class OnlineFreeRoam {
       for (let i = 0; i < m.tiles.length; i++) {
         const mesh = this.tileMeshes[i];
         const v = m.tiles[i];
-        if (mech === 'paint') {
+        if (mech === 'icepush') {
+          if (mesh.visible && v === 0) {
+            mesh.visible = false;
+            SFX.crack();
+            this.burst(mesh.position.x, mesh.position.z, '#9ADFFF', 12);
+          }
+        } else if (mech === 'paint') {
           const mat = mesh.material as THREE.MeshStandardMaterial;
           if (v === 0) mat.color.setHex(0x333a5c);
           else {
@@ -362,6 +437,14 @@ export class OnlineFreeRoam {
         SFX.hit();
         this.burst(p.x, p.z, '#FF4D4D', 12);
         this.engine.camera.shake(1.2);
+      } else if (ev.t === 'power') {
+        SFX.power();
+        this.engine.camera.shake(2);
+        const freeze = this.game.mechanic === 'climb';
+        HUD.banner(
+          p.you ? (freeze ? '❄ FREEZE! GO GO GO!' : '⚡ ZAP THEM ALL!') : `${freeze ? '❄' : '⚡'} ${p.hero.name} GOT THE BOX!`,
+          freeze ? '#9ADFFF' : '#FFD23F',
+        );
       } else if (ev.t === 'goal') {
         // reused as bomb-explosion cue
         SFX.goal();
@@ -434,7 +517,7 @@ export class OnlineFreeRoam {
       p.vx += this.input.ax * accel * dt;
       p.vz += this.input.ay * accel * dt;
     }
-    const retain = Math.pow(0.02, dt);
+    const retain = Math.pow(this.game.mechanic === 'icepush' ? 0.55 : 0.02, dt);
     p.vx *= retain;
     p.vz *= retain;
     const sp = Math.hypot(p.vx, p.vz);
@@ -447,7 +530,8 @@ export class OnlineFreeRoam {
       if (p.y <= 0) { p.y = 0; p.vy = 0; }
     }
     if (this.jumpQueued && p.y <= 0 && p.freezeT <= 0) p.vy = JUMP_V;
-    const open = this.game.mechanic === 'dodge' && (this.game.mods?.hz === 'logs' || this.game.mods?.hz === 'wind');
+    const open = this.game.mechanic === 'icepush' ||
+      (this.game.mechanic === 'dodge' && (this.game.mods?.hz === 'logs' || this.game.mods?.hz === 'wind'));
     if (!open) {
       const m = this.half - 1;
       p.x = Math.max(-m, Math.min(m, p.x));

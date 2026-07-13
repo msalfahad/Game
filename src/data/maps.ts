@@ -15,6 +15,8 @@ export type HazardKind = 'wind' | 'falling' | 'rollers' | 'geysers' | 'lasers';
 
 export type Mechanic =
   | 'goal' // puck/ball into rival walls (hockey & soccer variants)
+  | 'icepush' // slippery brawl: smash rivals through breakable ice walls
+  | 'climb' // vertical race up the mountain, dodging falling rocks
   | 'breaktiles' // floor breaks away, don't fall
   | 'pushout' // shrinking platform, shove rivals off
   | 'throwfight' // grab & hurl projectiles, drain HP
@@ -123,9 +125,9 @@ function g(
 export const GAMES: GameDef[] = [
   // 1. Frostbite Arena
   g('frost-1', 'frost', 'Ice Hockey Brawl', '🏒', 1, 'goal', 'square', [], 'Guard your wall. Deflect the puck. 0 pts = OUT.'),
-  g('frost-2', 'frost', 'Slip & Slide', '🧊', 2, 'breaktiles', 'square', ['wind'], 'The ice cracks under you. Keep moving, don’t fall.', { decay: 'ring' }),
+  g('frost-2', 'frost', 'Slip & Slide', '🧊', 2, 'icepush', 'square', [], 'Slippery brawl! Smash rivals through the ice walls. Grab the ⚡ box to zap everyone else.'),
   g('frost-3', 'frost', 'Snowball Smash', '☃️', 3, 'throwfight', 'square', ['wind', 'falling'], 'Grab snowballs, pelt your rivals out.', { proj: 'snowball' }),
-  g('frost-4', 'frost', 'Avalanche Run', '🏔️', 4, 'race', 'square', ['wind', 'falling', 'rollers'], 'Race the gates while the mountain comes down.', { laps: 2 }),
+  g('frost-4', 'frost', 'Avalanche Run', '🏔️', 4, 'climb', 'square', [], 'Climb the mountain! Boulders knock you back down. First to the summit — grab ❄ to freeze rivals.'),
 
   // 2. Inferno Arena
   g('inferno-1', 'inferno', 'Lava Hockey', '🔥', 1, 'goal', 'square', [], 'Hockey on obsidian. The ember puck burns.'),

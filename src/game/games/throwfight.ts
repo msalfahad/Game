@@ -17,7 +17,7 @@ import { setScore, markDead } from '../../ui/hud';
 
 type Proj = 'snowball' | 'bomb' | 'cannon' | 'crate';
 
-interface PickupItem { m: THREE.Mesh; x: number; z: number; }
+interface PickupItem { m: THREE.Mesh; x: number; z: number; big: boolean; }
 interface Missile {
   m: THREE.Mesh;
   x: number; z: number; y: number;
@@ -65,7 +65,13 @@ export class ThrowFightGame implements GameModule {
     return alive.sort((a, b) => b.hp - a.hp)[0] ?? null;
   }
 
-  private makeProjMesh(thrown: boolean): THREE.Mesh {
+  private makeProjMesh(thrown: boolean, big = false): THREE.Mesh {
+    const m = this.makeProjMeshInner(thrown);
+    if (big) m.scale.setScalar(1.5);
+    return m;
+  }
+
+  private makeProjMeshInner(thrown: boolean): THREE.Mesh {
     const s = PROJ_STATS[this.proj];
     let m: THREE.Mesh;
     if (this.proj === 'crate') {
@@ -86,12 +92,14 @@ export class ThrowFightGame implements GameModule {
   }
 
   private dropItem() {
-    const m = this.makeProjMesh(false);
+    // Snowball fights mix in bigger snowballs that hit ~60% harder.
+    const big = this.proj === 'snowball' && Math.random() < 0.35;
+    const m = this.makeProjMesh(false, big);
     const x = (Math.random() - 0.5) * this.ctx.halfSize * 1.6;
     const z = (Math.random() - 0.5) * this.ctx.halfSize * 1.6;
     m.position.set(x, 1.5, z);
     this.ctx.scene.add(m);
-    this.items.push({ m, x, z });
+    this.items.push({ m, x, z, big });
   }
 
   ability() {
@@ -129,14 +137,16 @@ export class ThrowFightGame implements GameModule {
       dx = Math.cos(a); dz = Math.sin(a);
     }
     const s = PROJ_STATS[this.proj];
-    const m = this.makeProjMesh(true);
+    const big = !!(p as any)._heldBig;
+    (p as any)._heldBig = false;
+    const m = this.makeProjMesh(true, big);
     m.position.set(p.x, 3, p.z);
     this.ctx.scene.add(m);
     this.missiles.push({
       m, x: p.x, z: p.z, y: 3,
       vx: dx * s.speed, vz: dz * s.speed, vy: 6,
       owner: p,
-      dmg: s.dmg * strengthMult(p.hero),
+      dmg: s.dmg * strengthMult(p.hero) * (big ? 1.6 : 1),
     });
     SFX.bump();
   }
@@ -229,7 +239,8 @@ export class ThrowFightGame implements GameModule {
         if (Math.hypot(it.x - p.x, it.z - p.z) < HITBOX_RADIUS + 2) {
           ctx.scene.remove(it.m);
           p.held = true;
-          const hm = this.makeProjMesh(false);
+          (p as any)._heldBig = it.big;
+          const hm = this.makeProjMesh(false, it.big);
           hm.scale.setScalar(0.7);
           hm.position.set(0, HITBOX_RADIUS * 2.4, 0);
           p.group.add(hm);

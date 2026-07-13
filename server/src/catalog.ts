@@ -3,7 +3,7 @@
 // Only what the simulation needs: mechanic, flavor mods, and duration.
 
 export type Mechanic =
-  | 'goal' | 'breaktiles' | 'pushout' | 'throwfight' | 'race' | 'dodge' | 'collect' | 'paint' | 'mash';
+  | 'goal' | 'icepush' | 'climb' | 'breaktiles' | 'pushout' | 'throwfight' | 'race' | 'dodge' | 'collect' | 'paint' | 'mash';
 
 export interface OnlineGameDef {
   id: string;
@@ -18,9 +18,9 @@ const g = (id: string, mechanic: Mechanic, duration: number, mods: OnlineGameDef
 export const ONLINE_CATALOG: OnlineGameDef[] = [
   // Frostbite
   g('frost-1', 'goal', 120),
-  g('frost-2', 'breaktiles', 90, { decay: 'ring' }),
+  g('frost-2', 'icepush', 120),
   g('frost-3', 'throwfight', 90, { proj: 'snowball' }),
-  g('frost-4', 'race', 90, { laps: 2 }),
+  g('frost-4', 'climb', 60),
   // Inferno
   g('inferno-1', 'goal', 120),
   g('inferno-2', 'breaktiles', 90, { decay: 'ring' }),
@@ -64,7 +64,7 @@ export function onlineGame(id: string): OnlineGameDef | undefined {
 }
 
 // 2v2 only makes sense for elimination mechanics; scoring games stay FFA.
-const TEAM_MECHANICS = new Set<Mechanic>(['pushout', 'throwfight', 'breaktiles', 'dodge']);
+const TEAM_MECHANICS = new Set<Mechanic>(['pushout', 'throwfight', 'breaktiles', 'dodge', 'icepush']);
 
 export function poolFor(mode: 'ffa' | '2v2'): OnlineGameDef[] {
   return mode === '2v2' ? ONLINE_CATALOG.filter((x) => TEAM_MECHANICS.has(x.mechanic)) : ONLINE_CATALOG;

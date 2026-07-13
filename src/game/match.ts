@@ -128,7 +128,8 @@ export class Match {
       finish: (ranked, subtitle) => this.finish(ranked, subtitle),
     };
 
-    this.engine.camera.frame(halfSize, isGoal ? 1.28 : 1.0);
+    // Throw-fights pull the camera back a touch for more overview.
+    this.engine.camera.frame(halfSize, isGoal ? 1.28 : game.mechanic === 'throwfight' ? 0.85 : 1.0);
 
     this.game.init(this.ctx);
     HUD.showHud(true);
