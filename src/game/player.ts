@@ -40,8 +40,10 @@ function loadAnim(hero: Hero, onReady: (t: THREE.Texture | null) => void) {
     for (const cb of animWaiters[hero.key] ?? []) cb(t);
     delete animWaiters[hero.key];
   };
+  // Single-file build embeds the strips on window.__CHAR_ANIM.
+  const inline = (globalThis as any).__CHAR_ANIM as Record<string, string> | undefined;
   const img = new Image();
-  img.src = animBase() + 'chars/anim/' + hero.key + '.png';
+  img.src = inline?.[hero.key] ?? animBase() + 'chars/anim/' + hero.key + '.png';
   img.onload = () => {
     const t = new THREE.Texture(img);
     t.colorSpace = THREE.SRGBColorSpace;

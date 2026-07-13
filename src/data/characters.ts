@@ -27,15 +27,18 @@ export interface Hero {
   ultName: string;
 }
 
+// Names/roles match the character sheets: Zip the Speedster, Vex the Wildcard
+// (art key 'rax'), Luna the Elemental, Ollie the Gadgeteer, Slam the
+// Juggernaut, Rolo the Tech Genius, Pix the Trickster, Brutus the Tank.
 export const HEROES: Hero[] = [
-  { key: 'zip', name: 'Volt', role: 'Speedster', col: '#7ED321', spd: 10, str: 3, acc: 8, def: 2, ultimate: 'blink', ultName: 'Lightning Blink' },
-  { key: 'rax', name: 'Ember', role: 'Assassin', col: '#FF4D4D', spd: 9, str: 4, acc: 7, def: 3, ultimate: 'spin', ultName: 'Fire Spin' },
-  { key: 'luna', name: 'Mirage', role: 'Ranged', col: '#E48CFF', spd: 8, str: 5, acc: 9, def: 4, ultimate: 'clone', ultName: 'Phantom Clone' },
-  { key: 'ollie', name: 'Nova', role: 'All-Rounder', col: '#FF9C3F', spd: 7, str: 7, acc: 7, def: 7, ultimate: 'burst', ultName: 'Stellar Burst' },
-  { key: 'slam', name: 'Timber', role: 'Bruiser', col: '#4DC3FF', spd: 6, str: 8, acc: 5, def: 8, ultimate: 'root', ultName: 'Root Cage' },
-  { key: 'rolo', name: 'Moss', role: 'Guardian', col: '#4DA6FF', spd: 5, str: 7, acc: 6, def: 7, ultimate: 'heal', ultName: 'Healing Grove' },
-  { key: 'pix', name: 'Glacier', role: 'Tank', col: '#FF3D9E', spd: 4, str: 9, acc: 6, def: 10, ultimate: 'slam', ultName: 'Frozen Ground Slam' },
-  { key: 'brutus', name: 'Boulder', role: 'Heavy', col: '#B06BFF', spd: 3, str: 10, acc: 5, def: 10, ultimate: 'fortress', ultName: 'Rolling Fortress' },
+  { key: 'zip', name: 'Zip', role: 'Speedster', col: '#7ED321', spd: 10, str: 3, acc: 8, def: 2, ultimate: 'blink', ultName: 'Lightning Blink' },
+  { key: 'rax', name: 'Vex', role: 'Wildcard', col: '#B06BFF', spd: 9, str: 4, acc: 7, def: 3, ultimate: 'spin', ultName: 'Shadow Spin' },
+  { key: 'luna', name: 'Luna', role: 'Elemental', col: '#4DA6FF', spd: 8, str: 5, acc: 9, def: 4, ultimate: 'clone', ultName: 'Phantom Clone' },
+  { key: 'ollie', name: 'Ollie', role: 'Gadgeteer', col: '#FF9C3F', spd: 7, str: 7, acc: 7, def: 7, ultimate: 'burst', ultName: 'Gadget Burst' },
+  { key: 'slam', name: 'Slam', role: 'Juggernaut', col: '#3D5AFE', spd: 6, str: 8, acc: 5, def: 8, ultimate: 'root', ultName: 'Ground Shaker' },
+  { key: 'rolo', name: 'Rolo', role: 'Tech Genius', col: '#2BD9C8', spd: 5, str: 7, acc: 6, def: 7, ultimate: 'heal', ultName: 'Repair Field' },
+  { key: 'pix', name: 'Pix', role: 'Trickster', col: '#FF3D9E', spd: 4, str: 9, acc: 6, def: 10, ultimate: 'slam', ultName: 'Boom Drop' },
+  { key: 'brutus', name: 'Brutus', role: 'Tank', col: '#E05038', spd: 3, str: 10, acc: 5, def: 10, ultimate: 'fortress', ultName: 'Rolling Fortress' },
 ];
 
 export function heroByKey(key: string): Hero {

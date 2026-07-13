@@ -35,7 +35,7 @@ html = html.replace(
   },
 );
 
-// Embed the character sprites as data URIs.
+// Embed the character sprites + animation strips as data URIs.
 const charDir = 'public/chars';
 const imgs = {};
 for (const f of readdirSync(charDir)) {
@@ -43,9 +43,16 @@ for (const f of readdirSync(charDir)) {
   const key = f.replace('.webp', '');
   imgs[key] = 'data:image/webp;base64,' + readFileSync(join(charDir, f)).toString('base64');
 }
+const animDir = join(charDir, 'anim');
+const anims = {};
+for (const f of readdirSync(animDir)) {
+  if (!f.endsWith('.png')) continue;
+  const key = f.replace('.png', '');
+  anims[key] = 'data:image/png;base64,' + readFileSync(join(animDir, f)).toString('base64');
+}
 html = html.replace(
   '<script type="module">',
-  `<script>window.__CHAR_IMG=${JSON.stringify(imgs)};</script>\n<script type="module">`,
+  `<script>window.__CHAR_IMG=${JSON.stringify(imgs)};window.__CHAR_ANIM=${JSON.stringify(anims)};</script>\n<script type="module">`,
 );
 
 const out = join(dist, 'bash-arena-single.html');
