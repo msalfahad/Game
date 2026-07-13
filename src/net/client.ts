@@ -54,21 +54,26 @@ export class Net {
     return !!this.socket?.connected && !!this.me;
   }
 
-  /** Connect + sign in. Resolves once the account handshake completes. */
+  /**
+   * Connect + sign in. Resolves once the account handshake completes.
+   * Free-tier hosts (Render) sleep when idle and take up to ~1 min to wake,
+   * so we retry connect errors until an overall 75s deadline.
+   */
   connect(serverUrl: string, name: string): Promise<WelcomeMsg> {
     return new Promise((resolve, reject) => {
-      const socket = io(serverUrl, { transports: ['websocket', 'polling'], timeout: 8000 });
+      const socket = io(serverUrl, {
+        transports: ['websocket', 'polling'],
+        timeout: 10000,
+        reconnectionAttempts: 8,
+        reconnectionDelay: 2000,
+      });
       this.socket = socket;
       const fail = (why: string) => {
         socket.close();
         this.socket = null;
         reject(new Error(why));
       };
-      const timer = setTimeout(() => fail('Could not reach the server.'), 9000);
-      socket.on('connect_error', () => {
-        clearTimeout(timer);
-        fail('Could not reach the server.');
-      });
+      const timer = setTimeout(() => fail('Could not reach the server.'), 75000);
       socket.on('connect', () => {
         socket.emit('hello', { token: localStorage.getItem(TOKEN_KEY) ?? undefined, name }, (w: WelcomeMsg) => {
           clearTimeout(timer);

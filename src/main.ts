@@ -6,6 +6,8 @@ import { Match } from './game/match';
 import { buildScreens, show, hideScreens, showResults } from './ui/screens';
 import { buildOnlineScreens, enterOnline, showOnlineResults } from './ui/online';
 import { OnlineMatch } from './net/onlinematch';
+import { OnlineHockey } from './net/onlinehockey';
+import { gameById } from './data/maps';
 
 // Boot: engine + input + match controller, screen flow, tuning, title.
 
@@ -29,13 +31,17 @@ buildScreens({
   onQualityChange: (t) => match.setQuality(t),
 });
 
-// Online play: sign in once, then quick play or party rooms.
-let online: OnlineMatch | null = null;
+// Online play: sign in once, then quick play or party rooms. The controller
+// is picked by the mechanic of the server-chosen game.
+let online: OnlineMatch | OnlineHockey | null = null;
 buildOnlineScreens({
   onMatchStart: (m) => {
     match.stop();
     online?.stop();
-    online = new OnlineMatch(engine, input, (end, youSlot) => showOnlineResults(end, youSlot));
+    const isHockey = gameById(m.gameId).mechanic === 'goal';
+    online = isHockey
+      ? new OnlineHockey(engine, input, (end, youSlot) => showOnlineResults(end, youSlot))
+      : new OnlineMatch(engine, input, (end, youSlot) => showOnlineResults(end, youSlot));
     online.start(m);
   },
 });

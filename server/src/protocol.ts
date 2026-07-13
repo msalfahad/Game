@@ -7,8 +7,10 @@ export const TICK_RATE = 20; // server simulation + broadcast Hz
 export const INPUT_RATE = 30; // client input send Hz
 export const MAX_PLAYERS = 4;
 
-// Games playable online in v1 (pushout mechanic — simplest state to sync).
-export const ONLINE_GAMES = ['classic-1', 'wild-1'];
+// Online game pools. 2v2 sticks to team-friendly pushout arenas; free-for-all
+// mixes in the hockey rinks.
+export const ONLINE_GAMES_2V2 = ['classic-1', 'wild-1'];
+export const ONLINE_GAMES_FFA = ['classic-1', 'wild-1', 'frost-1', 'inferno-1'];
 
 export interface HelloMsg {
   token?: string;
@@ -62,6 +64,8 @@ export interface MatchStartMsg {
 
 export interface InputMsg {
   seq: number;
+  // Hockey paddles send an absolute target position (0..1) instead of axes.
+  pos?: number;
   ax: number; // -1..1
   ay: number;
   jump?: boolean;
@@ -72,7 +76,7 @@ export interface InputMsg {
 export type PlayerState = [number, number, number, number, number, number, number, number, number, number, number];
 
 export interface SimEvent {
-  t: 'ult' | 'fall' | 'out';
+  t: 'ult' | 'fall' | 'out' | 'goal' | 'power';
   slot: number;
 }
 
@@ -83,10 +87,14 @@ export interface StateMsg {
   ack: number; // last input seq the server has applied for YOU
   players: PlayerState[];
   events: SimEvent[];
+  // Hockey-only channel: paddle positions (0..1 per slot), points per slot,
+  // and pucks as [x, z, y, powered].
+  hockey?: { pos: number[]; pts: number[]; balls: [number, number, number, number][] };
 }
 
 export interface MatchEndMsg {
   mode: MatchMode;
   winnerTeam: number; // -1 in FFA
+  scoreLabel: string; // 'lives' | 'pts'
   ranking: { slot: number; name: string; heroKey: string; lives: number; dead: boolean; team: number }[];
 }

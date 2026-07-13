@@ -36,4 +36,5 @@ function statMult(stat: number): number {
 }
 export const speedMult = (h: HeroDef) => statMult(h.spd);
 export const strengthMult = (h: HeroDef) => statMult(h.str);
+export const accuracyMult = (h: HeroDef) => statMult(h.acc);
 export const defenseMult = (h: HeroDef) => statMult(h.def);

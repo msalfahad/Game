@@ -218,8 +218,10 @@ export async function enterOnline() {
     if (!server) return;
   }
   const name = savedName() ?? prompt('Pick a player name:') ?? '';
+  const loading = document.getElementById('loading')!;
   try {
-    document.getElementById('loading')!.style.display = 'flex';
+    loading.textContent = 'CONNECTING… (a sleeping free server can take up to a minute to wake)';
+    loading.style.display = 'flex';
     await net.connect(server, name);
     showOnline('scrOnlineHome');
     refreshWho();
@@ -228,7 +230,8 @@ export async function enterOnline() {
     alert((e as Error).message + '\nCheck the server URL (see README → Multiplayer).');
     localStorage.removeItem('ba-server');
   } finally {
-    document.getElementById('loading')!.style.display = 'none';
+    loading.style.display = 'none';
+    loading.textContent = 'LOADING ARENA…';
   }
 }
 
@@ -260,7 +263,7 @@ export function showOnlineResults(m: MatchEndMsg, youSlot: number) {
     const teamChip = m.mode === '2v2'
       ? `<span style="color:${TEAM_COLS[r.team]};font-size:10px"> ${TEAM_NAMES[r.team]}</span>`
       : '';
-    d.innerHTML = `<img src="${heroImg(hh)}"><div class="rn" style="color:${hh.col}">${i + 1}. ${r.name}${r.slot === youSlot ? ' (YOU)' : ''}${teamChip}</div><div class="rs">${r.dead ? 'OUT' : r.lives + ' lives'}</div>`;
+    d.innerHTML = `<img src="${heroImg(hh)}"><div class="rn" style="color:${hh.col}">${i + 1}. ${r.name}${r.slot === youSlot ? ' (YOU)' : ''}${teamChip}</div><div class="rs">${r.dead ? 'OUT' : r.lives + ' ' + (m.scoreLabel ?? 'lives')}</div>`;
     list.appendChild(d);
   });
   (list as HTMLElement).style.display = 'flex';

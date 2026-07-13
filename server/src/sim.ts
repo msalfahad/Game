@@ -347,6 +347,15 @@ export class MatchSim {
         dead: p.dead,
         team: p.team,
       }));
-    this.onEnd({ mode: this.mode, winnerTeam, ranking });
+    this.onEnd({ mode: this.mode, winnerTeam, scoreLabel: 'lives', ranking });
   }
+}
+
+/** Common surface every game simulation exposes to the lobby. */
+export interface GameSim {
+  start(): void;
+  stop(): void;
+  applyInput(socketId: string, msg: InputMsg): void;
+  dropPlayer(socketId: string): void;
+  readonly humanCount: number;
 }

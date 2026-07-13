@@ -53,6 +53,8 @@ export interface MatchStartMsg {
 
 export interface InputMsg {
   seq: number;
+  // Hockey paddles send an absolute target position (0..1) instead of axes.
+  pos?: number;
   ax: number;
   ay: number;
   jump?: boolean;
@@ -63,7 +65,7 @@ export interface InputMsg {
 export type PlayerState = [number, number, number, number, number, number, number, number, number, number, number];
 
 export interface SimEvent {
-  t: 'ult' | 'fall' | 'out';
+  t: 'ult' | 'fall' | 'out' | 'goal' | 'power';
   slot: number;
 }
 
@@ -74,10 +76,14 @@ export interface StateMsg {
   ack: number;
   players: PlayerState[];
   events: SimEvent[];
+  // Hockey-only channel: paddle positions (0..1 per slot), points per slot,
+  // and pucks as [x, z, y, powered].
+  hockey?: { pos: number[]; pts: number[]; balls: [number, number, number, number][] };
 }
 
 export interface MatchEndMsg {
   mode: MatchMode;
   winnerTeam: number; // -1 in FFA
+  scoreLabel: string; // 'lives' | 'pts'
   ranking: { slot: number; name: string; heroKey: string; lives: number; dead: boolean; team: number }[];
 }

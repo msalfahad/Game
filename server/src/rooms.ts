@@ -1,8 +1,9 @@
 import type { Socket } from 'socket.io';
-import { MatchSim, type MatchSeat } from './sim.js';
+import { MatchSim, type GameSim, type MatchSeat } from './sim.js';
+import { HockeySim } from './hockeysim.js';
 import { recordResult, type Account } from './accounts.js';
 import { HEROES } from './heroes.js';
-import { MAX_PLAYERS, ONLINE_GAMES, type MatchMode, type MatchStartMsg, type QueueUpdateMsg, type RoomUpdateMsg } from './protocol.js';
+import { MAX_PLAYERS, ONLINE_GAMES_2V2, ONLINE_GAMES_FFA, type MatchMode, type MatchStartMsg, type QueueUpdateMsg, type RoomUpdateMsg } from './protocol.js';
 
 // Party rooms (4-letter codes) + the quick-play queue. Both feed the same
 // match starter; empty seats are filled with bots (SPEC section 2). A match
@@ -17,7 +18,7 @@ interface Session {
   team: number; // 0 | 1, used when the room is in 2v2 mode
   roomCode: string | null;
   inQueue: boolean;
-  match: MatchSim | null;
+  match: GameSim | null;
 }
 
 interface Room {
@@ -269,9 +270,13 @@ export class Lobby {
       }
     }
 
-    const gameId = ONLINE_GAMES[Math.floor(Math.random() * ONLINE_GAMES.length)];
+    const pool = mode === '2v2' ? ONLINE_GAMES_2V2 : ONLINE_GAMES_FFA;
+    // FORCE_GAME pins the map for testing (e.g. FORCE_GAME=frost-1 npm start).
+    const gameId = process.env.FORCE_GAME ?? pool[Math.floor(Math.random() * pool.length)];
+    const isHockey = gameId === 'frost-1' || gameId === 'inferno-1';
 
-    const sim = new MatchSim(
+    const SimCtor = isHockey ? HockeySim : MatchSim;
+    const sim: GameSim = new SimCtor(
       seats,
       mode,
       (socketId, msg) => this.sessions.get(socketId)?.socket.emit('state', msg),
