@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { FamilyDef, GameDef } from '../data/maps';
 import type { SurfaceKind } from '../data/surfaces';
 import { auroraSky, gradientSky, styledFloor } from './textures';
+import { makeSkyDome } from './skydome';
 
 // Builds the themed arena for a game: sky, fog, lights, ground, floor (square
 // or circle), neon trim, per-family decorative props, and ambient particles.
@@ -24,8 +25,12 @@ export function buildWorld(
   const t = family.theme;
   const style = family.style;
 
-  scene.background = style === 'ice' ? auroraSky(t.skyTop, t.skyBot) : gradientSky(t.skyTop, t.skyBot);
+  // Living shader skydome (aurora / embers / clouds / stars per family). The
+  // flat gradient stays as a fallback background color behind the dome.
+  scene.background = new THREE.Color(t.skyBot);
+  const skyDome = makeSkyDome(scene, family);
   scene.fog = new THREE.Fog(new THREE.Color(t.fog).getHex(), halfSize * 3.0, halfSize * 7.5);
+  void auroraSky; void gradientSky; // retained for the single-file/legacy path
 
   scene.add(new THREE.AmbientLight(t.light, 0.75));
   const sun = new THREE.DirectionalLight(t.light, 0.9);
@@ -112,6 +117,7 @@ export function buildWorld(
     surfaceAt,
     tick(dt: number) {
       tickAmbient(ambientPts, family, dt);
+      skyDome.tick(dt);
     },
   };
 }
