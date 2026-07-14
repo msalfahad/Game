@@ -5,7 +5,7 @@ import { HITBOX_RADIUS } from '../player';
 import { setupRoster, localMove, botMove, collidePlayers, tickRoster, localJump } from '../freeroam';
 import { matchTime } from '../../core/tuning';
 import { SFX } from '../../core/audio';
-import { setScore } from '../../ui/hud';
+import { setScore, showClimbMap, updateClimbMap, hideClimbMap } from '../../ui/hud';
 
 // CLIMB — Avalanche Run. A one-minute scramble up a LONG NARROW mountain
 // corridor: the summit line is far up-slope, boulders tumble down, the pace
@@ -48,6 +48,7 @@ export class ClimbGame implements GameModule {
       p.x = (i - 1.5) * 5.5;
       p.z = CLIMB_L - 4;
     });
+    showClimbMap(ctx.players.map((p) => p.hero.col), 0);
 
     // Summit line: glowing finish strip far up the corridor.
     const line = new THREE.Mesh(
@@ -96,11 +97,15 @@ export class ClimbGame implements GameModule {
     );
     crate.castShadow = true;
     grp.add(crate);
-    // Drop it a little ahead of the leading climber, inside the corridor.
+    // Drop it ANYWHERE random along the pack's active stretch (a bit past the
+    // leader down to a bit behind the last climber) — luck joins the skill.
     const alive = this.ctx.players.filter((p) => !p.dead);
     const leadZ = alive.length ? Math.min(...alive.map((p) => p.z)) : 0;
+    const tailZ = alive.length ? Math.max(...alive.map((p) => p.z)) : 0;
+    const lo = Math.max(-(CLIMB_L - 6), leadZ - 14);
+    const hi = Math.min(CLIMB_L - 5, tailZ + 6);
     const x = (Math.random() - 0.5) * (CLIMB_W - 3) * 2;
-    const z = Math.max(-(CLIMB_L - 6), leadZ - 8 - Math.random() * 10);
+    const z = lo + Math.random() * Math.max(0, hi - lo);
     grp.position.set(x, 1.2, z);
     this.ctx.scene.add(grp);
     this.box = { m: grp, x, z };
@@ -210,6 +215,13 @@ export class ClimbGame implements GameModule {
     // The camera climbs with you.
     ctx.camera.follow(ctx.players[0].z, -(CLIMB_L - 13), CLIMB_L - 13);
 
+    // Minimap: 0 = base, 1 = summit line.
+    const total = CLIMB_L - 4 + (CLIMB_L - 3.5);
+    updateClimbMap(
+      ctx.players.map((p) => (CLIMB_L - 4 - p.z) / total),
+      ctx.players.map((p) => p.dead),
+    );
+
     // Progress + summit check.
     for (const p of ctx.players) {
       if (p.dead) continue;
@@ -230,6 +242,7 @@ export class ClimbGame implements GameModule {
   private doFinish(sub: string) {
     if (this.finished) return;
     this.finished = true;
+    hideClimbMap();
     this.ctx.players.forEach((p) => ((p as any)._res = this.progressM(p) + 'm climbed'));
     const ranked = [...this.ctx.players].sort((a, b) => a.z - b.z);
     this.ctx.finish(ranked, sub);

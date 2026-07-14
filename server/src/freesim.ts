@@ -561,12 +561,16 @@ export class FreeSim {
     if (this.spawnT <= 0) {
       this.spawnT = 10;
       for (const e of this.ents.values()) if (e.type === ET.LOOT) this.ents.delete(e.id);
+      // ANYWHERE random along the pack's active stretch — luck joins skill.
       const alive = this.players.filter((p) => !p.dead);
       const leadZ = alive.length ? Math.min(...alive.map((p) => p.z)) : 0;
+      const tailZ = alive.length ? Math.max(...alive.map((p) => p.z)) : 0;
+      const lo = Math.max(-(CLIMB_L - 6), leadZ - 14);
+      const hi = Math.min(CLIMB_L - 5, tailZ + 6);
       this.addEnt(
         ET.LOOT,
         (Math.random() - 0.5) * (CLIMB_W - 3) * 2,
-        Math.max(-(CLIMB_L - 6), leadZ - 8 - Math.random() * 10),
+        lo + Math.random() * Math.max(0, hi - lo),
         1.2,
         2,
       );

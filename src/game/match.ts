@@ -132,8 +132,10 @@ export class Match {
       finish: (ranked, subtitle) => this.finish(ranked, subtitle),
     };
 
-    // Ice push pulls back a touch so the FULL circular rink fits on phones.
-    this.engine.camera.frame(isClimb ? 17 : halfSize, isGoal ? 1.28 : isIce ? 1.18 : 1.0);
+    // Ice push + hockey pull back so the FULL arena fits, extra on portrait
+    // phones where the rink corners were getting cut off.
+    const portrait = innerWidth < innerHeight;
+    this.engine.camera.frame(isClimb ? 17 : halfSize, isGoal ? (portrait ? 1.62 : 1.28) : isIce ? 1.18 : 1.0);
 
     this.game.init(this.ctx);
     HUD.showHud(true);

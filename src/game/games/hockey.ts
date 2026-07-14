@@ -6,6 +6,7 @@ import { speedMult, strengthMult, accuracyMult } from '../../data/characters';
 import { SFX } from '../../core/audio';
 import { matchTime } from '../../core/tuning';
 import { makeHeads } from '../../ui/hud';
+import { decorateRink, sealStrip, cornerServe, cornerBounce, type RinkDeco } from '../rinkdeco';
 
 // Frostbite 1.1 — Ice Hockey Brawl. Four players guard the four walls of a
 // small rink; pucks bounce around and each goal costs the conceding player a
@@ -51,7 +52,7 @@ export class HockeyGame implements GameModule {
       p.buildRider(ctx.scene);
     }
     makeHeads(ctx.players, 10);
-    this.buildSpawnPad();
+    this.deco = decorateRink(ctx.scene, this.half, ctx.players.map((p) => p.hero.col));
     this.spawnBall();
     this.updateRiders();
   }
@@ -64,39 +65,22 @@ export class HockeyGame implements GameModule {
     return [this.half, P];
   }
 
-  /** Glowing center pad — the clear place every puck comes out of. */
-  private buildSpawnPad() {
-    const pad = new THREE.Mesh(
-      new THREE.CircleGeometry(2.6, 28),
-      new THREE.MeshBasicMaterial({ color: 0x0a1230, transparent: true, opacity: 0.85 }),
-    );
-    pad.rotation.x = -Math.PI / 2;
-    pad.position.y = 0.12;
-    this.ctx.scene.add(pad);
-    const rim = new THREE.Mesh(
-      new THREE.TorusGeometry(2.6, 0.22, 8, 32),
-      new THREE.MeshBasicMaterial({ color: 0xff8a2e }),
-    );
-    rim.rotation.x = -Math.PI / 2;
-    rim.position.y = 0.2;
-    this.ctx.scene.add(rim);
-  }
+  private deco!: RinkDeco;
 
   private spawnBall() {
-    const a = Math.random() * Math.PI * 2;
     const m = new THREE.Mesh(
       new THREE.SphereGeometry(0.9, 16, 16),
       new THREE.MeshStandardMaterial({ color: 0xff8a2e, emissive: 0x7a3000, roughness: 0.3, metalness: 0.3 }),
     );
     m.castShadow = true;
     this.ctx.scene.add(m);
-    this.balls.push({ x: 0, z: 0, vx: Math.cos(a) * 25, vz: Math.sin(a) * 25, y: 1.4, vy: 0, power: 0, grace: 0.7, m });
+    const s = cornerServe(this.half, 25);
+    this.balls.push({ x: s.x, z: s.z, vx: s.vx, vz: s.vz, y: 1.4, vy: 0, power: 0, grace: 0.7, m });
   }
 
   private resetBall(b: Puck) {
-    b.x = 0; b.z = 0;
-    const a = Math.random() * Math.PI * 2;
-    b.vx = Math.cos(a) * 23; b.vz = Math.sin(a) * 23;
+    const s = cornerServe(this.half, 23);
+    b.x = s.x; b.z = s.z; b.vx = s.vx; b.vz = s.vz;
     b.grace = 0.8; b.power = 0;
   }
 
@@ -133,6 +117,7 @@ export class HockeyGame implements GameModule {
       p.dead = true;
       p.headEl?.classList.add('dead');
       p.group.visible = false;
+      sealStrip(this.deco, p.index);
       SFX.out();
       this.ctx.fx.banner(p.you ? 'YOU ARE OUT!' : p.hero.name + ' IS OUT!', '#FF4D4D');
       if (p.you || this.ctx.players.slice(1).every((q) => q.dead)) setTimeout(() => this.doFinish(), 900);
@@ -254,6 +239,7 @@ export class HockeyGame implements GameModule {
       const cap = b.power > 0 ? 46 : 30;
       const sp = Math.hypot(b.vx, b.vz);
       if (sp > cap) { b.vx *= cap / sp; b.vz *= cap / sp; }
+      cornerBounce(b, this.half); // corner posts guard the seams between walls
 
       for (const p of this.ctx.players) {
         const R = HITBOX_RADIUS + 1.4;

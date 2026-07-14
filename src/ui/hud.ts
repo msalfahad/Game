@@ -15,6 +15,59 @@ export function showHud(on: boolean) {
   for (const el of [headsEl, clockEl, objectiveEl]) el.classList.toggle('hidden', !on);
   document.getElementById('mute')!.classList.toggle('hidden', !on);
   abilityHintEl.style.display = on ? 'block' : 'none';
+  if (!on) hideClimbMap();
+}
+
+// --- Climb minimap -----------------------------------------------------------
+// A vertical race track on the right edge: one dot per climber (their color),
+// YOUR dot is bigger with a white ring, the summit flag sits at the top. Shows
+// at a glance who leads and who's breathing down your neck.
+
+let climbMapEl: HTMLElement | null = null;
+let climbDots: HTMLElement[] = [];
+
+export function showClimbMap(cols: string[], youIndex: number) {
+  hideClimbMap();
+  const el = document.createElement('div');
+  el.id = 'climbMap';
+  el.style.cssText =
+    'position:fixed;right:12px;top:50%;transform:translateY(-50%);width:16px;height:46vh;' +
+    'background:rgba(10,18,48,.6);border:2px solid rgba(154,223,255,.4);border-radius:10px;' +
+    'z-index:40;pointer-events:none;';
+  const flag = document.createElement('div');
+  flag.textContent = '🏔️';
+  flag.style.cssText = 'position:absolute;top:-26px;left:50%;transform:translateX(-50%);font-size:17px;line-height:1;';
+  el.appendChild(flag);
+  climbDots = cols.map((c, i) => {
+    const you = i === youIndex;
+    const s = you ? 15 : 10;
+    const d = document.createElement('div');
+    d.style.cssText =
+      `position:absolute;left:50%;width:${s}px;height:${s}px;margin-left:${-s / 2}px;` +
+      `border-radius:50%;background:${c};bottom:1%;transition:bottom .15s linear;` +
+      (you ? 'border:2px solid #fff;box-shadow:0 0 8px #fff;z-index:2;' : 'opacity:.92;');
+    el.appendChild(d);
+    return d;
+  });
+  document.body.appendChild(el);
+  climbMapEl = el;
+}
+
+/** progress: 0 (start) .. 1 (summit) per player; dead climbers fade. */
+export function updateClimbMap(progress: number[], dead?: boolean[]) {
+  if (!climbMapEl) return;
+  progress.forEach((t, i) => {
+    const d = climbDots[i];
+    if (!d) return;
+    d.style.bottom = Math.max(0, Math.min(1, t)) * 92 + 1 + '%';
+    if (dead?.[i]) d.style.opacity = '0.25';
+  });
+}
+
+export function hideClimbMap() {
+  climbMapEl?.remove();
+  climbMapEl = null;
+  climbDots = [];
 }
 
 export function makeHeads(players: Player[], initialScore: string | number) {

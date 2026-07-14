@@ -106,14 +106,36 @@ export class HockeySim {
     return [HALF, P];
   }
 
+  // Pucks serve from a random CORNER pad, aimed inward (matches the client
+  // rink deco); corner posts (r=2.4) guard the seams between walls.
+  private cornerServe(speed: number): { x: number; z: number; vx: number; vz: number } {
+    const sx = (Math.random() < 0.5 ? -1 : 1) * (HALF - 2.6);
+    const sz = (Math.random() < 0.5 ? -1 : 1) * (HALF - 2.6);
+    const a = Math.atan2(-sz, -sx) + (Math.random() - 0.5) * 0.9;
+    return { x: sx, z: sz, vx: Math.cos(a) * speed, vz: Math.sin(a) * speed };
+  }
+  private cornerBounce(b: Ball) {
+    const R = 2.4 + 0.9;
+    for (const cx of [-HALF, HALF]) {
+      for (const cz of [-HALF, HALF]) {
+        const dx = b.x - cx, dz = b.z - cz;
+        const d = Math.hypot(dx, dz);
+        if (d > R || d === 0) continue;
+        const nx = dx / d, nz = dz / d;
+        const dot = b.vx * nx + b.vz * nz;
+        if (dot < 0) { b.vx -= 2 * dot * nx; b.vz -= 2 * dot * nz; }
+        b.x = cx + nx * R;
+        b.z = cz + nz * R;
+      }
+    }
+  }
   private spawnBall() {
-    const a = Math.random() * Math.PI * 2;
-    this.balls.push({ x: 0, z: 0, vx: Math.cos(a) * 25, vz: Math.sin(a) * 25, y: 1.4, vy: 0, power: 0, grace: 0.7 });
+    const s = this.cornerServe(25);
+    this.balls.push({ x: s.x, z: s.z, vx: s.vx, vz: s.vz, y: 1.4, vy: 0, power: 0, grace: 0.7 });
   }
   private resetBall(b: Ball) {
-    b.x = 0; b.z = 0;
-    const a = Math.random() * Math.PI * 2;
-    b.vx = Math.cos(a) * 23; b.vz = Math.sin(a) * 23;
+    const s = this.cornerServe(23);
+    b.x = s.x; b.z = s.z; b.vx = s.vx; b.vz = s.vz;
     b.grace = 0.8; b.power = 0;
   }
 
@@ -208,6 +230,7 @@ export class HockeySim {
       const cap = b.power > 0 ? 46 : 30;
       const sp = Math.hypot(b.vx, b.vz);
       if (sp > cap) { b.vx *= cap / sp; b.vz *= cap / sp; }
+      this.cornerBounce(b);
 
       for (const p of this.players) {
         const reach = HITBOX + 1.4;

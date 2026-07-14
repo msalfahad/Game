@@ -147,8 +147,10 @@ export class Input {
     if (!this.enabled) return;
     SFX.unlock();
     for (const t of Array.from(e.changedTouches)) {
-      // Right side lower area = ability tap.
-      if (t.clientX >= innerWidth * 0.62 && t.clientY > innerHeight * 0.55) {
+      // Ability = the ⚡ button in the bottom-right CORNER only. (This used to
+      // be the whole lower-right 38% of the screen, which swallowed movement
+      // drags — you couldn't steer from the right half in hockey.)
+      if (t.clientX >= innerWidth - 150 && t.clientY >= innerHeight - 150) {
         this.abilityQueued = true;
         continue;
       }

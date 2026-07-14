@@ -40,10 +40,11 @@ function loadAnim(hero: Hero, onReady: (t: THREE.Texture | null) => void) {
     for (const cb of animWaiters[hero.key] ?? []) cb(t);
     delete animWaiters[hero.key];
   };
-  // Single-file build embeds the strips on window.__CHAR_ANIM.
+  // Single-file build embeds the strips on window.__CHAR_ANIM. The ?v= busts
+  // stale phone caches whenever the art generation changes.
   const inline = (globalThis as any).__CHAR_ANIM as Record<string, string> | undefined;
   const img = new Image();
-  img.src = inline?.[hero.key] ?? animBase() + 'chars/anim/' + hero.key + '.png';
+  img.src = inline?.[hero.key] ?? animBase() + 'chars/anim/' + hero.key + '.png?v=3';
   img.onload = () => {
     const t = new THREE.Texture(img);
     t.colorSpace = THREE.SRGBColorSpace;
@@ -340,11 +341,11 @@ export class Player {
         this.frameM.scale.y += (1.04 - this.frameM.scale.y) * 0.2;
       } else if (speed > 0.05) {
         // Distance-driven stride so feet match the ground: ~1 full cycle
-        // every ~6 world units, 8 frames per cycle. Walk under ~55% speed,
-        // run above it.
+        // every ~6 world units, 8 frames per cycle. Anything beyond a stroll
+        // uses the RUN cycle so slower heroes and easy bots still visibly run.
         this.strideT += dist * 0.17;
         const f = Math.floor(this.strideT * 8) % 8;
-        this.setFrame((speed > 0.55 ? RUN_F : WALK_F) + f);
+        this.setFrame((speed > 0.4 ? RUN_F : WALK_F) + f);
         this.frameM.scale.y += (1 - this.landSquash * 0.12 - this.frameM.scale.y) * 0.35;
       } else {
         this.setFrame(IDLE_F);

@@ -4,6 +4,7 @@ import type { Input } from '../core/input';
 import { SFX } from '../core/audio';
 import { Player, HITBOX_RADIUS } from '../game/player';
 import { buildWorld, type World } from '../game/world';
+import { decorateRink, sealStrip, type RinkDeco } from '../game/rinkdeco';
 import { gameById, familyById } from '../data/maps';
 import { heroByKey, speedMult } from '../data/characters';
 import * as HUD from '../ui/hud';
@@ -37,6 +38,7 @@ export class OnlineHockey {
   private inputTimer = 0;
   private running = false;
   private parts: { m: THREE.Mesh; vx: number; vy: number; vz: number; life: number }[] = [];
+  private deco!: RinkDeco;
   private onFinish: (end: MatchEndMsg, youSlot: number) => void;
 
   constructor(engine: Engine, input: Input, onFinish: (end: MatchEndMsg, youSlot: number) => void) {
@@ -57,23 +59,8 @@ export class OnlineHockey {
 
     this.engine.clearScene();
     this.world = buildWorld(this.engine.scene, family, game, HALF);
-    this.engine.camera.frame(HALF, 1.28);
-
-    // Center spawn pad — where every puck comes out.
-    const pad = new THREE.Mesh(
-      new THREE.CircleGeometry(2.6, 28),
-      new THREE.MeshBasicMaterial({ color: 0x0a1230, transparent: true, opacity: 0.85 }),
-    );
-    pad.rotation.x = -Math.PI / 2;
-    pad.position.y = 0.12;
-    this.engine.scene.add(pad);
-    const rim = new THREE.Mesh(
-      new THREE.TorusGeometry(2.6, 0.22, 8, 32),
-      new THREE.MeshBasicMaterial({ color: 0xff8a2e }),
-    );
-    rim.rotation.x = -Math.PI / 2;
-    rim.position.y = 0.2;
-    this.engine.scene.add(rim);
+    // Extra pull-back on portrait phones so the whole rink + paddles fit.
+    this.engine.camera.frame(HALF, innerWidth < innerHeight ? 1.62 : 1.28);
 
     const sides = ['bottom', 'top', 'left', 'right'] as const;
     this.players = msg.players.map((pi) => {
@@ -85,6 +72,8 @@ export class OnlineHockey {
       return p;
     });
     this.placePaddles();
+    // Corner posts, corner serve pads and per-player goal strips.
+    this.deco = decorateRink(this.engine.scene, HALF, this.players.map((p) => p.hero.col));
 
     HUD.makeHeads(this.players, 10);
     HUD.showHud(true);
@@ -142,6 +131,7 @@ export class OnlineHockey {
       if (!p.dead && pts <= 0) {
         p.dead = true;
         HUD.markDead(p);
+        sealStrip(this.deco, slot);
       }
     });
 

@@ -119,6 +119,7 @@ export class OnlineFreeRoam {
     }
     HUD.showHud(true);
     HUD.setObjective(`${this.game.name} · ONLINE${is2v2 ? ' · 2 VS 2' : ''} — ${this.game.blurb}`);
+    if (isClimb) HUD.showClimbMap(this.players.map((p) => p.hero.col), this.players.findIndex((p) => p.you));
     this.input.setEnabled(true);
     this.input.setMode('float');
 
@@ -521,7 +522,14 @@ export class OnlineFreeRoam {
     }
 
     const you = this.players[this.youSlot];
-    if (this.game.mechanic === 'climb') this.engine.camera.follow(you.z, -(CLIMB_L - 13), CLIMB_L - 13);
+    if (this.game.mechanic === 'climb') {
+      this.engine.camera.follow(you.z, -(CLIMB_L - 13), CLIMB_L - 13);
+      const total = CLIMB_L - 4 + (CLIMB_L - 3.5);
+      HUD.updateClimbMap(
+        this.players.map((p) => (CLIMB_L - 4 - p.z) / total),
+        this.players.map((p) => p.dead),
+      );
+    }
     HUD.setAbilityHint(you.dead ? '' : you.cd <= 0 ? 'ready' : '');
     this.world.tick(dt);
     this.tickParts(dt);
