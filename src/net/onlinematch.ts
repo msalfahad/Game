@@ -5,6 +5,7 @@ import { SFX } from '../core/audio';
 import { Player } from '../game/player';
 import { buildWorld, type World } from '../game/world';
 import { victoryWalk } from '../game/victorywalk';
+import { FAMILY_GRADE } from '../core/postfx';
 import { gameById, familyById } from '../data/maps';
 import { heroByKey, speedMult } from '../data/characters';
 import * as HUD from '../ui/hud';
@@ -63,6 +64,7 @@ export class OnlineMatch {
     this.engine.clearScene();
     this.world = buildWorld(this.engine.scene, family, game, this.half);
     this.engine.camera.frame(this.half, 1.0);
+    this.engine.post.setGrade(FAMILY_GRADE[family.id] ?? {});
 
     const is2v2 = msg.mode === '2v2';
     const TEAM_COLS = [0x4dc3ff, 0xff4d4d];

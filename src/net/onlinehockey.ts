@@ -5,6 +5,7 @@ import { SFX } from '../core/audio';
 import { Player, HITBOX_RADIUS } from '../game/player';
 import { buildWorld, type World } from '../game/world';
 import { victoryWalk } from '../game/victorywalk';
+import { FAMILY_GRADE } from '../core/postfx';
 import { decorateRink, sealStrip, type RinkDeco } from '../game/rinkdeco';
 import { gameById, familyById } from '../data/maps';
 import { heroByKey, speedMult } from '../data/characters';
@@ -62,6 +63,7 @@ export class OnlineHockey {
     this.world = buildWorld(this.engine.scene, family, game, HALF);
     // Extra pull-back on portrait phones so the whole rink + paddles fit.
     this.engine.camera.frame(HALF, innerWidth < innerHeight ? 1.62 : 1.28);
+    this.engine.post.setGrade(FAMILY_GRADE[family.id] ?? {});
 
     const sides = ['bottom', 'top', 'left', 'right'] as const;
     this.players = msg.players.map((pi) => {

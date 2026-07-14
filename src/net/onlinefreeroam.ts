@@ -11,6 +11,7 @@ import { net } from './client';
 import { ET, INPUT_RATE, type MatchEndMsg, type MatchStartMsg, type StateMsg } from './protocol';
 import { spawnBolt, tickBolts, type Bolt } from '../game/boltfx';
 import { victoryWalk } from '../game/victorywalk';
+import { FAMILY_GRADE } from '../core/postfx';
 
 // Universal online controller for the free-roam mechanics (collect, mash,
 // paint, breaktiles, throwfight, race, dodge). The server owns all game
@@ -94,6 +95,7 @@ export class OnlineFreeRoam {
     );
     // Ice push pulls back a touch so the FULL circular rink fits on phones.
     this.engine.camera.frame(isClimb ? 17 : this.half, this.game.mechanic === 'icepush' ? 1.18 : 1.0);
+    this.engine.post.setGrade(FAMILY_GRADE[family.id] ?? {});
 
     const is2v2 = msg.mode === '2v2';
     this.players = msg.players.map((pi) => {

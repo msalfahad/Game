@@ -12,6 +12,7 @@ import { CLIMB_W, CLIMB_L } from './games/climb';
 import { victoryWalk } from './victorywalk';
 import { DIFFICULTY, type Fx, type GameModule, type MatchContext } from './context';
 import * as HUD from '../ui/hud';
+import { FAMILY_GRADE } from '../core/postfx';
 
 const ASBASE = 30;
 
@@ -138,6 +139,7 @@ export class Match {
     const portrait = innerWidth < innerHeight;
     this.engine.camera.frame(isClimb ? 17 : halfSize, isGoal ? (portrait ? 1.62 : 1.28) : isIce ? 1.18 : 1.0);
 
+    this.engine.post.setGrade(FAMILY_GRADE[family.id] ?? {});
     this.game.init(this.ctx);
     HUD.showHud(true);
     HUD.setObjective(this.game.objective);
