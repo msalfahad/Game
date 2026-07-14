@@ -5,7 +5,7 @@ import { SFX } from '../core/audio';
 import { Player } from '../game/player';
 import { buildWorld, type World } from '../game/world';
 import { gameById, familyById, type GameDef } from '../data/maps';
-import { heroByKey, speedMult } from '../data/characters';
+import { heroByKey, speedMult, HEROES } from '../data/characters';
 import * as HUD from '../ui/hud';
 import { net } from './client';
 import { ET, INPUT_RATE, type MatchEndMsg, type MatchStartMsg, type StateMsg } from './protocol';
@@ -56,6 +56,10 @@ export class OnlineFreeRoam {
   private youScoreShown = -1;
   private parts: { m: THREE.Mesh; vx: number; vy: number; vz: number; life: number }[] = [];
   private bolts: Bolt[] = [];
+  // Volcano Rush dressing: crater guardian bot + embers.
+  private guardian: Player | null = null;
+  private guardianTX = 0;
+  private embers: THREE.Sprite[] = [];
   private onFinish: (end: MatchEndMsg, youSlot: number) => void;
 
   constructor(engine: Engine, input: Input, onFinish: (end: MatchEndMsg, youSlot: number) => void) {
@@ -78,6 +82,8 @@ export class OnlineFreeRoam {
     this.beamMeshes = [];
     this.gateMeshes = [];
     this.bolts = [];
+    this.guardian = null;
+    this.embers = [];
     this.youScoreShown = -1;
 
     this.engine.clearScene();
@@ -143,6 +149,52 @@ export class OnlineFreeRoam {
   private buildMechanicScenery() {
     const mech = this.game.mechanic;
     const trim = familyById(this.game.familyId).theme.trim;
+    if (mech === 'climb' && this.game.mods?.volcano) {
+      // Crater cone + glowing rim beyond the summit.
+      const cone = new THREE.Mesh(
+        new THREE.ConeGeometry(30, 22, 24, 1, true),
+        new THREE.MeshStandardMaterial({ color: 0x241008, roughness: 0.95, side: THREE.DoubleSide }),
+      );
+      cone.position.set(0, 4, -(CLIMB_L + 22));
+      this.engine.scene.add(cone);
+      const glow = new THREE.Mesh(new THREE.CircleGeometry(11, 24), new THREE.MeshBasicMaterial({ color: 0xff7a2e }));
+      glow.rotation.x = -Math.PI / 2;
+      glow.position.set(0, 15.2, -(CLIMB_L + 22));
+      this.engine.scene.add(glow);
+      const rim = new THREE.Mesh(
+        new THREE.TorusGeometry(11.5, 1.2, 10, 30),
+        new THREE.MeshStandardMaterial({ color: 0x3a1408, emissive: 0xff5e2e, emissiveIntensity: 0.9 }),
+      );
+      rim.rotation.x = Math.PI / 2;
+      rim.position.set(0, 15.4, -(CLIMB_L + 22));
+      this.engine.scene.add(rim);
+      for (let i = 0; i < 8; i++) {
+        const crack = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.9 + Math.random() * 1.4, 7 + Math.random() * 12),
+          new THREE.MeshBasicMaterial({ color: 0xff6a2e, transparent: true, opacity: 0.55 }),
+        );
+        crack.rotation.x = -Math.PI / 2;
+        crack.rotation.z = (Math.random() - 0.5) * 0.9;
+        crack.position.set((Math.random() - 0.5) * (CLIMB_W * 2 - 5), 0.12, (Math.random() - 0.5) * 2 * (CLIMB_L - 8));
+        this.engine.scene.add(crack);
+      }
+      for (let i = 0; i < 16; i++) {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xffa64d, transparent: true, opacity: 0.85, depthWrite: false }));
+        sp.scale.setScalar(0.5 + Math.random() * 0.6);
+        sp.position.set((Math.random() - 0.5) * CLIMB_W * 2, Math.random() * 14, (Math.random() - 0.5) * 2 * CLIMB_L);
+        this.engine.scene.add(sp);
+        this.embers.push(sp);
+      }
+      // The crater GUARDIAN: a hero who is NOT one of the four in the match.
+      const used = new Set(this.players.map((p) => p.hero.key));
+      const hero = HEROES.find((h) => !used.has(h.key)) ?? HEROES[0];
+      const bot = new Player(hero, false, 5, 0);
+      bot.buildRider(this.engine.scene);
+      bot.x = 0;
+      bot.z = -(CLIMB_L + 5.5);
+      bot.group.position.set(bot.x, 0, bot.z);
+      this.guardian = bot;
+    }
     if (mech === 'throwfight' && this.game.mods?.proj === 'snowball') {
       // "SLIPPERY" A-frame sign — solid cover in the bottom middle.
       const grp = new THREE.Group();
@@ -317,8 +369,21 @@ export class OnlineFreeRoam {
     if (type === ET.LOG && this.game.mechanic === 'climb') {
       return new THREE.Mesh(
         new THREE.DodecahedronGeometry(2.3),
-        new THREE.MeshStandardMaterial({ color: 0x9db8cc, roughness: 0.8 }),
+        this.game.mods?.volcano
+          ? new THREE.MeshStandardMaterial({ color: 0x35180c, emissive: 0xb03a10, emissiveIntensity: 0.55, roughness: 0.85 })
+          : new THREE.MeshStandardMaterial({ color: 0x9db8cc, roughness: 0.8 }),
       );
+    }
+    if (type === ET.MISSILE && this.game.mechanic === 'climb') {
+      // Guardian fireball; extra&4 = the BIG one (1.5x).
+      const big = (extra & 4) !== 0;
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(big ? 4.5 : 3, 14, 14),
+        new THREE.MeshStandardMaterial({ color: 0x2a1008, emissive: big ? 0xff3a10 : 0xff5e2e, emissiveIntensity: 1, roughness: 0.7 }),
+      );
+      // Guardian visibly tracks its throws.
+      this.guardianTX = 0; // recomputed below from the entity x on spawn
+      return m;
     }
     if (type === ET.LOOT) {
       if (extra === 1) {
@@ -600,6 +665,18 @@ export class OnlineFreeRoam {
     }
 
     const you = this.players[this.youSlot];
+    if (this.guardian) {
+      const g = this.guardian;
+      g.x += (this.guardianTX - g.x) * 0.03;
+      if (Math.abs(this.guardianTX - g.x) < 1) this.guardianTX = Math.sin(elapsed * 0.5) * (CLIMB_W - 5);
+      g.group.position.set(g.x, 0, g.z);
+      g.bob(elapsed, 7);
+      g.tickEffects(dt);
+      for (const e of this.embers) {
+        e.position.y += dt * (1.5 + (e.scale.x - 0.5) * 2);
+        if (e.position.y > 16) e.position.y = 0.5;
+      }
+    }
     if (this.game.mechanic === 'climb') {
       this.engine.camera.follow(you.z, -(CLIMB_L - 13), CLIMB_L - 13);
       const total = CLIMB_L - 4 + (CLIMB_L - 3.5);
@@ -630,6 +707,7 @@ export class OnlineFreeRoam {
     if (sp > top) { p.vx *= top / sp; p.vz *= top / sp; }
     p.x += p.vx * dt;
     p.z += p.vz * dt;
+    if (this.game.mechanic === 'climb' && this.game.mods?.volcano) p.x += p.vx * dt * 0.45; // sideways ~normal
     if (p.y > 0 || p.vy !== 0) {
       p.y += p.vy * dt;
       p.vy -= GRAVITY * dt;

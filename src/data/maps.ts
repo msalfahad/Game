@@ -133,7 +133,7 @@ export const GAMES: GameDef[] = [
   g('inferno-1', 'inferno', 'Lava Hockey', '🔥', 1, 'goal', 'square', [], 'Hockey on obsidian. The ember puck burns.'),
   g('inferno-2', 'inferno', 'Floor Is Lava', '🌋', 2, 'breaktiles', 'square', ['geysers'], 'Platforms crumble into lava. Stay on top.', { decay: 'ring' }),
   g('inferno-3', 'inferno', 'Blast Zone', '💣', 3, 'throwfight', 'square', ['geysers', 'falling'], 'Grab bombs. Big blasts, big knockback.', { proj: 'bomb' }),
-  g('inferno-4', 'inferno', 'Volcano Rush', '🌪️', 4, 'race', 'square', ['geysers', 'falling', 'rollers'], 'Race the crater while it erupts.', { laps: 2 }),
+  g('inferno-4', 'inferno', 'Volcano Rush', '🌋', 4, 'climb', 'square', [], 'Climb the erupting volcano! Dodge rolling lava rocks and the crater guardian\'s fireballs.', { volcano: 1 }),
 
   // 3. Dune Clash
   g('dune-1', 'dune', 'Sand Soccer', '⚽', 1, 'goal', 'square', [], 'Soccer on drifting sand. Guard your goal line.'),

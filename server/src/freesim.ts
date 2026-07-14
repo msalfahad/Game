@@ -81,6 +81,7 @@ export class FreeSim {
   private tickN = 0;
   private events: SimEvent[] = [];
   private spawnT = 0;
+  private throwT = 2.5; // Volcano Rush guardian fireballs
   // Snowball Smash: hit-count scoring, no elimination, random perk drops.
   private snow = false;
   private decayT = 0;
@@ -312,6 +313,7 @@ export class FreeSim {
     if (sp > top) { p.vx *= top / sp; p.vz *= top / sp; }
     p.x += p.vx * dt;
     p.z += p.vz * dt;
+    if (this.mech === 'climb' && this.mods.volcano) p.x += p.vx * dt * 0.45; // sideways ~normal speed
     if (p.y > 0 || p.vy !== 0) {
       p.y += p.vy * dt;
       p.vy -= GRAVITY * dt;
@@ -544,16 +546,23 @@ export class FreeSim {
   }
 
   private tickClimb(dt: number, prog: number) {
+    const volcano = !!this.mods.volcano;
     // Boulders tumble down the slope; hits knock climbers back down.
     this.decayT -= dt;
     if (this.decayT <= 0) {
-      this.decayT = Math.max(0.55, 1.3 - prog * 0.6);
+      this.decayT = Math.max(volcano ? 1.0 : 0.55, (volcano ? 1.8 : 1.3) - prog * 0.6);
       const e = this.addEnt(ET.LOG, (Math.random() - 0.5) * (CLIMB_W - 2) * 2, -(CLIMB_L + 4), 2, 2);
       e.vz = 13 + prog * 7 + Math.random() * 5;
+      // Volcano rocks tumble DIAGONALLY, bouncing between the walls.
+      if (volcano) e.vx = (Math.random() < 0.5 ? -1 : 1) * (4 + Math.random() * 6);
     }
     for (const e of this.ents.values()) {
       if (e.type !== ET.LOG) continue;
       e.z += e.vz * dt;
+      e.x += e.vx * dt;
+      const rw = CLIMB_W - 1.5;
+      if (e.x < -rw) { e.x = -rw; e.vx = Math.abs(e.vx); }
+      if (e.x > rw) { e.x = rw; e.vx = -Math.abs(e.vx); }
       for (const p of this.players) {
         if (p.dead || p.hitCd > 0) continue;
         if (Math.hypot(p.x - e.x, p.z - e.z) < HITBOX + 2.2) {
@@ -564,6 +573,63 @@ export class FreeSim {
         }
       }
       if (e.z > CLIMB_L + 6) this.ents.delete(e.id);
+    }
+    // Volcano Rush: the crater guardian lobs slow fireballs — at the LEADER
+    // half the time, otherwise anyone. Big balls (extra&4) hit much harder.
+    if (volcano) {
+      this.throwT -= dt;
+      if (this.throwT <= 0) {
+        this.throwT = 2.3 + Math.random() * 1.6;
+        const alive = this.players.filter((p) => !p.dead);
+        if (alive.length) {
+          const closest = [...alive].sort((a, b) => a.z - b.z)[0];
+          const target = Math.random() < 0.5 ? closest : alive[Math.floor(Math.random() * alive.length)];
+          const big = Math.random() < 0.3;
+          const r = big ? 4.5 : 3;
+          const sx = Math.sin(Date.now() / 2000) * (CLIMB_W - 5);
+          const sz = -(CLIMB_L + 3.5);
+          const tx = target.x + (Math.random() - 0.5) * 4;
+          const tz = target.z + (Math.random() - 0.5) * 4;
+          const T = Math.max(1.3, Math.min(2.6, Math.hypot(tx - sx, tz - sz) / 15));
+          const e = this.addEnt(ET.MISSILE, sx, sz, 4, big ? 4 : 0);
+          e.vx = (tx - sx) / T;
+          e.vz = (tz - sz) / T;
+          e.vy = (r * 0.7 - 4 + 15 * T * T) / T;
+          e.life = 6;
+        }
+      }
+      for (const e of this.ents.values()) {
+        if (e.type !== ET.MISSILE) continue;
+        const big = (e.extra & 4) !== 0;
+        const r = big ? 4.5 : 3;
+        e.x += e.vx * dt;
+        e.z += e.vz * dt;
+        e.y += e.vy * dt;
+        e.vy -= 30 * dt;
+        const ground = r * 0.7;
+        if (e.y <= ground) {
+          e.y = ground;
+          e.vy = 0;
+          e.vz = Math.max(e.vz, 9 + (big ? 3 : 0)); // rolls DOWN the slope
+          e.vx *= 0.92;
+          e.life -= dt * 2.5;
+        }
+        const w = CLIMB_W - 1.2;
+        if (e.x < -w) { e.x = -w; e.vx = Math.abs(e.vx); }
+        if (e.x > w) { e.x = w; e.vx = -Math.abs(e.vx); }
+        for (const p of this.players) {
+          if (p.dead || p.hitCd > 0) continue;
+          if (Math.hypot(p.x - e.x, p.z - e.z) < HITBOX + r * 0.8 && e.y < 6) {
+            p.hitCd = 1.3;
+            p.freezeT = Math.max(p.freezeT, big ? 1.4 : 0.8);
+            p.vz += big ? 44 : 26;
+            p.vx += Math.sign(p.x - e.x) * (big ? 16 : 8);
+            this.events.push({ t: 'hit', slot: p.slot });
+          }
+        }
+        e.life -= dt * 0.2;
+        if (e.life <= 0 || e.z > CLIMB_L + 6) this.ents.delete(e.id);
+      }
     }
     // ❄ freeze box every 10s.
     this.spawnT -= dt;

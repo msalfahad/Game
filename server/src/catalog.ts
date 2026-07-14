@@ -25,7 +25,7 @@ export const ONLINE_CATALOG: OnlineGameDef[] = [
   g('inferno-1', 'goal', 120),
   g('inferno-2', 'breaktiles', 90, { decay: 'ring' }),
   g('inferno-3', 'throwfight', 90, { proj: 'bomb' }),
-  g('inferno-4', 'race', 90, { laps: 2 }),
+  g('inferno-4', 'climb', 60, { volcano: 1 }),
   // Dune
   g('dune-1', 'goal', 120),
   g('dune-2', 'breaktiles', 90, { decay: 'respawn' }),
