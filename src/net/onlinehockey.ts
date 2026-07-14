@@ -4,6 +4,7 @@ import type { Input } from '../core/input';
 import { SFX } from '../core/audio';
 import { Player, HITBOX_RADIUS } from '../game/player';
 import { buildWorld, type World } from '../game/world';
+import { victoryWalk } from '../game/victorywalk';
 import { decorateRink, sealStrip, type RinkDeco } from '../game/rinkdeco';
 import { gameById, familyById } from '../data/maps';
 import { heroByKey, speedMult } from '../data/characters';
@@ -299,7 +300,10 @@ export class OnlineHockey {
     const won = m.ranking[0]?.slot === this.youSlot;
     if (won) SFX.win();
     else SFX.lose();
-    this.onFinish(m, this.youSlot);
+    // Finishing-order parade before the results screen.
+    const ranked = m.ranking.map((r) => this.players[r.slot]).filter(Boolean);
+    const labels = m.ranking.map((r) => `${r.lives} ${m.scoreLabel}`);
+    victoryWalk(this.engine, ranked, labels, { z: HALF * 0.3 }, () => this.onFinish(m, this.youSlot));
   }
 
   stop() {

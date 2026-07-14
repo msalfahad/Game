@@ -4,6 +4,7 @@ import type { Input } from '../core/input';
 import { SFX } from '../core/audio';
 import { Player } from '../game/player';
 import { buildWorld, type World } from '../game/world';
+import { victoryWalk } from '../game/victorywalk';
 import { gameById, familyById } from '../data/maps';
 import { heroByKey, speedMult } from '../data/characters';
 import * as HUD from '../ui/hud';
@@ -301,7 +302,10 @@ export class OnlineMatch {
     const won = m.ranking[0]?.slot === this.youSlot;
     if (won) SFX.win();
     else SFX.lose();
-    this.onFinish(m, this.youSlot);
+    // Finishing-order parade before the results screen.
+    const ranked = m.ranking.map((r) => this.players[r.slot]).filter(Boolean);
+    const labels = m.ranking.map((r) => `${r.lives} ${m.scoreLabel}`);
+    victoryWalk(this.engine, ranked, labels, { z: 8 }, () => this.onFinish(m, this.youSlot));
   }
 
   stop() {

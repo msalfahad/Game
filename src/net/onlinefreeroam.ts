@@ -10,6 +10,7 @@ import * as HUD from '../ui/hud';
 import { net } from './client';
 import { ET, INPUT_RATE, type MatchEndMsg, type MatchStartMsg, type StateMsg } from './protocol';
 import { spawnBolt, tickBolts, type Bolt } from '../game/boltfx';
+import { victoryWalk } from '../game/victorywalk';
 
 // Universal online controller for the free-roam mechanics (collect, mash,
 // paint, breaktiles, throwfight, race, dodge). The server owns all game
@@ -25,6 +26,9 @@ const BREAK_N = 11;
 const CLIMB_W = 12;
 const CLIMB_L = 62; // KEEP IN SYNC with climb.ts + server freesim.ts
 const CLIMB_PACE = 0.7;
+// Snowball Smash "SLIPPERY" sign cover. KEEP IN SYNC with throwfight + server.
+const SIGN_HW = 4.6;
+const SIGN_HD = 1.1;
 
 interface Snap { at: number; msg: StateMsg; }
 
@@ -139,6 +143,38 @@ export class OnlineFreeRoam {
   private buildMechanicScenery() {
     const mech = this.game.mechanic;
     const trim = familyById(this.game.familyId).theme.trim;
+    if (mech === 'throwfight' && this.game.mods?.proj === 'snowball') {
+      // "SLIPPERY" A-frame sign — solid cover in the bottom middle.
+      const grp = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color: 0xffd23f, roughness: 0.55 });
+      for (const [tilt, zo] of [[-0.16, 0.55], [0.16, -0.55]] as const) {
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(9, 5.4, 0.35), mat);
+        panel.rotation.x = tilt;
+        panel.position.set(0, 2.7, zo);
+        panel.castShadow = true;
+        grp.add(panel);
+      }
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 128;
+      const x2 = c.getContext('2d')!;
+      x2.fillStyle = '#1a2033';
+      x2.font = 'bold 46px Nunito, sans-serif';
+      x2.textAlign = 'center';
+      x2.fillText('\u26A0 SLIPPERY', 128, 58);
+      x2.font = '44px serif';
+      x2.fillText('\u2744', 128, 108);
+      const t2 = new THREE.CanvasTexture(c);
+      t2.colorSpace = THREE.SRGBColorSpace;
+      const face = new THREE.Mesh(
+        new THREE.PlaneGeometry(8.4, 4.4),
+        new THREE.MeshBasicMaterial({ map: t2, transparent: true, depthWrite: false }),
+      );
+      face.rotation.x = -0.16;
+      face.position.set(0, 2.9, 0.78);
+      grp.add(face);
+      grp.position.set(0, 0, this.half * 0.55);
+      this.engine.scene.add(grp);
+    }
     if (mech === 'paint' || mech === 'breaktiles') {
       const n = mech === 'paint' ? PAINT_N : BREAK_N;
       const step = (this.half * 2) / n;
@@ -471,6 +507,7 @@ export class OnlineFreeRoam {
         if (p.you) SFX.gem();
       } else if (ev.t === 'hit') {
         SFX.hit();
+        p.flinchT = 0.5; // visible stagger on the one who got smacked
         this.burst(p.x, p.z, '#FF4D4D', 12);
         this.engine.camera.shake(1.2);
       } else if (ev.t === 'power') {
@@ -612,6 +649,19 @@ export class OnlineFreeRoam {
         p.z = Math.max(-m, Math.min(m, p.z));
       }
     }
+    if (this.game.mechanic === 'throwfight' && this.game.mods?.proj === 'snowball') {
+      // Solid SLIPPERY-sign cover, mirrored from the server.
+      const HW = SIGN_HW + 2.4;
+      const HD = SIGN_HD + 2.4;
+      const signZ = this.half * 0.55;
+      const dz = p.z - signZ;
+      if (Math.abs(p.x) < HW && Math.abs(dz) < HD) {
+        const penX = HW - Math.abs(p.x);
+        const penZ = HD - Math.abs(dz);
+        if (penX < penZ) p.x = Math.sign(p.x || 1) * HW;
+        else p.z = signZ + Math.sign(dz || 1) * HD;
+      }
+    }
   }
 
   private interpolate() {
@@ -714,7 +764,14 @@ export class OnlineFreeRoam {
       : m.ranking[0]?.slot === this.youSlot;
     if (won) SFX.win();
     else SFX.lose();
-    this.onFinish(m, this.youSlot);
+    // Finishing-order parade before the results screen.
+    const ranked = m.ranking.map((r) => this.players[r.slot]).filter(Boolean);
+    const labels = m.ranking.map((r) => `${r.lives} ${m.scoreLabel}`);
+    victoryWalk(
+      this.engine, ranked, labels,
+      { z: this.half * 0.24, follow: this.game.mechanic === 'climb' },
+      () => this.onFinish(m, this.youSlot),
+    );
   }
 
   stop() {

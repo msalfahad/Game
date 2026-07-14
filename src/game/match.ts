@@ -9,6 +9,7 @@ import { HEROES, type Hero } from '../data/characters';
 import { gameById, familyById } from '../data/maps';
 import { makeGame } from './games/index';
 import { CLIMB_W, CLIMB_L } from './games/climb';
+import { victoryWalk } from './victorywalk';
 import { DIFFICULTY, type Fx, type GameModule, type MatchContext } from './context';
 import * as HUD from '../ui/hud';
 
@@ -175,7 +176,14 @@ export class Match {
     const youWon = ranked[0] === you;
     if (youWon) SFX.win();
     else SFX.lose();
-    this.onFinish?.(ranked, subtitle, youWon);
+    // Finishing-order parade before the results screen.
+    const isClimb = this.ctx?.game.mechanic === 'climb';
+    const labels = ranked.map((p) => String((p as any)._res ?? ''));
+    victoryWalk(
+      this.engine, ranked, labels,
+      { z: Math.min(this.ctx?.halfSize ?? 30, 30) * 0.24, follow: isClimb },
+      () => this.onFinish?.(ranked, subtitle, youWon),
+    );
   }
 
   stop() {

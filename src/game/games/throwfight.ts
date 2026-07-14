@@ -53,6 +53,11 @@ export class ThrowFightGame implements GameModule {
   private snow = false;
   private perks: { m: THREE.Group; x: number; z: number; kind: 'shoes' | 'zap' | 'shield' }[] = [];
   private perkT = 6;
+  // "SLIPPERY" sign in the bottom-middle — solid cover to hide behind.
+  // KEEP IN SYNC with server freesim + onlinefreeroam.
+  private signZ = 0;
+  private static readonly SIGN_HW = 4.6;
+  private static readonly SIGN_HD = 1.1;
 
   init(ctx: MatchContext) {
     this.ctx = ctx;
@@ -69,6 +74,64 @@ export class ThrowFightGame implements GameModule {
     setupRoster(ctx, this.snow ? 0 : 100, 0.55);
     for (let i = 0; i < 6; i++) this.dropItem();
     this.powerups = this.snow ? null : new Powerups(ctx, ['speed', 'shield', 'giant', 'heal'], () => this.leader());
+    if (this.snow) {
+      this.signZ = ctx.halfSize * 0.55;
+      this.buildSign();
+    }
+  }
+
+  /** Cartoon "⚠ SLIPPERY" A-frame sign — solid cover in the bottom middle. */
+  private buildSign() {
+    const grp = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffd23f, roughness: 0.55 });
+    const mk = (tilt: number, zOff: number) => {
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(9, 5.4, 0.35), mat);
+      panel.rotation.x = tilt;
+      panel.position.set(0, 2.7, zOff);
+      panel.castShadow = true;
+      grp.add(panel);
+      return panel;
+    };
+    mk(-0.16, 0.55);
+    mk(0.16, -0.55);
+    // Face label.
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 128;
+    const x = c.getContext('2d')!;
+    x.fillStyle = '#1a2033';
+    x.font = 'bold 46px Nunito, sans-serif';
+    x.textAlign = 'center';
+    x.fillText('⚠ SLIPPERY', 128, 58);
+    x.font = '44px serif';
+    x.fillText('❄', 128, 108);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    const face = new THREE.Mesh(
+      new THREE.PlaneGeometry(8.4, 4.4),
+      new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false }),
+    );
+    face.rotation.x = -0.16;
+    face.position.set(0, 2.9, 0.78);
+    grp.add(face);
+    grp.position.set(0, 0, this.signZ);
+    this.ctx.scene.add(grp);
+  }
+
+  /** Solid sign collision: push players out along the smaller penetration axis. */
+  private pushOffSign(p: Player) {
+    const HW = ThrowFightGame.SIGN_HW + HITBOX_RADIUS * 0.8;
+    const HD = ThrowFightGame.SIGN_HD + HITBOX_RADIUS * 0.8;
+    const dz = p.z - this.signZ;
+    if (Math.abs(p.x) >= HW || Math.abs(dz) >= HD) return;
+    const penX = HW - Math.abs(p.x);
+    const penZ = HD - Math.abs(dz);
+    if (penX < penZ) {
+      p.x = Math.sign(p.x || 1) * HW;
+      p.vx = Math.sign(p.x) * Math.abs(p.vx) * 0.3;
+    } else {
+      p.z = this.signZ + Math.sign(dz || 1) * HD;
+      p.vz = Math.sign(dz || 1) * Math.abs(p.vz) * 0.3;
+    }
   }
 
   private leader(): Player | null {
@@ -331,6 +394,7 @@ export class ThrowFightGame implements GameModule {
       botMaybeUltimate(ctx, p, dt);
     }
     collidePlayers(ctx);
+    if (this.snow) for (const p of ctx.players) if (!p.dead) this.pushOffSign(p);
 
     // Pickups.
     for (const p of ctx.players) {
@@ -363,6 +427,14 @@ export class ThrowFightGame implements GameModule {
       pr.m.position.set(pr.x, Math.max(pr.y, 1), pr.z);
       pr.m.rotation.x += dt * 6;
       pr.m.rotation.y += dt * 4;
+      // The SLIPPERY sign is solid cover: low throws splat against it.
+      if (this.snow && Math.abs(pr.x) < ThrowFightGame.SIGN_HW + 0.8 &&
+          Math.abs(pr.z - this.signZ) < ThrowFightGame.SIGN_HD + 0.8 && pr.y < 5.6) {
+        ctx.fx.burst(pr.x, pr.z, '#F0F8FF', 10);
+        SFX.tick();
+        ctx.scene.remove(pr.m);
+        return false;
+      }
       for (const q of ctx.players) {
         if (q === pr.owner || q.dead) continue;
         if (Math.hypot(q.x - pr.x, q.z - pr.z) < HITBOX_RADIUS + 1.6 && pr.y < HITBOX_RADIUS * 2.6) {
@@ -377,6 +449,9 @@ export class ThrowFightGame implements GameModule {
             } else {
               pr.owner.score += pr.big ? 2 : 1;
               setScore(pr.owner, pr.owner.score);
+              // Splat! 0.5s stun + a visible stagger.
+              q.freezeT = Math.max(q.freezeT, 0.5);
+              q.flinchT = 0.5;
               q.vx += (pr.vx / L) * (pr.big ? 30 : 20);
               q.vz += (pr.vz / L) * (pr.big ? 30 : 20);
               ctx.fx.burst(q.x, q.z, '#F0F8FF', pr.big ? 20 : 12);

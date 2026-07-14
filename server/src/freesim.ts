@@ -23,6 +23,10 @@ const ICE_SEGS = 16;
 const CLIMB_W = 12; // Avalanche Run corridor half-width
 const CLIMB_L = 62; // Avalanche Run slope half-length (keep in sync with client)
 const CLIMB_PACE = 0.7;
+// Snowball Smash "SLIPPERY" sign cover (bottom middle). KEEP IN SYNC with client.
+const SIGN_Z = HALF * 0.55;
+const SIGN_HW = 4.6;
+const SIGN_HD = 1.1;
 
 interface FPlayer {
   slot: number;
@@ -781,12 +785,37 @@ export class FreeSim {
         }
       }
     }
+    // Solid sign collision: push players out along the smaller penetration axis.
+    if (this.snow) {
+      for (const p of this.players) {
+        if (p.dead) continue;
+        const HW = SIGN_HW + HITBOX * 0.8;
+        const HD = SIGN_HD + HITBOX * 0.8;
+        const dz = p.z - SIGN_Z;
+        if (Math.abs(p.x) >= HW || Math.abs(dz) >= HD) continue;
+        const penX = HW - Math.abs(p.x);
+        const penZ = HD - Math.abs(dz);
+        if (penX < penZ) {
+          p.x = Math.sign(p.x || 1) * HW;
+          p.vx = Math.sign(p.x) * Math.abs(p.vx) * 0.3;
+        } else {
+          p.z = SIGN_Z + Math.sign(dz || 1) * HD;
+          p.vz = Math.sign(dz || 1) * Math.abs(p.vz) * 0.3;
+        }
+      }
+    }
+
     // Missiles.
     for (const e of [...this.ents.values()].filter((x) => x.type === ET.MISSILE)) {
       e.x += e.vx * dt;
       e.z += e.vz * dt;
       e.y += e.vy * dt;
       e.vy -= 30 * dt;
+      // The SLIPPERY sign is solid cover: low throws splat against it.
+      if (this.snow && Math.abs(e.x) < SIGN_HW + 0.8 && Math.abs(e.z - SIGN_Z) < SIGN_HD + 0.8 && e.y < 5.6) {
+        this.ents.delete(e.id);
+        continue;
+      }
       const s = PROJ[e.extra & 3] ?? PROJ[3];
       const bigMul = (e.extra & 4) !== 0 ? 1.6 : 1;
       let boom = false;
@@ -802,6 +831,8 @@ export class FreeSim {
             if (q.shieldT <= 0) {
               const ow2 = this.players[e.owner];
               if (ow2) ow2.score += big ? 2 : 1;
+              // Splat! 0.5s stun; the client shows the stagger on 'hit'.
+              q.freezeT = Math.max(q.freezeT, 0.5);
               const L = Math.hypot(e.vx, e.vz) || 1;
               q.vx += (e.vx / L) * (big ? 30 : 20);
               q.vz += (e.vz / L) * (big ? 30 : 20);

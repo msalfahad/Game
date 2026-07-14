@@ -147,6 +147,7 @@ export class Player {
   giantT = 0;
   shieldT = 0;
   invulnT = 0;
+  flinchT = 0; // snowball-hit reaction: brief stagger lean + red flash
   held = false;
   zapped = false;
 
@@ -332,6 +333,9 @@ export class Player {
       const headX = Math.abs(this.vx) > 0.6 ? this.vx : dx * 60;
       if (Math.abs(headX) > 1.2) this.facing = headX > 0 ? 1 : -1;
       this.frameM.scale.x += (this.facing - this.frameM.scale.x) * 0.5;
+      // Hit reaction: stagger lean away + a quick head-back wobble.
+      const flinchLean = this.flinchT > 0 ? -this.facing * this.flinchT * 1.1 * Math.abs(Math.sin(this.flinchT * 18)) * 0.55 - this.facing * this.flinchT * 0.35 : 0;
+      this.frameM.rotation.z += (flinchLean - this.frameM.rotation.z) * 0.45;
 
       if (airborne) {
         this.setFrame(JUMP_F); // run "UP" pose reads as a jump
@@ -424,25 +428,36 @@ export class Player {
   private iconSprite: THREE.Sprite | null = null;
   private iconT = 0;
 
-  setStatusIcon(emoji: string | null, seconds = 0) {
+  setStatusIcon(label: string | null, seconds = 0) {
     if (this.iconSprite) {
       this.group.remove(this.iconSprite);
       (this.iconSprite.material as THREE.SpriteMaterial).map?.dispose();
       this.iconSprite = null;
     }
     this.iconT = 0;
-    if (!emoji) return;
+    if (!label) return;
+    // Emoji or short text ("🥇 5 hits"); font shrinks to fit.
     const c = document.createElement('canvas');
-    c.width = c.height = 64;
+    c.width = 256;
+    c.height = 80;
     const x = c.getContext('2d')!;
-    x.font = '52px serif';
+    let size = 56;
+    x.font = `bold ${size}px Nunito, serif`;
+    while (size > 22 && x.measureText(label).width > 240) {
+      size -= 4;
+      x.font = `bold ${size}px Nunito, serif`;
+    }
     x.textAlign = 'center';
     x.textBaseline = 'middle';
-    x.fillText(emoji, 32, 36);
+    x.lineWidth = 6;
+    x.strokeStyle = 'rgba(10,18,48,0.9)';
+    x.strokeText(label, 128, 44);
+    x.fillStyle = '#ffffff';
+    x.fillText(label, 128, 44);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
-    sp.scale.set(2.6, 2.6, 1);
+    sp.scale.set(8, 2.5, 1);
     sp.position.y = this.baseH + 2.2;
     this.group.add(sp);
     this.iconSprite = sp;
@@ -464,6 +479,7 @@ export class Player {
     if (this.freezeT <= 0) this.zapped = false;
     this.speedT = Math.max(0, this.speedT - dt);
     this.shoesT = Math.max(0, this.shoesT - dt);
+    this.flinchT = Math.max(0, this.flinchT - dt);
     this.shieldT = Math.max(0, this.shieldT - dt);
     this.invulnT = Math.max(0, this.invulnT - dt);
     this.cd = Math.max(0, this.cd - dt);
@@ -473,6 +489,7 @@ export class Player {
     if (wasGiant !== isGiant) this.group.scale.setScalar(isGiant ? 1.35 : 1);
     let tint = 0xffffff;
     if (this.zapped && this.freezeT > 0) tint = 0x141414; // blacked out by the zap
+    else if (this.flinchT > 0) tint = 0xffb0a6; // hit! brief red flash
     else if (this.freezeT > 0) tint = 0x88ccff;
     else if (this.shieldT > 0) tint = 0xbfe8ff;
     const opacity = this.invulnT > 0 ? 0.55 : 1;
