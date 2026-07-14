@@ -35,7 +35,7 @@ export function moveFreeRoam(
 ) {
   const topSpeed =
     BASE_SPEED * speedMult(p.hero) * (opts.sprint ? SPRINT : 1) *
-    (p.speedT > 0 ? 1.35 : 1) * TUNING.speedScale * (opts.speedMul ?? 1);
+    (p.speedT > 0 ? 1.35 : 1) * (p.shoesT > 0 ? 2 : 1) * TUNING.speedScale * (opts.speedMul ?? 1);
   const accel = topSpeed * 2.6 * surf.accel;
 
   // Direct acceleration from intent (frozen players get no control).

@@ -143,6 +143,7 @@ export class Player {
 
   freezeT = 0;
   speedT = 0;
+  shoesT = 0; // ⚡ speed-shoes perk: x2 speed while active
   giantT = 0;
   shieldT = 0;
   invulnT = 0;
@@ -202,27 +203,23 @@ export class Player {
     const r = HITBOX_RADIUS;
     const grp = new THREE.Group();
 
-    const disc = new THREE.Mesh(
-      new THREE.CylinderGeometry(r, r * 1.1, 1.1, 20),
-      new THREE.MeshStandardMaterial({ color: 0x232a4a, roughness: 0.5, metalness: 0.4 }),
-    );
-    disc.castShadow = true;
-    grp.add(disc);
-
+    // Player marker: a plain colored RING on the ground — the map shows
+    // through the middle (no dark disc), per design feedback.
     this.ring = new THREE.Mesh(
-      new THREE.TorusGeometry(r * 0.95, 0.28, 8, 24),
+      new THREE.TorusGeometry(r * 0.95, 0.3, 8, 28),
       new THREE.MeshBasicMaterial({ color: new THREE.Color(this.hero.col).getHex() }),
     );
     this.ring.rotation.x = -Math.PI / 2;
-    this.ring.position.y = 0.6;
+    this.ring.position.y = 0.22;
     grp.add(this.ring);
 
+    // Soft halo just outside the ring; brightens while an ability is armed.
     this.glow = new THREE.Mesh(
-      new THREE.CircleGeometry(r * 1.2, 20),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color(this.hero.col).getHex(), transparent: true, opacity: 0.3 }),
+      new THREE.RingGeometry(r * 1.05, r * 1.42, 28),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(this.hero.col).getHex(), transparent: true, opacity: 0.28, side: THREE.DoubleSide }),
     );
     this.glow.rotation.x = -Math.PI / 2;
-    this.glow.position.y = 0.05;
+    this.glow.position.y = 0.08;
     grp.add(this.glow);
 
     // Start as the plain full-art sprite; swap to the puppet when slices load.
@@ -230,7 +227,7 @@ export class Player {
     const W = this.baseH * 0.82;
     const startSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: charTex(this.hero), transparent: true, depthWrite: false }));
     startSprite.scale.set(W, this.baseH, 1);
-    startSprite.position.y = this.baseH * 0.5 + 0.6;
+    startSprite.position.y = this.baseH * 0.5 + 0.15;
     grp.add(startSprite);
     this.sprite = startSprite;
     this.charGroup = new THREE.Group();
@@ -254,7 +251,7 @@ export class Player {
         const mat = new THREE.MeshBasicMaterial({ map: this.frameTex, transparent: true, depthWrite: false, side: THREE.DoubleSide });
         this.pieceMats = [mat];
         this.frameM = new THREE.Mesh(geo, mat);
-        this.frameM.position.y = 0.6;
+        this.frameM.position.y = 0.15;
         this.frameM.renderOrder = 2;
         this.charGroup.add(this.frameM);
         this.sprite = this.frameM;
@@ -268,7 +265,7 @@ export class Player {
       if (!grp.parent || this.frameM) return; // rider torn down / frames won
       grp.remove(startSprite);
       const H = this.baseH;
-      const bottom = 0.6;
+      const bottom = 0.15;
       const legH = H * 0.34;
       const hipY = bottom + legH;
       this.pieceMats = [];
@@ -423,15 +420,50 @@ export class Player {
     this.frameTex.offset.x = i / ANIM_CELLS;
   }
 
+  // --- status icon (👟 ⚡ 🛡️ …) floating above the head while a perk is on ---
+  private iconSprite: THREE.Sprite | null = null;
+  private iconT = 0;
+
+  setStatusIcon(emoji: string | null, seconds = 0) {
+    if (this.iconSprite) {
+      this.group.remove(this.iconSprite);
+      (this.iconSprite.material as THREE.SpriteMaterial).map?.dispose();
+      this.iconSprite = null;
+    }
+    this.iconT = 0;
+    if (!emoji) return;
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const x = c.getContext('2d')!;
+    x.font = '52px serif';
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.fillText(emoji, 32, 36);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
+    sp.scale.set(2.6, 2.6, 1);
+    sp.position.y = this.baseH + 2.2;
+    this.group.add(sp);
+    this.iconSprite = sp;
+    this.iconT = seconds;
+  }
+
   setArmedGlow(on: boolean) {
     if (this.glow) (this.glow.material as THREE.MeshBasicMaterial).opacity = on ? 0.7 : 0.3;
   }
 
   /** Tick down status-effect timers and reflect them on the art. */
   tickEffects(dt: number) {
+    if (this.iconSprite && this.iconT > 0) {
+      this.iconT -= dt;
+      this.iconSprite.position.y = this.baseH + 2.2 + Math.sin(performance.now() / 250) * 0.25;
+      if (this.iconT <= 0) this.setStatusIcon(null);
+    }
     this.freezeT = Math.max(0, this.freezeT - dt);
     if (this.freezeT <= 0) this.zapped = false;
     this.speedT = Math.max(0, this.speedT - dt);
+    this.shoesT = Math.max(0, this.shoesT - dt);
     this.shieldT = Math.max(0, this.shieldT - dt);
     this.invulnT = Math.max(0, this.invulnT - dt);
     this.cd = Math.max(0, this.cd - dt);

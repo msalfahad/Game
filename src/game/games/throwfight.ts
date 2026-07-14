@@ -9,6 +9,7 @@ import { accuracyMult, strengthMult } from '../../data/characters';
 import { matchTime } from '../../core/tuning';
 import { SFX } from '../../core/audio';
 import { setScore, markDead } from '../../ui/hud';
+import { spawnBolt } from '../boltfx';
 
 // THROWFIGHT — grab & hurl projectiles to drain rival HP (Snowball Smash,
 // Blast Zone, Cannon Blast, Crate Brawl). Projectile flavor changes damage,
@@ -24,6 +25,7 @@ interface Missile {
   vx: number; vz: number; vy: number;
   owner: Player;
   dmg: number;
+  big?: boolean;
 }
 
 const PROJ_STATS: Record<Proj, { dmg: number; speed: number; aoe: boolean; col: number }> = {
@@ -44,25 +46,91 @@ export class ThrowFightGame implements GameModule {
   private missiles: Missile[] = [];
   private timeLeft = 90;
   private duration = 90;
-  private powerups!: Powerups;
+  private powerups: Powerups | null = null;
   private finished = false;
+  // Snowball Smash mode: no HP — most HITS in 100s wins; snow doesn't slip;
+  // perks (shoes/zap/shield) drop at random spots every 5-10s.
+  private snow = false;
+  private perks: { m: THREE.Group; x: number; z: number; kind: 'shoes' | 'zap' | 'shield' }[] = [];
+  private perkT = 6;
 
   init(ctx: MatchContext) {
     this.ctx = ctx;
     this.title = ctx.game.name;
     this.finished = false;
     this.proj = (ctx.game.mods?.proj as Proj) ?? 'crate';
-    this.duration = this.timeLeft = matchTime(90);
+    this.snow = this.proj === 'snowball';
+    if (this.snow) this.objective = 'Most hits in 100s wins · grab 👟⚡🛡️ perks';
+    this.duration = this.timeLeft = matchTime(this.snow ? 100 : 90);
     this.items = [];
     this.missiles = [];
-    setupRoster(ctx, 100, 0.55);
+    this.perks = [];
+    this.perkT = 5 + Math.random() * 5;
+    setupRoster(ctx, this.snow ? 0 : 100, 0.55);
     for (let i = 0; i < 6; i++) this.dropItem();
-    this.powerups = new Powerups(ctx, ['speed', 'shield', 'giant', 'heal'], () => this.leader());
+    this.powerups = this.snow ? null : new Powerups(ctx, ['speed', 'shield', 'giant', 'heal'], () => this.leader());
   }
 
   private leader(): Player | null {
     const alive = this.ctx.players.filter((p) => !p.dead);
     return alive.sort((a, b) => b.hp - a.hp)[0] ?? null;
+  }
+
+  // --- Snowball Smash perks --------------------------------------------------
+  private spawnPerk() {
+    const kinds = ['shoes', 'zap', 'shield'] as const;
+    const kind = kinds[Math.floor(Math.random() * kinds.length)];
+    const emoji = kind === 'shoes' ? '👟' : kind === 'zap' ? '⚡' : '🛡️';
+    const grp = new THREE.Group();
+    const base = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.5, 1.7, 0.5, 16),
+      new THREE.MeshStandardMaterial({ color: 0x9adfff, emissive: 0x2a6a9a, emissiveIntensity: 0.5 }),
+    );
+    grp.add(base);
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const x2 = c.getContext('2d')!;
+    x2.font = '50px serif';
+    x2.textAlign = 'center';
+    x2.textBaseline = 'middle';
+    x2.fillText(emoji, 32, 36);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
+    sp.scale.set(3.2, 3.2, 1);
+    sp.position.y = 2.6;
+    grp.add(sp);
+    const x = (Math.random() - 0.5) * this.ctx.halfSize * 1.6;
+    const z = (Math.random() - 0.5) * this.ctx.halfSize * 1.6;
+    grp.position.set(x, 0.3, z);
+    this.ctx.scene.add(grp);
+    this.perks.push({ m: grp, x, z, kind });
+  }
+
+  private grabPerk(p: Player, kind: 'shoes' | 'zap' | 'shield') {
+    const ctx = this.ctx;
+    SFX.power();
+    if (kind === 'shoes') {
+      p.shoesT = 5;
+      p.setStatusIcon('👟', 5);
+      ctx.fx.banner(p.you ? '👟 SPEED x2!' : `👟 ${p.hero.name} IS FAST!`, '#7ED321');
+    } else if (kind === 'shield') {
+      p.shieldT = 5;
+      p.setStatusIcon('🛡️', 5);
+      ctx.fx.banner(p.you ? '🛡️ SHIELD! Hits on you do not count' : `🛡️ ${p.hero.name} IS SHIELDED!`, '#9ADFFF');
+    } else {
+      SFX.zap();
+      p.setStatusIcon('⚡', 3);
+      ctx.fx.banner(p.you ? '⚡ ZAP THEM ALL!' : `⚡ ${p.hero.name} ZAPPED YOU!`, '#FFD23F');
+      for (const q of ctx.players) {
+        if (q === p || q.dead) continue;
+        q.freezeT = Math.max(q.freezeT, 3);
+        q.zapped = true;
+        spawnBolt(ctx.scene, q.x, q.z);
+        ctx.fx.burst(q.x, q.z, '#FFD23F', 12);
+      }
+      ctx.fx.shake(2);
+    }
   }
 
   private makeProjMesh(thrown: boolean, big = false): THREE.Mesh {
@@ -140,14 +208,18 @@ export class ThrowFightGame implements GameModule {
     const big = !!(p as any)._heldBig;
     (p as any)._heldBig = false;
     const m = this.makeProjMesh(true, big);
-    m.position.set(p.x, 3, p.z);
+    // Leaves the HAND: start beside the body at throwing height, launched
+    // slightly along the aim so it reads like a real throw.
+    const hx = p.x + dx * 1.6, hz = p.z + dz * 1.6;
+    m.position.set(hx, 4.2, hz);
     this.ctx.scene.add(m);
     this.missiles.push({
-      m, x: p.x, z: p.z, y: 3,
-      vx: dx * s.speed, vz: dz * s.speed, vy: 6,
+      m, x: hx, z: hz, y: 4.2,
+      vx: dx * s.speed, vz: dz * s.speed, vy: 7,
       owner: p,
       dmg: s.dmg * strengthMult(p.hero) * (big ? 1.6 : 1),
-    });
+      big,
+    } as Missile & { big: boolean });
     SFX.bump();
   }
 
@@ -191,15 +263,38 @@ export class ThrowFightGame implements GameModule {
     this.timeLeft -= dt;
     ctx.setClock(this.timeLeft);
     const alive = ctx.players.filter((p) => !p.dead);
-    if (this.timeLeft <= 0 || alive.length <= 1 || ctx.players[0].dead) return this.doFinish();
+    // Snowball Smash runs the full clock — nobody gets eliminated.
+    if (this.timeLeft <= 0 || (!this.snow && (alive.length <= 1 || ctx.players[0].dead))) return this.doFinish();
     ctx.hazards.setProgress(1 - this.timeLeft / this.duration);
     ctx.hazards.tick(dt, ctx.players);
-    this.powerups.tick(dt);
+    this.powerups?.tick(dt);
     tickDecoys(ctx, dt);
 
     if (this.items.length < 6 && Math.random() < dt * 0.6) this.dropItem();
 
-    localMove(ctx, dt);
+    // Perk drops: 👟 / ⚡ / 🛡️ at a random spot every 5-10 seconds.
+    if (this.snow) {
+      this.perkT -= dt;
+      if (this.perkT <= 0) {
+        this.perkT = 5 + Math.random() * 5;
+        if (this.perks.length < 2) this.spawnPerk();
+      }
+      for (const pk of this.perks) pk.m.rotation.y += dt * 2;
+      for (const p of ctx.players) {
+        if (p.dead) continue;
+        this.perks = this.perks.filter((pk) => {
+          if (Math.hypot(pk.x - p.x, pk.z - p.z) < HITBOX_RADIUS + 2) {
+            ctx.scene.remove(pk.m);
+            this.grabPerk(p, pk.kind);
+            return false;
+          }
+          return true;
+        });
+      }
+    }
+
+    const moveOpts = this.snow ? { surfaceOverride: 'metal' as const } : {};
+    localMove(ctx, dt, moveOpts);
     for (const p of ctx.players.slice(1)) {
       if (p.dead) continue;
       p.retarget -= dt;
@@ -213,6 +308,11 @@ export class ThrowFightGame implements GameModule {
           }
           p.tx = c ? c.x : 0;
           p.tz = c ? c.z : 0;
+          // Perks are tempting — grab a nearby one on the way.
+          if (this.snow && this.perks.length && Math.random() < 0.5) {
+            const pk = this.perks[0];
+            if (Math.hypot(pk.x - p.x, pk.z - p.z) < 22) { p.tx = pk.x; p.tz = pk.z; }
+          }
         } else {
           let q: Player | null = null, bd = 1e9;
           for (const o of ctx.players) {
@@ -227,7 +327,7 @@ export class ThrowFightGame implements GameModule {
           p.tx = p.x; p.tz = p.z;
         }
       }
-      botMove(ctx, p, p.tx, p.tz, dt);
+      botMove(ctx, p, p.tx, p.tz, dt, moveOpts);
       botMaybeUltimate(ctx, p, dt);
     }
     collidePlayers(ctx);
@@ -241,8 +341,9 @@ export class ThrowFightGame implements GameModule {
           p.held = true;
           (p as any)._heldBig = it.big;
           const hm = this.makeProjMesh(false, it.big);
-          hm.scale.setScalar(0.7);
-          hm.position.set(0, HITBOX_RADIUS * 2.4, 0);
+          // Carried IN HAND — beside the body at arm height, not overhead.
+          hm.scale.setScalar(0.75);
+          hm.position.set(1.6, 3.6, 1.0);
           p.group.add(hm);
           (p as any)._heldMesh = hm;
           SFX.tick();
@@ -265,7 +366,25 @@ export class ThrowFightGame implements GameModule {
       for (const q of ctx.players) {
         if (q === pr.owner || q.dead) continue;
         if (Math.hypot(q.x - pr.x, q.z - pr.z) < HITBOX_RADIUS + 1.6 && pr.y < HITBOX_RADIUS * 2.6) {
-          if (aoe) this.explode(pr.x, pr.z, pr.owner);
+          if (this.snow) {
+            // Hit-count scoring: big snowballs are worth DOUBLE. A shield
+            // means hits on you don't count at all.
+            const L = Math.hypot(pr.vx, pr.vz) || 1;
+            if (q.shieldT > 0) {
+              ctx.fx.burst(q.x, q.z, '#9ADFFF', 10);
+              if (q.you) ctx.fx.banner('🛡️ BLOCKED!', '#9ADFFF');
+              SFX.tick();
+            } else {
+              pr.owner.score += pr.big ? 2 : 1;
+              setScore(pr.owner, pr.owner.score);
+              q.vx += (pr.vx / L) * (pr.big ? 30 : 20);
+              q.vz += (pr.vz / L) * (pr.big ? 30 : 20);
+              ctx.fx.burst(q.x, q.z, '#F0F8FF', pr.big ? 20 : 12);
+              ctx.fx.shake(pr.big ? 2 : 1.2);
+              SFX.hit();
+              if (pr.owner.you) ctx.fx.banner(pr.big ? '+2 BIG HIT!' : '+1 HIT!', '#F0F8FF');
+            }
+          } else if (aoe) this.explode(pr.x, pr.z, pr.owner);
           else {
             this.damage(q, pr.dmg);
             const L = Math.hypot(pr.vx, pr.vz) || 1;
@@ -297,6 +416,11 @@ export class ThrowFightGame implements GameModule {
   private doFinish() {
     if (this.finished) return;
     this.finished = true;
+    if (this.snow) {
+      this.ctx.players.forEach((p) => ((p as any)._res = p.score + ' hits'));
+      this.ctx.finish(rankBy(this.ctx, (p) => p.score), 'Most snowball hits wins.');
+      return;
+    }
     this.ctx.players.forEach((p) => ((p as any)._res = p.dead ? 'OUT' : Math.max(Math.round(p.hp), 0) + ' HP'));
     this.ctx.finish(rankBy(this.ctx, (p) => (p.dead ? -1 : p.hp)), 'Last basher standing wins.');
   }

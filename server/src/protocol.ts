@@ -81,6 +81,8 @@ export type PlayerState = [number, number, number, number, number, number, numbe
 export interface SimEvent {
   t: 'ult' | 'fall' | 'out' | 'goal' | 'power' | 'pick' | 'hit';
   slot: number;
+  // Perk kind for 'power' events in Snowball Smash: 4=shoes, 5=zap, 6=shield.
+  k?: number;
 }
 
 // Synced world entity: [id, type, x, z, y, extra]

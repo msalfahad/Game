@@ -15,6 +15,9 @@ import { TUNING } from '../core/tuning';
 export interface RoamOpts {
   noClamp?: boolean;
   speedMul?: number;
+  // Force a specific surface (e.g. Snowball Smash plays on packed snow — no
+  // slipping — even though the Frostbite floor is ice).
+  surfaceOverride?: import('../data/surfaces').SurfaceKind;
 }
 
 /** Reset + spawn the four players at diagonal-ish spots and build HUD heads. */
@@ -27,7 +30,7 @@ export function setupRoster(ctx: MatchContext, initScore: string | number, sprea
     p.z = spots[i][1] * ctx.halfSize;
     p.vx = 0; p.vz = 0; p.y = 0; p.vy = 0;
     p.grounded = true; p.airJumps = 0; p.dashCd = 0; p.diveT = 0;
-    p.freezeT = 0; p.speedT = 0; p.giantT = 0; p.shieldT = 0; p.invulnT = 0;
+    p.freezeT = 0; p.speedT = 0; p.shoesT = 0; p.giantT = 0; p.shieldT = 0; p.invulnT = 0;
     p.dead = false; p.cd = 0; p.armed = false; p.held = false;
     p.score = 0; p.hp = 100; p.lives = 3; p.retarget = 0; p.wp = 0; p.lap = 0;
     p.group.scale.setScalar(1);
@@ -45,7 +48,7 @@ export function localMove(ctx: MatchContext, dt: number, opts: RoamOpts = {}) {
   const wind = ctx.hazards.windForce();
   you.vx += wind.x * dt;
   you.vz += wind.z * dt;
-  const surf = surface(ctx.world.surfaceAt(you.x, you.z));
+  const surf = surface(opts.surfaceOverride ?? ctx.world.surfaceAt(you.x, you.z));
   moveFreeRoam(you, ax, ay, surf, dt, { halfSize: ctx.halfSize, sprint, noClamp: opts.noClamp, speedMul: opts.speedMul });
 }
 
@@ -66,7 +69,7 @@ export function botMove(ctx: MatchContext, p: Player, tx: number, tz: number, dt
   const dx = tx - p.x, dz = tz - p.z;
   const L = Math.hypot(dx, dz) || 1;
   const cap = Math.min(1, ctx.diff.cap * TUNING.botScale);
-  const surf = surface(ctx.world.surfaceAt(p.x, p.z));
+  const surf = surface(opts.surfaceOverride ?? ctx.world.surfaceAt(p.x, p.z));
   moveFreeRoam(p, (dx / L) * cap, (dz / L) * cap, surf, dt, {
     halfSize: ctx.halfSize,
     sprint: cap > 0.85,

@@ -19,7 +19,7 @@ export const ONLINE_CATALOG: OnlineGameDef[] = [
   // Frostbite
   g('frost-1', 'goal', 120),
   g('frost-2', 'icepush', 120),
-  g('frost-3', 'throwfight', 90, { proj: 'snowball' }),
+  g('frost-3', 'throwfight', 100, { proj: 'snowball' }),
   g('frost-4', 'climb', 60),
   // Inferno
   g('inferno-1', 'goal', 120),

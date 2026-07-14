@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Engine } from '../core/engine';
 import type { Input } from '../core/input';
 import { SFX } from '../core/audio';
-import { Player, HITBOX_RADIUS } from '../game/player';
+import { Player } from '../game/player';
 import { buildWorld, type World } from '../game/world';
 import { gameById, familyById, type GameDef } from '../data/maps';
 import { heroByKey, speedMult } from '../data/characters';
@@ -23,7 +23,7 @@ const WPS = 8;
 const PAINT_N = 9;
 const BREAK_N = 11;
 const CLIMB_W = 12;
-const CLIMB_L = 45;
+const CLIMB_L = 62; // KEEP IN SYNC with climb.ts + server freesim.ts
 const CLIMB_PACE = 0.7;
 
 interface Snap { at: number; msg: StateMsg; }
@@ -107,7 +107,8 @@ export class OnlineFreeRoam {
     this.buildMechanicScenery();
 
     const mech = this.game.mechanic;
-    const init = mech === 'throwfight' ? 100
+    const snow = this.game.mods?.proj === 'snowball';
+    const init = mech === 'throwfight' ? (snow ? 0 : 100)
       : mech === 'breaktiles' || mech === 'dodge' || mech === 'icepush' ? 3
       : mech === 'race' ? `0/${WPS * Number(this.game.mods?.laps ?? 2)}`
       : mech === 'climb' ? '0m' : 0;
@@ -233,6 +234,30 @@ export class OnlineFreeRoam {
 
   // --- entity rendering --------------------------------------------------------
   private makeEntMesh(type: number, extra: number): THREE.Object3D {
+    if (type === ET.LOOT && extra >= 4 && this.game.mechanic === 'throwfight') {
+      // Snowball Smash perks: 4 = shoes, 5 = zap, 6 = shield.
+      const emoji = extra === 4 ? '\u{1F45F}' : extra === 5 ? '\u26A1' : '\u{1F6E1}\uFE0F';
+      const grp = new THREE.Group();
+      const base = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.5, 1.7, 0.5, 16),
+        new THREE.MeshStandardMaterial({ color: 0x9adfff, emissive: 0x2a6a9a, emissiveIntensity: 0.5 }),
+      );
+      grp.add(base);
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const x2 = c.getContext('2d')!;
+      x2.font = '50px serif';
+      x2.textAlign = 'center';
+      x2.textBaseline = 'middle';
+      x2.fillText(emoji, 32, 36);
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
+      sp.scale.set(3.2, 3.2, 1);
+      sp.position.y = 2.6;
+      grp.add(sp);
+      return grp;
+    }
     if (type === ET.LOOT && extra >= 2) {
       // Power boxes: 2 = freeze (climb), 3 = thunder (icepush).
       const freeze = extra === 2;
@@ -344,7 +369,7 @@ export class OnlineFreeRoam {
       const p = this.players[slot];
       if (!p) continue;
       // HUD value per mechanic.
-      const shown = mech === 'throwfight' ? Math.max(lives, 0)
+      const shown = mech === 'throwfight' ? (this.game.mods?.proj === 'snowball' ? score : Math.max(lives, 0))
         : mech === 'breaktiles' || mech === 'dodge' || mech === 'icepush' ? Math.max(lives, 0)
         : mech === 'race' ? `${score}/${WPS * Number(this.game.mods?.laps ?? 2)}`
         : mech === 'climb' ? `${score}m`
@@ -363,12 +388,13 @@ export class OnlineFreeRoam {
       p.freezeT = freezeT;
       if (mech === 'icepush' && freezeT > 0) p.zapped = true;
       p.shieldT = shieldT;
+      if (((flags as number) & 2) !== 0) p.shoesT = Math.max(p.shoesT, 0.4); // refreshed by every state while active
       // Held item display.
       const held = (flags & 1) === 1;
       if (held && !this.heldMeshes[slot]) {
         const hm = this.makeProjMesh(Number(this.game.mods?.proj === 'snowball' ? 0 : this.game.mods?.proj === 'bomb' ? 1 : this.game.mods?.proj === 'cannon' ? 2 : 3));
-        hm.scale.setScalar(0.7);
-        hm.position.set(0, HITBOX_RADIUS * 2.4, 0);
+        hm.scale.setScalar(0.75);
+        hm.position.set(1.6, 3.6, 1.0); // carried in hand, not overhead
         p.group.add(hm);
         this.heldMeshes[slot] = hm;
       } else if (!held && this.heldMeshes[slot]) {
@@ -449,21 +475,36 @@ export class OnlineFreeRoam {
         this.engine.camera.shake(1.2);
       } else if (ev.t === 'power') {
         const isZap = this.game.mechanic === 'icepush';
-        if (isZap) {
+        if (ev.k === 4) {
+          // Snowball perk: speed shoes.
+          SFX.power();
+          p.setStatusIcon('👟', 5);
+          HUD.banner(p.you ? '👟 SPEED x2!' : `👟 ${p.hero.name} IS FAST!`, '#7ED321');
+        } else if (ev.k === 6) {
+          // Snowball perk: shield.
+          SFX.power();
+          p.setStatusIcon('🛡️', 5);
+          HUD.banner(p.you ? '🛡️ SHIELD! Hits on you do not count' : `🛡️ ${p.hero.name} IS SHIELDED!`, '#9ADFFF');
+        } else if (ev.k === 5 || isZap) {
+          // Zap: everyone else goes black + stunned.
           SFX.zap();
+          if (ev.k === 5) p.setStatusIcon('⚡', 3);
           for (const q of this.players) {
             if (q === p || q.dead) continue;
+            q.zapped = true;
             this.bolts.push(spawnBolt(this.engine.scene, q.x, q.z));
           }
+          this.engine.camera.shake(2);
+          HUD.banner(p.you ? '⚡ ZAP THEM ALL!' : `⚡ ${p.hero.name} ZAPPED YOU!`, '#FFD23F');
         } else {
           SFX.power();
+          this.engine.camera.shake(2);
+          const freeze = this.game.mechanic === 'climb';
+          HUD.banner(
+            p.you ? (freeze ? '❄ FREEZE! GO GO GO!' : '⚡ ZAP THEM ALL!') : `${freeze ? '❄' : '⚡'} ${p.hero.name} GOT THE BOX!`,
+            freeze ? '#9ADFFF' : '#FFD23F',
+          );
         }
-        this.engine.camera.shake(2);
-        const freeze = this.game.mechanic === 'climb';
-        HUD.banner(
-          p.you ? (freeze ? '❄ FREEZE! GO GO GO!' : '⚡ ZAP THEM ALL!') : `${freeze ? '❄' : '⚡'} ${p.hero.name} GOT THE BOX!`,
-          freeze ? '#9ADFFF' : '#FFD23F',
-        );
       } else if (ev.t === 'goal') {
         // reused as bomb-explosion cue
         SFX.goal();
@@ -539,7 +580,7 @@ export class OnlineFreeRoam {
   private predictLocal(dt: number) {
     const p = this.players[this.youSlot];
     if (p.dead) return;
-    const top = BASE_SPEED * speedMult(p.hero) * (this.game.mechanic === 'climb' ? CLIMB_PACE : 1);
+    const top = BASE_SPEED * speedMult(p.hero) * (p.shoesT > 0 ? 2 : 1) * (this.game.mechanic === 'climb' ? CLIMB_PACE : 1);
     const accel = top * 2.6;
     if (p.freezeT <= 0) {
       p.vx += this.input.ax * accel * dt;

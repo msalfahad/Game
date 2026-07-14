@@ -36,7 +36,7 @@ interface FPlayer {
   score: number;
   dead: boolean;
   held: boolean;
-  invulnT: number; freezeT: number; shieldT: number; speedT: number; cd: number;
+  invulnT: number; freezeT: number; shieldT: number; speedT: number; shoesT: number; cd: number;
   wp: number; lap: number;
   hitCd: number; // per-player laser/log damage cooldown
   input: InputMsg;
@@ -77,6 +77,8 @@ export class FreeSim {
   private tickN = 0;
   private events: SimEvent[] = [];
   private spawnT = 0;
+  // Snowball Smash: hit-count scoring, no elimination, random perk drops.
+  private snow = false;
   private decayT = 0;
   private beltT = 8;
   private ended = false;
@@ -93,6 +95,7 @@ export class FreeSim {
   ) {
     this.mech = game.mechanic;
     this.mods = game.mods;
+    this.snow = this.mech === 'throwfight' && this.mods.proj === 'snowball';
     this.duration = this.timeLeft = game.duration;
     const spots = [[-0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [0.5, 0.5]];
     this.players = seats.map((s, i) => ({
@@ -109,7 +112,7 @@ export class FreeSim {
       score: 0,
       dead: false,
       held: false,
-      invulnT: 0, freezeT: 0, shieldT: 0, speedT: 0, cd: 0,
+      invulnT: 0, freezeT: 0, shieldT: 0, speedT: 0, shoesT: 0, cd: 0,
       wp: 0, lap: 0,
       hitCd: 0,
       input: { seq: 0, ax: 0, ay: 0 },
@@ -141,6 +144,7 @@ export class FreeSim {
       for (let i = 0; i < 7; i++) this.popTarget();
     } else if (this.mech === 'throwfight') {
       for (let i = 0; i < 6; i++) this.dropItem();
+      this.spawnT = 5 + Math.random() * 5; // first perk drop (snowball mode)
     } else if (this.mech === 'race') {
       const g0 = this.wpPos(0);
       this.players.forEach((p, i) => {
@@ -256,6 +260,7 @@ export class FreeSim {
       p.freezeT = Math.max(0, p.freezeT - dt);
       p.shieldT = Math.max(0, p.shieldT - dt);
       p.speedT = Math.max(0, p.speedT - dt);
+      p.shoesT = Math.max(0, p.shoesT - dt);
       p.hitCd = Math.max(0, p.hitCd - dt);
       p.cd = Math.max(0, p.cd - dt);
       if (p.socketId === null) this.botThink(p, dt);
@@ -278,14 +283,14 @@ export class FreeSim {
     this.events = [];
 
     // End conditions.
-    const elimination = this.mech === 'breaktiles' || this.mech === 'throwfight' || this.mech === 'dodge';
+    const elimination = this.mech === 'breaktiles' || (this.mech === 'throwfight' && !this.snow) || this.mech === 'dodge';
     const alive = this.players.filter((p) => !p.dead);
     const aliveTeams = new Set(alive.map((p) => p.team));
     if (this.timeLeft <= 0 || (elimination && aliveTeams.size <= 1)) this.finish();
   }
 
   private move(p: FPlayer, dt: number) {
-    const top = BASE_SPEED * speedMult(p.hero) * (p.speedT > 0 ? 1.35 : 1) * (this.mech === 'climb' ? CLIMB_PACE : 1);
+    const top = BASE_SPEED * speedMult(p.hero) * (p.speedT > 0 ? 1.35 : 1) * (p.shoesT > 0 ? 2 : 1) * (this.mech === 'climb' ? CLIMB_PACE : 1);
     const accel = top * 2.6;
     if (p.freezeT <= 0) {
       p.vx += p.input.ax * accel * dt;
@@ -732,6 +737,36 @@ export class FreeSim {
   private tickThrow(dt: number) {
     const items = [...this.ents.values()].filter((e) => e.type === ET.ITEM);
     if (items.length < 6 && Math.random() < dt * 0.6) this.dropItem();
+    // Snowball Smash perks: shoes (4) / zap (5) / shield (6) every 5-10s.
+    if (this.snow) {
+      this.spawnT -= dt;
+      const perks = [...this.ents.values()].filter((e) => e.type === ET.LOOT);
+      if (this.spawnT <= 0) {
+        this.spawnT = 5 + Math.random() * 5;
+        if (perks.length < 2) {
+          const kind = 4 + Math.floor(Math.random() * 3);
+          this.addEnt(ET.LOOT, (Math.random() - 0.5) * HALF * 1.6, (Math.random() - 0.5) * HALF * 1.6, 0.3, kind);
+        }
+      }
+      for (const e of perks) {
+        for (const p of this.players) {
+          if (p.dead) continue;
+          if (Math.hypot(e.x - p.x, e.z - p.z) < HITBOX + 2) {
+            this.ents.delete(e.id);
+            if (e.extra === 4) p.shoesT = 5;
+            else if (e.extra === 6) p.shieldT = 5;
+            else {
+              for (const q of this.players) {
+                if (q === p || q.dead) continue;
+                q.freezeT = Math.max(q.freezeT, 3);
+              }
+            }
+            this.events.push({ t: 'power', slot: p.slot, k: e.extra });
+            break;
+          }
+        }
+      }
+    }
     // Pickups.
     for (const p of this.players) {
       if (p.dead || p.held) continue;
@@ -760,7 +795,19 @@ export class FreeSim {
         const ow = this.players[e.owner];
         if (ow && q.team === ow.team) continue;
         if (Math.hypot(q.x - e.x, q.z - e.z) < HITBOX + 1.6 && e.y < HITBOX * 2.6) {
-          if (s.aoe) boom = true;
+          if (this.snow) {
+            // Hit-count scoring: big snowballs count DOUBLE; a shield means
+            // hits on you don't count at all.
+            const big = (e.extra & 4) !== 0;
+            if (q.shieldT <= 0) {
+              const ow2 = this.players[e.owner];
+              if (ow2) ow2.score += big ? 2 : 1;
+              const L = Math.hypot(e.vx, e.vz) || 1;
+              q.vx += (e.vx / L) * (big ? 30 : 20);
+              q.vz += (e.vz / L) * (big ? 30 : 20);
+              this.events.push({ t: 'hit', slot: q.slot });
+            }
+          } else if (s.aoe) boom = true;
           else {
             const ow2 = this.players[e.owner];
             this.damage(q, s.dmg * bigMul * (ow2 ? strengthMult(ow2.hero) : 1));
@@ -769,7 +816,7 @@ export class FreeSim {
             q.vx += (e.vx / L) * 22 * damp;
             q.vz += (e.vz / L) * 22 * damp;
           }
-          if (!s.aoe) this.ents.delete(e.id);
+          if (!s.aoe || this.snow) this.ents.delete(e.id);
           break;
         }
       }
@@ -961,6 +1008,13 @@ export class FreeSim {
         }
         p.tx = best ? best.x : 0;
         p.tz = best ? best.z : 0;
+        if (this.snow && Math.random() < 0.5) {
+          for (const e of this.ents.values()) {
+            if (e.type !== ET.LOOT) continue;
+            if (Math.hypot(e.x - p.x, e.z - p.z) < 22) { p.tx = e.x; p.tz = e.z; }
+            break;
+          }
+        }
       } else {
         let q: FPlayer | null = null, bd = 1e9;
         for (const o of this.players) {
@@ -1032,7 +1086,7 @@ export class FreeSim {
       Math.round(p.shieldT * 100) / 100,
       Math.round(p.cd * 10) / 10,
       Math.round(p.score * 10) / 10,
-      p.held ? 1 : 0,
+      (p.held ? 1 : 0) | (p.shoesT > 0 ? 2 : 0),
     ]);
     const entities: EntityState[] = [...this.ents.values()].map((e) => [
       e.id, e.type,
@@ -1064,7 +1118,7 @@ export class FreeSim {
     if (this.ended) return;
     this.ended = true;
     this.stop();
-    const scoreBased = this.mech === 'collect' || this.mech === 'mash' || this.mech === 'paint' || this.mech === 'race' || this.mech === 'climb';
+    const scoreBased = this.mech === 'collect' || this.mech === 'mash' || this.mech === 'paint' || this.mech === 'race' || this.mech === 'climb' || this.snow;
     let winnerTeam = -1;
     if (this.mode === '2v2') {
       const teamScore = (team: number) =>
@@ -1083,7 +1137,7 @@ export class FreeSim {
         : this.mech === 'climb' ? (CLIMB_L - p.z) * 100
         : scoreBased ? p.score * 100
         : (p.dead ? -1 : p.lives) * 100 + p.score);
-    const label = this.mech === 'throwfight' ? 'HP' : this.mech === 'climb' ? 'm' : scoreBased ? 'pts' : 'lives';
+    const label = this.snow ? 'hits' : this.mech === 'throwfight' ? 'HP' : this.mech === 'climb' ? 'm' : scoreBased ? 'pts' : 'lives';
     const shown = (p: FPlayer) =>
       this.mech === 'race' ? p.lap * WPS + p.wp : scoreBased ? Math.round(p.score) : Math.max(Math.round(p.lives), 0);
     const ranking = [...this.players]
