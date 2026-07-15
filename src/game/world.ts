@@ -3,6 +3,7 @@ import type { FamilyDef, GameDef } from '../data/maps';
 import type { SurfaceKind } from '../data/surfaces';
 import { auroraSky, gradientSky, styledFloor } from './textures';
 import { makeSkyDome } from './skydome';
+import { makeBackdrop } from './backdrop';
 
 // Builds the themed arena for a game: sky, fog, lights, ground, floor (square
 // or circle), neon trim, per-family decorative props, and ambient particles.
@@ -29,6 +30,7 @@ export function buildWorld(
   // flat gradient stays as a fallback background color behind the dome.
   scene.background = new THREE.Color(t.skyBot);
   const skyDome = makeSkyDome(scene, family);
+  makeBackdrop(scene, family); // photoreal horizon vista (skipped if no art)
   scene.fog = new THREE.Fog(new THREE.Color(t.fog).getHex(), halfSize * 3.0, halfSize * 7.5);
   void auroraSky; void gradientSky; // retained for the single-file/legacy path
 
@@ -47,8 +49,9 @@ export function buildWorld(
   scene.add(rim);
 
   // Surrounding ground plane. Lava glows.
+  // 500² keeps the corners (half-diagonal ≈354) inside the r=370 backdrop ring.
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(600, 600),
+    new THREE.PlaneGeometry(500, 500),
     new THREE.MeshStandardMaterial({
       color: new THREE.Color(t.ground).getHex(),
       roughness: 1,
@@ -71,24 +74,9 @@ export function buildWorld(
     emissiveIntensity: style === 'lava' ? 0.6 : 0,
   });
 
-  // Apply PBR ice textures if available (Higgsfield-generated)
-  if (style === 'ice') {
-    const textureLoader = new THREE.TextureLoader();
-    try {
-      const albedo = textureLoader.load('assets/textures/ice-albedo.png');
-      const normal = textureLoader.load('assets/textures/ice-normal.png');
-      const roughmetal = textureLoader.load('assets/textures/ice-roughmetal.png');
-
-      fmat.map = albedo;
-      fmat.normalMap = normal;
-      fmat.roughnessMap = roughmetal;
-      fmat.metalnessMap = roughmetal;
-      fmat.roughness = 0.45;
-      fmat.metalness = 0.05;
-    } catch (err) {
-      console.log('Ice PBR textures not ready, using fallback');
-    }
-  }
+  // Real tiling ice PBR maps are not generated yet; when they land in
+  // public/textures/, wire them here with an async loader + onLoad swap
+  // (assigning a TextureLoader result that 404s renders the floor black).
 
   let floorMesh: THREE.Mesh;
   let ringMesh: THREE.Mesh | null = null;

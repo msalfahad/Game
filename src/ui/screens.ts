@@ -110,6 +110,14 @@ export function buildScreens(hooks: Hooks) {
     </div>
   </div>`;
 
+  // Title screen: photoreal neon-arena keyart behind a readability gradient.
+  // Set from JS with a relative URL so it survives sub-path deploys (Pages).
+  const title = document.getElementById('scrTitle')!;
+  title.style.background =
+    "linear-gradient(180deg, rgba(13,16,38,.55) 0%, rgba(13,16,38,.82) 70%, #0D1026 100%), " +
+    "url('maps/classic.webp') center / cover no-repeat, " +
+    'radial-gradient(circle at 50% 12%, #272E55 0%, #0D1026 68%)';
+
   // Title settings.
   const shake = document.getElementById('shakeSlider') as HTMLInputElement;
   shake.addEventListener('input', () => hooks.onShakeChange(Number(shake.value) / 100));
