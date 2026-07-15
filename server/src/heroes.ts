@@ -15,7 +15,7 @@ export interface HeroDef {
 }
 
 export const HEROES: HeroDef[] = [
-  { key: 'zip', name: 'Zip', spd: 10, str: 3, acc: 8, def: 2, ult: 'blink' },
+  { key: 'zip', name: 'Zap', spd: 10, str: 3, acc: 8, def: 2, ult: 'blink' },
   { key: 'rax', name: 'Vex', spd: 9, str: 4, acc: 7, def: 3, ult: 'spin' },
   { key: 'luna', name: 'Luna', spd: 8, str: 5, acc: 9, def: 4, ult: 'clone' },
   { key: 'ollie', name: 'Ollie', spd: 7, str: 7, acc: 7, def: 7, ult: 'burst' },

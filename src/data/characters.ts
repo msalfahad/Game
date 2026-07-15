@@ -27,11 +27,11 @@ export interface Hero {
   ultName: string;
 }
 
-// Names/roles match the character sheets: Zip the Speedster, Vex the Wildcard
+// Names/roles match the character sheets: Zap the Speedster, Vex the Wildcard
 // (art key 'rax'), Luna the Elemental, Ollie the Gadgeteer, Slam the
 // Juggernaut, Rolo the Tech Genius, Pix the Trickster, Brutus the Tank.
 export const HEROES: Hero[] = [
-  { key: 'zip', name: 'Zip', role: 'Speedster', col: '#7ED321', spd: 10, str: 3, acc: 8, def: 2, ultimate: 'blink', ultName: 'Lightning Blink' },
+  { key: 'zip', name: 'Zap', role: 'Speedster', col: '#7ED321', spd: 10, str: 3, acc: 8, def: 2, ultimate: 'blink', ultName: 'Lightning Blink' },
   { key: 'rax', name: 'Vex', role: 'Wildcard', col: '#B06BFF', spd: 9, str: 4, acc: 7, def: 3, ultimate: 'spin', ultName: 'Shadow Spin' },
   { key: 'luna', name: 'Luna', role: 'Elemental', col: '#4DA6FF', spd: 8, str: 5, acc: 9, def: 4, ultimate: 'clone', ultName: 'Phantom Clone' },
   { key: 'ollie', name: 'Ollie', role: 'Gadgeteer', col: '#FF9C3F', spd: 7, str: 7, acc: 7, def: 7, ultimate: 'burst', ultName: 'Gadget Burst' },
