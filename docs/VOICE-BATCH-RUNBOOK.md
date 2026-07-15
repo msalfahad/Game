@@ -50,6 +50,17 @@ climax 71d47515.
 ## user gave: "I'M WINNING!" screamed in a thick anime voice + "woo-hoo!" +
 ## laugh at the end. Add such tails especially to victory / round-win /
 ## climax / taunt lines for every hero.
+##
+## EMOTION SYSTEM (user directive): each clip is generated WITH AN EMOTION
+## and the voice acting must match it — the same character sounds gleeful
+## when winning, furious/whiny when losing, mocking while dodging. Write the
+## emotion into every audio prompt: [happy] [gloating] [angry] [sad]
+## [laughing] [mocking] [panicked]. Four EXTRA line keys per hero:
+##   winning  [gloating+laughing] — leading the match, e.g. "LOSERS! Hahaha!"
+##   losing   [angry or sad]      — behind in score / knocked out
+##   dodge    [mocking+laughing]  — evading hits, e.g. "You CAN'T hit me!"
+##   trash    [mocking+laughing]  — signature dig at another hero
+## Total per hero: 14 clips (10 core + 4 emotional) = 112 clips.
 Line keys: spawn, ability-charged, hit, victory, taunt, revival, ability-use,
 round-win, surprise, climax.
 
@@ -105,11 +116,44 @@ spawn "BRUTUS… IS HERE. Grrr." · ability-charged "Ready… to CRUSH." · hit
 revival "STILL… STANDING." · ability-use "CRUUUSH!" · round-win "DOMINATED.
 Grrhehe." · surprise "WHAT!?" · climax "TIME TO BREAK SOMETHING! RAAAGH!"
 
+## EXTRA emotional lines per hero (winning / losing / dodge / trash)
+zip/Zap: winning "LOOOSERS! Hahahaha!" · losing [angry] "No no NO! Grrr!" ·
+dodge "You CAN'T hit me! Hehehe!" · trash (at Brutus) "Too slow, big guy!
+Hahaha!"
+rax/Vex: winning "Bow to the KING! Ahahaha!" · losing [angry] "GRRR…
+you'll PAY for that!" · dodge "Pathetic! Heh heh!" · trash (at Luna) "Go
+play with a doll! Hahahaha!"
+luna/Luna: winning "The stars favor ME~! Ahaha!" · losing [sad] "This…
+cannot be…" · dodge "Too slow for magic~!" · trash (at Vex) "Bad puppy! Go
+fetch! Hahaha~!"
+ollie/Ollie: winning "I'M WINNING I'M WINNING! WOOHOO!" · losing [sad-angry]
+"Aw man, RECALCULATING!" · dodge "Missed! Missed again! Heehee!" · trash (at
+Slam) "Big muscles, tiny brain! Hahaha!"
+slam/Slam: winning "SCOREBOARD, BABY! HAHAHA!" · losing [angry] "REF!
+RAAAGH!" · dodge "Swing and a MISS! Ha!" · trash (at Ollie) "Nap time,
+junior! Ho ho ho!"
+rolo/Rolo: winning "Victory calculated! Ha-snort!" · losing [panicked]
+"ERROR! ERROR!" · dodge "Nope! Nope! Hehe!" · trash (at Pix) "Bird brain!
+Ha-ha-snort!"
+pix/Pix: winning "WINNER WINNER! CACAW! Ahahaha!" · losing [angry squawk]
+"WAAARK! No fair!" · dodge "Can't catch a bird! Nyahaha!" · trash (at Rolo)
+"Nice ears, carrot boy! AHAHAHA!"
+brutus/Brutus: winning "ALL. TOO. EASY. GRAHAHA!" · losing [furious]
+"RAAAAGH! BRUTUS ANGRY!" · dodge "Heh. Missed." · trash (at Zap) "Little
+lizard, BIG mouth! Grrhaha!"
+
 ## Audio prompt template (per clip)
-"Exaggerated <voice description> cartoon game-character voice bark, anime
-fight-scene delivery, shouted with over-the-top energy: '<line text>'.
-Include the laugh/growl/whoop tail written in the line. Clean studio audio,
-no background noise, no music, 0.8-2 seconds."
+"Exaggerated <voice description> cartoon game-character voice bark,
+[EMOTION] anime fight-scene delivery, shouted with over-the-top energy:
+'<line text>'. Include the laugh/growl/whoop tail written in the line.
+Clean studio audio, no background noise, no music, 0.8-2 seconds."
+
+## Client wiring for the emotion clips (after download)
+- winning/losing: play on big score swings (match.ts already tracks setScore)
+- dodge: on near-miss / successful dash away (player invuln or dash window)
+- trash: on knocking out a rival — play attacker's trash line
+File names: <key>-winning.wav, <key>-losing.wav, <key>-dodge.wav,
+<key>-trash.wav in public/audio/voices/.
 
 ## Delivery targets
 `public/audio/voices/<key>-<lineKey>.wav`
