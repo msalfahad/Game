@@ -53,6 +53,13 @@ export function heroImg(h: Hero): string {
   return inline?.[h.key] ?? `chars/${h.key}.webp?v=3`;
 }
 
+// Photoreal AAA portrait (Higgsfield-generated from the original art). Used on
+// menu/select screens; the in-world billboard keeps heroImg(). Callers should
+// attach an onerror fallback to heroImg() for builds without the HD art.
+export function heroPortrait(h: Hero): string {
+  return `chars/hd/${h.key}.webp?v=1`;
+}
+
 // --- Stat normalization -----------------------------------------------------
 // The bible caps mechanical advantage at 15%. We convert a 0-15 stat into a
 // multiplier in [1-SPREAD/2, 1+SPREAD/2] so the fastest hero is only ~15%

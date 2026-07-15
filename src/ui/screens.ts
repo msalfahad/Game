@@ -1,4 +1,5 @@
-import { HEROES, heroImg, type Hero } from '../data/characters';
+import { HEROES, type Hero } from '../data/characters';
+import { portraitImg, attachPortraitFallback } from './portrait';
 import { FAMILIES, familyGames, gameById, type GameDef } from '../data/maps';
 import type { Player } from '../game/player';
 import { TUNING, saveTuning, resetTuning } from '../core/tuning';
@@ -122,7 +123,7 @@ export function buildScreens(hooks: Hooks) {
   HEROES.forEach((h, i) => {
     const d = document.createElement('div');
     d.className = 'cc' + (i === 0 ? ' sel' : '');
-    d.innerHTML = `<img src="${heroImg(h)}"><div class="n" style="color:${h.col}">${h.name.toUpperCase()}</div>`;
+    d.innerHTML = `${portraitImg(h)}<div class="n" style="color:${h.col}">${h.name.toUpperCase()}</div>`;
     d.onclick = () => {
       sel = h;
       grid.querySelectorAll('.cc').forEach((e) => e.classList.remove('sel'));
@@ -131,6 +132,7 @@ export function buildScreens(hooks: Hooks) {
     };
     grid.appendChild(d);
   });
+  attachPortraitFallback(grid);
   updInfo();
 
   document.querySelectorAll('.diff').forEach((d) =>
@@ -148,6 +150,11 @@ export function buildScreens(hooks: Hooks) {
     const d = document.createElement('div');
     d.className = 'famCard';
     d.innerHTML = `<div class="fi">${f.icon}</div><div class="fn">${f.name.toUpperCase()}</div><div class="fd">${familyGames(f.id).length} games</div>`;
+    // Photoreal arena keyart backdrop (Higgsfield) with a dark overlay so the
+    // gold text stays readable; families without art keep the plain panel.
+    d.style.backgroundImage = `linear-gradient(rgba(10,12,24,.55), rgba(10,12,24,.8)), url('maps/${f.id}.webp')`;
+    d.style.backgroundSize = 'cover';
+    d.style.backgroundPosition = 'center';
     d.onclick = () => openFamily(f.id);
     fam.appendChild(d);
   }
@@ -251,9 +258,10 @@ function toVersus() {
   roster.forEach((p) => {
     const d = document.createElement('div');
     d.className = 'vsCard' + (p.you ? ' you' : '');
-    d.innerHTML = `<img src="${heroImg(p.hero)}"><div class="n" style="color:${p.hero.col}">${p.hero.name.toUpperCase()}${p.you ? '<br>(YOU)' : ''}</div>`;
+    d.innerHTML = `${portraitImg(p.hero)}<div class="n" style="color:${p.hero.col}">${p.hero.name.toUpperCase()}${p.you ? '<br>(YOU)' : ''}</div>`;
     row.appendChild(d);
   });
+  attachPortraitFallback(row);
   const gm: GameDef = gameById(chosenGameId);
   const f = FAMILIES.find((x) => x.id === gm.familyId)!;
   document.getElementById('vsTitle')!.textContent = gm.name.toUpperCase();
@@ -275,8 +283,9 @@ export function showResults(ranked: Player[], subtitle: string, youWon: boolean)
     const d = document.createElement('div');
     d.className = 'resRow' + (i === 0 ? ' first' : '');
     const res = (p as any)._res ?? '';
-    d.innerHTML = `<img src="${heroImg(p.hero)}"><div class="rn" style="color:${p.hero.col}">${i + 1}. ${p.hero.name.toUpperCase()}${p.you ? ' (YOU)' : ''}</div><div class="rs">${res}</div>`;
+    d.innerHTML = `${portraitImg(p.hero)}<div class="rn" style="color:${p.hero.col}">${i + 1}. ${p.hero.name.toUpperCase()}${p.you ? ' (YOU)' : ''}</div><div class="rs">${res}</div>`;
     list.appendChild(d);
   });
+  attachPortraitFallback(list);
   show('scrOver');
 }
