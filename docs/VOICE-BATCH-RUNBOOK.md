@@ -39,6 +39,18 @@ Fallback presets: zip=Brooks c2acff45, rax=Cillian d8ba9f14, luna=Skye
 pix=Zoe d0374db1, brutus=Gideon 1ad38ba4.
 
 Rate limit: seed_audio 429s fast — space calls ~2-3s apart, retry once after 5s.
+
+## BATCHING (user directive — Higgsfield misbehaves on big bursts)
+Generate in batches of 10 clips MAX, one hero at a time:
+1. create_voice for the hero → verify the voice with ONE test line first
+2. queue that hero's remaining lines, 2-3s apart (max 10 in flight)
+3. wait for the batch to finish (show_generations), collect result URLs
+4. only then start the next hero
+If anything 429s or hangs: stop, wait 30s, resume where you left off.
+Keep a running manifest (hero, line key, job id, URL) and update
+docs/ASSET-GENERATION-STATUS.md as you go so progress survives disconnects.
+Audio delivery confirmed working: the user CAN export .wav from the app
+(16-bit PCM 24kHz — exactly what the game needs; mono/stereo both fine).
 Existing Zap clips from earlier jobs (see docs/ASSET-GENERATION-STATUS.md)
 can be reused instead of regenerating: ability-charged 32cdd003, taunt
 f1f94db1, ability-use 7d83fbe0, round-win c292cc3d, surprise fe0f172b,
