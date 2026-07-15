@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Engine } from '../core/engine';
 import { Input } from '../core/input';
 import { SFX } from '../core/audio';
+import { characterVoice } from '../core/voice-barks';
 import { Player } from './player';
 import { buildWorld } from './world';
 import { Hazards } from './hazards';
@@ -149,6 +150,7 @@ export class Match {
     SFX.unlock();
     SFX.start();
     HUD.banner(game.name + '!', '#' + new THREE.Color(family.theme.trim).getHexString());
+    characterVoice.spawn(opts.hero.key).catch(() => {});
 
     this.engine.start((dt, elapsed) => this.loop(dt, elapsed));
   }
@@ -176,8 +178,12 @@ export class Match {
     HUD.showHud(false);
     const you = ranked.find((p) => p.you)!;
     const youWon = ranked[0] === you;
-    if (youWon) SFX.win();
-    else SFX.lose();
+    if (youWon) {
+      characterVoice.victory(you.hero.key).catch(() => {});
+      SFX.win();
+    } else {
+      SFX.lose();
+    }
     // Finishing-order parade before the results screen.
     const isClimb = this.ctx?.game.mechanic === 'climb';
     const labels = ranked.map((p) => String((p as any)._res ?? ''));

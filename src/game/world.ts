@@ -70,6 +70,26 @@ export function buildWorld(
     emissive: style === 'lava' ? 0x3a1008 : 0x000000,
     emissiveIntensity: style === 'lava' ? 0.6 : 0,
   });
+
+  // Apply PBR ice textures if available (Higgsfield-generated)
+  if (style === 'ice') {
+    const textureLoader = new THREE.TextureLoader();
+    try {
+      const albedo = textureLoader.load('assets/textures/ice-albedo.png');
+      const normal = textureLoader.load('assets/textures/ice-normal.png');
+      const roughmetal = textureLoader.load('assets/textures/ice-roughmetal.png');
+
+      fmat.map = albedo;
+      fmat.normalMap = normal;
+      fmat.roughnessMap = roughmetal;
+      fmat.metalnessMap = roughmetal;
+      fmat.roughness = 0.45;
+      fmat.metalness = 0.05;
+    } catch (err) {
+      console.log('Ice PBR textures not ready, using fallback');
+    }
+  }
+
   let floorMesh: THREE.Mesh;
   let ringMesh: THREE.Mesh | null = null;
   const trimMat = new THREE.MeshBasicMaterial({ color: t.trim });

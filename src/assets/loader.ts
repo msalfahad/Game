@@ -1,6 +1,4 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
-import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader';
 
 /**
  * Asset loader for Higgsfield-generated resources.
@@ -11,17 +9,11 @@ const textureCache: Record<string, THREE.Texture> = {};
 const modelCache: Record<string, THREE.Group> = {};
 const audioCache: Record<string, HTMLAudioElement> = {};
 
-async function loadTexture(url: string, type: 'exr' | 'png' = 'png'): Promise<THREE.Texture> {
+async function loadTexture(url: string): Promise<THREE.Texture> {
   if (textureCache[url]) return textureCache[url];
 
-  let texture: THREE.Texture;
-  if (type === 'exr') {
-    const loader = new EXRLoader();
-    texture = await loader.loadAsync(url);
-  } else {
-    const loader = new THREE.TextureLoader();
-    texture = await loader.loadAsync(url);
-  }
+  const loader = new THREE.TextureLoader();
+  const texture = await loader.loadAsync(url);
 
   texture.colorSpace = THREE.SRGBColorSpace;
   textureCache[url] = texture;
@@ -31,12 +23,14 @@ async function loadTexture(url: string, type: 'exr' | 'png' = 'png'): Promise<TH
 async function loadGLTF(url: string): Promise<THREE.Group> {
   if (modelCache[url]) return modelCache[url].clone();
 
+  // Dynamically import GLTFLoader
+  const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(url);
   const scene = gltf.scene;
 
   // Ensure all materials are PBR-ready
-  scene.traverse((node) => {
+  scene.traverse((node: THREE.Object3D) => {
     if (node instanceof THREE.Mesh) {
       if (node.material instanceof THREE.MeshStandardMaterial) {
         node.castShadow = true;
@@ -63,10 +57,9 @@ async function loadAudio(url: string): Promise<HTMLAudioElement> {
 export async function applySkybox(
   scene: THREE.Scene,
   skyboxUrl: string,
-  type: 'exr' | 'png' = 'exr',
 ): Promise<void> {
   try {
-    const texture = await loadTexture(skyboxUrl, type);
+    const texture = await loadTexture(skyboxUrl);
     const cubeTexture = new THREE.CubeTexture([
       texture, texture, texture, texture, texture, texture,
     ]);
@@ -86,7 +79,7 @@ export async function applyPBRMaterial(
   roughMetalUrl?: string,
 ): Promise<void> {
   try {
-    const albedo = await loadTexture(albedoUrl, 'png');
+    const albedo = await loadTexture(albedoUrl);
 
     const material = new THREE.MeshStandardMaterial({
       map: albedo,
@@ -95,13 +88,13 @@ export async function applyPBRMaterial(
     });
 
     if (normalUrl) {
-      const normal = await loadTexture(normalUrl, 'png');
+      const normal = await loadTexture(normalUrl);
       material.normalMap = normal;
       material.normalScale.set(1, 1);
     }
 
     if (roughMetalUrl) {
-      const rm = await loadTexture(roughMetalUrl, 'png');
+      const rm = await loadTexture(roughMetalUrl);
       material.roughnessMap = rm;
       material.metalnessMap = rm;
     }
