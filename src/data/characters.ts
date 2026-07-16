@@ -53,11 +53,12 @@ export function heroImg(h: Hero): string {
   return inline?.[h.key] ?? `chars/${h.key}.webp?v=3`;
 }
 
-// Photoreal AAA portrait (Higgsfield-generated from the original art). Used on
-// menu/select screens; the in-world billboard keeps heroImg(). Callers should
-// attach an onerror fallback to heroImg() for builds without the HD art.
+// Menu/select portrait: the hero's REAL 3D model rendered on a transparent
+// background (no studio backdrop) — see src/shoot.ts / public/chars/render.
+// The in-world billboard keeps heroImg(); callers attach an onerror fallback to
+// heroImg() for builds without the render.
 export function heroPortrait(h: Hero): string {
-  return `chars/hd/${h.key}.webp?v=1`;
+  return `chars/render/${h.key}.webp?v=1`;
 }
 
 // --- Stat normalization -----------------------------------------------------
