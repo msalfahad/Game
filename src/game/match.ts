@@ -36,6 +36,12 @@ export class Match {
   private parts: { m: THREE.Mesh; vx: number; vy: number; vz: number; life: number }[] = [];
   private onFinish: StartOpts['onFinish'] | null = null;
 
+  // Voice-bark edge detection for the local player (players[0]): barks fire on
+  // state transitions this frame (ability used, dash started, rival KO'd).
+  private vPrevCd = 0;
+  private vPrevDash = 0;
+  private vPrevDead: boolean[] = [];
+
   constructor(engine: Engine, input: Input) {
     this.engine = engine;
     this.input = input;
@@ -142,6 +148,11 @@ export class Match {
 
     this.engine.post.setGrade(FAMILY_GRADE[family.id] ?? {});
     this.game.init(this.ctx);
+    // Snapshot post-init state so the first loop frame doesn't read a stale
+    // cooldown as a fresh ability/dash and fire a spurious bark.
+    this.vPrevCd = players[0].cd;
+    this.vPrevDash = players[0].dashCd;
+    this.vPrevDead = players.map((p) => p.dead);
     HUD.showHud(true);
     HUD.setObjective(this.game.objective);
     this.input.setEnabled(true);
@@ -167,7 +178,33 @@ export class Match {
 
     this.game.tick(dt, elapsed);
     this.ctx.world.tick(dt);
+    this.voiceBarks(you);
     this.tickParts(dt);
+  }
+
+  // Fire the local player's voice barks off state transitions that happened
+  // this frame. dodge/ability/trash are throttled inside characterVoice so
+  // rapid events don't stack.
+  private voiceBarks(you: Player) {
+    if (!this.ctx) return;
+    const key = you.hero.key;
+    // Ability used: cooldown transitioned from ready to charging.
+    if (this.vPrevCd <= 0 && you.cd > 0) characterVoice.ability(key).catch(() => {});
+    this.vPrevCd = you.cd;
+    // Dodge: a dash just started (dash cooldown began).
+    if (this.vPrevDash <= 0 && you.dashCd > 0) characterVoice.dodge(key).catch(() => {});
+    this.vPrevDash = you.dashCd;
+    // Trash talk: a rival just got knocked out while you're still alive.
+    if (!you.dead) {
+      const players = this.ctx.players;
+      for (let i = 1; i < players.length; i++) {
+        if (players[i].dead && !this.vPrevDead[i]) {
+          characterVoice.trash(key).catch(() => {});
+          break;
+        }
+      }
+    }
+    this.vPrevDead = this.ctx.players.map((p) => p.dead);
   }
 
   private finish(ranked: Player[], subtitle: string) {
@@ -182,6 +219,7 @@ export class Match {
       characterVoice.victory(you.hero.key).catch(() => {});
       SFX.win();
     } else {
+      characterVoice.losing(you.hero.key).catch(() => {});
       SFX.lose();
     }
     // Finishing-order parade before the results screen.

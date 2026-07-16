@@ -50,117 +50,56 @@ export async function playVoiceBark(
   }
 }
 
+// A voice bark should never talk over itself. Barks for the same character are
+// throttled so rapid-fire events (dashes, chained KOs) don't stack into a
+// garbled mess.
+let lastBarkAt = 0;
+const MIN_BARK_GAP_MS = 900;
+
+function throttled(): boolean {
+  const now = performance.now();
+  if (now - lastBarkAt < MIN_BARK_GAP_MS) return true;
+  lastBarkAt = now;
+  return false;
+}
+
 /**
- * Character-specific voice bark triggers.
+ * Character-specific voice bark triggers. Six lines per hero, matching the
+ * files delivered to `public/audio/voices/<key>-<line>.wav`
+ * (spawn, victory, losing, dodge, ability, trash). Missing files fall back to
+ * the synth SFX tone, so partial delivery is always safe.
  */
 export const characterVoice = {
-  /**
-   * Spawn/ready — energetic opening.
-   */
+  /** Spawn/ready — energetic opening shout. */
   async spawn(characterKey: string) {
-    await playVoiceBark(
-      `audio/voices/${characterKey}-spawn.wav`,
-      () => SFX.tick(),
-      0.7,
-    );
+    await playVoiceBark(`audio/voices/${characterKey}-spawn.wav`, () => SFX.start(), 0.75);
   },
 
-  /**
-   * Ability charged — alert/ready.
-   */
-  async abilityCharged(characterKey: string) {
-    await playVoiceBark(
-      `audio/voices/${characterKey}-ability-charged.wav`,
-      () => SFX.power(),
-      0.8,
-    );
-  },
-
-  /**
-   * Hit/flinch — pain/reaction.
-   */
-  async hit(characterKey: string) {
-    await playVoiceBark(
-      `audio/voices/${characterKey}-hit.wav`,
-      () => SFX.hit(),
-      0.6,
-    );
-  },
-
-  /**
-   * Victory — celebratory.
-   */
+  /** Victory — celebratory gloat. */
   async victory(characterKey: string) {
-    await playVoiceBark(
-      `audio/voices/${characterKey}-victory.wav`,
-      () => SFX.win(),
-      0.8,
-    );
+    await playVoiceBark(`audio/voices/${characterKey}-victory.wav`, () => SFX.win(), 0.85);
   },
 
-  /**
-   * Taunt — competitive/aggressive.
-   */
-  async taunt(characterKey: string) {
-    await playVoiceBark(
-      `audio/voices/${characterKey}-taunt.wav`,
-      () => SFX.power(),
-      0.7,
-    );
+  /** Losing — knocked out / lost the match. */
+  async losing(characterKey: string) {
+    await playVoiceBark(`audio/voices/${characterKey}-losing.wav`, () => SFX.lose(), 0.8);
   },
 
-  /**
-   * Revival — comeback/determination.
-   */
-  async revival(characterKey: string) {
-    await playVoiceBark(
-      `audio/voices/${characterKey}-revival.wav`,
-      () => SFX.tick(),
-      0.75,
-    );
+  /** Dodge — dashed away / near miss. Throttled. */
+  async dodge(characterKey: string) {
+    if (throttled()) return;
+    await playVoiceBark(`audio/voices/${characterKey}-dodge.wav`, () => SFX.tick(), 0.7);
   },
 
-  /**
-   * Ability use — activation callout.
-   */
-  async abilityUse(characterKey: string) {
-    await playVoiceBark(
-      `audio/voices/${characterKey}-ability-use.wav`,
-      () => SFX.zap(),
-      0.8,
-    );
+  /** Ability — ultimate / signature move activation. Throttled. */
+  async ability(characterKey: string) {
+    if (throttled()) return;
+    await playVoiceBark(`audio/voices/${characterKey}-ability.wav`, () => SFX.zap(), 0.85);
   },
 
-  /**
-   * Round win — match result.
-   */
-  async roundWin(characterKey: string) {
-    await playVoiceBark(
-      `audio/voices/${characterKey}-round-win.wav`,
-      () => SFX.win(),
-      0.8,
-    );
-  },
-
-  /**
-   * Surprise/reaction — unexpected.
-   */
-  async surprise(characterKey: string) {
-    await playVoiceBark(
-      `audio/voices/${characterKey}-surprise.wav`,
-      () => SFX.tick(),
-      0.7,
-    );
-  },
-
-  /**
-   * Climax — final match moment.
-   */
-  async climax(characterKey: string) {
-    await playVoiceBark(
-      `audio/voices/${characterKey}-climax.wav`,
-      () => SFX.win(),
-      0.85,
-    );
+  /** Trash talk — landed a KO on a rival. Throttled. */
+  async trash(characterKey: string) {
+    if (throttled()) return;
+    await playVoiceBark(`audio/voices/${characterKey}-trash.wav`, () => SFX.power(), 0.8);
   },
 };
