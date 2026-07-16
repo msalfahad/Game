@@ -66,21 +66,35 @@ export function poseRig(rig: Rig, state: AnimState, phase: number, t: number, am
   switch (state) {
     case 'walk':
     case 'run': {
-      const k = state === 'run' ? 1 : 0.62; // run swings harder
-      // Legs: thighs swing fore/aft (opposite), knees bend on the back swing.
-      rot(rig, 'LeftUpLeg', s * 0.9 * k * amt, 0, 0);
-      rot(rig, 'RightUpLeg', -s * 0.9 * k * amt, 0, 0);
-      rot(rig, 'LeftLeg', Math.max(0, -s) * 1.1 * k * amt, 0, 0);
-      rot(rig, 'RightLeg', Math.max(0, s) * 1.1 * k * amt, 0, 0);
-      // Arms: counter-swing to the legs; elbows slightly bent.
-      rot(rig, 'LeftArm', -s * 0.7 * k * amt, 0, 0.12);
-      rot(rig, 'RightArm', s * 0.7 * k * amt, 0, -0.12);
-      rot(rig, 'LeftForeArm', -0.35 * k, 0, 0);
-      rot(rig, 'RightForeArm', -0.35 * k, 0, 0);
-      // Torso: bob + a forward lean when running, slight counter-twist.
-      rot(rig, 'Spine02', (state === 'run' ? 0.28 : 0.08) * amt, -s * 0.12 * amt, 0);
-      rot(rig, 'Spine', 0, s * 0.06 * amt, 0);
-      if (hips) hips.position.y = rig.hipsRestY + Math.abs(s2) * 0.06 * (state === 'run' ? 1.4 : 1);
+      const run = state === 'run';
+      const k = (run ? 1 : 0.62) * amt; // run swings harder
+      const c = Math.cos(phase);
+      const lean = run ? 0.3 : 0.1;
+      // Pelvis: twists with the stride, drops toward the swing leg, and bobs
+      // twice a cycle — the biggest readability win for a natural walk.
+      rot(rig, 'Hips', 0, s * 0.14 * k, c * 0.05 * k);
+      if (hips) hips.position.y = rig.hipsRestY + Math.abs(s2) * 0.06 * (run ? 1.5 : 1);
+      // Torso: forward lean + COUNTER-rotate the pelvis so the shoulders stay
+      // squarer than the hips (contra-body motion), plus a little side bend.
+      rot(rig, 'Spine02', lean * amt, -s * 0.14 * k, -c * 0.03 * k);
+      rot(rig, 'Spine01', lean * 0.3 * amt, -s * 0.07 * k, 0);
+      rot(rig, 'Spine', 0, -s * 0.05 * k, 0);
+      // Head stabilises: counters the torso twist/lean so the gaze holds ahead.
+      rot(rig, 'Head', -lean * 0.6 * amt, s * 0.1 * k, 0);
+      // Legs: thigh swing (opposite), knee flex through swing + push-off.
+      rot(rig, 'LeftUpLeg', s * 0.95 * k, 0, 0);
+      rot(rig, 'RightUpLeg', -s * 0.95 * k, 0, 0);
+      rot(rig, 'LeftLeg', (Math.max(0, -s) * 1.05 + Math.max(0, s) * 0.35) * k, 0, 0);
+      rot(rig, 'RightLeg', (Math.max(0, s) * 1.05 + Math.max(0, -s) * 0.35) * k, 0, 0);
+      // Ankles: toe lifts on the forward swing, points on push-off.
+      rot(rig, 'LeftFoot', -s * 0.4 * k, 0, 0);
+      rot(rig, 'RightFoot', s * 0.4 * k, 0, 0);
+      // Arms: counter-swing to the legs, elbows flexing more on the forward
+      // swing; a touch of outward flare so they clear the body.
+      rot(rig, 'LeftArm', -s * 0.75 * k, 0, 0.12);
+      rot(rig, 'RightArm', s * 0.75 * k, 0, -0.12);
+      rot(rig, 'LeftForeArm', -(0.3 + Math.max(0, -s) * 0.55) * k, 0, 0);
+      rot(rig, 'RightForeArm', -(0.3 + Math.max(0, s) * 0.55) * k, 0, 0);
       break;
     }
     case 'sidewalk': {
@@ -110,19 +124,29 @@ export function poseRig(rig: Rig, state: AnimState, phase: number, t: number, am
       break;
     }
     case 'dance': {
-      // Celebration: hips sway, arms pump overhead, head bobs to the beat.
-      const b = Math.sin(t * 6);
-      const b2 = Math.sin(t * 6 + Math.PI / 2);
-      rot(rig, 'Spine02', 0.05, b * 0.25, b * 0.12);
-      rot(rig, 'Spine', 0, b * 0.12, 0);
-      rot(rig, 'LeftArm', -2.2 + b * 0.4, 0, 0.3);
-      rot(rig, 'RightArm', -2.2 - b * 0.4, 0, -0.3);
-      rot(rig, 'LeftForeArm', -0.5 + b2 * 0.4, 0, 0);
-      rot(rig, 'RightForeArm', -0.5 - b2 * 0.4, 0, 0);
-      rot(rig, 'LeftUpLeg', Math.max(0, b) * 0.3, 0, 0.15);
-      rot(rig, 'RightUpLeg', Math.max(0, -b) * 0.3, 0, -0.15);
-      rot(rig, 'Head', b * 0.15, b * 0.2, 0);
-      if (hips) hips.position.y = rig.hipsRestY + Math.abs(b) * 0.12;
+      // Celebration groove: bounce on the beat, hips circle, arms pump
+      // overhead out of phase, knees lift alternately, head bobs.
+      const beat = t * 6;
+      const b = Math.sin(beat);
+      const b2 = Math.sin(beat + Math.PI / 2);
+      const bounce = Math.abs(Math.sin(beat)); // two dips per beat
+      rot(rig, 'Hips', 0, b * 0.15, b * 0.14);
+      rot(rig, 'Spine02', 0.06 + bounce * 0.05, -b * 0.18, -b * 0.1);
+      rot(rig, 'Spine', 0, -b * 0.1, b * 0.05);
+      // Arms punch up and alternate — right up while left dips and back.
+      rot(rig, 'LeftArm', -2.35 + b2 * 0.6, 0, 0.35);
+      rot(rig, 'RightArm', -2.35 - b2 * 0.6, 0, -0.35);
+      rot(rig, 'LeftForeArm', -0.45 + b * 0.5, 0, 0);
+      rot(rig, 'RightForeArm', -0.45 - b * 0.5, 0, 0);
+      rot(rig, 'LeftHand', 0, 0, b * 0.5);
+      rot(rig, 'RightHand', 0, 0, -b * 0.5);
+      // Alternating knee lift with the beat.
+      rot(rig, 'LeftUpLeg', Math.max(0, b) * 0.5, 0, 0.15);
+      rot(rig, 'LeftLeg', Math.max(0, b) * 0.6, 0, 0);
+      rot(rig, 'RightUpLeg', Math.max(0, -b) * 0.5, 0, -0.15);
+      rot(rig, 'RightLeg', Math.max(0, -b) * 0.6, 0, 0);
+      rot(rig, 'Head', bounce * 0.12, b * 0.22, 0);
+      if (hips) hips.position.y = rig.hipsRestY + bounce * 0.16;
       break;
     }
     case 'wave': {
@@ -137,12 +161,20 @@ export function poseRig(rig: Rig, state: AnimState, phase: number, t: number, am
     }
     case 'idle':
     default: {
-      // Breathing: chest rises, arms sway a hair, subtle weight shift.
-      const br = Math.sin(t * 2) * 0.5 + 0.5;
-      rot(rig, 'Spine02', 0.02 + br * 0.03, 0, 0);
-      rot(rig, 'LeftArm', 0, 0, 0.08 + br * 0.03);
-      rot(rig, 'RightArm', 0, 0, -0.08 - br * 0.03);
-      rot(rig, 'Head', Math.sin(t * 1.3) * 0.04, Math.sin(t * 0.9) * 0.06, 0);
+      // Alive idle: breathing (chest), a slow weight shift hip-to-hip, arms
+      // and shoulders easing with it, and the head glancing around.
+      const br = Math.sin(t * 2) * 0.5 + 0.5; // breathing 0..1
+      const sway = Math.sin(t * 0.8); // slow weight shift
+      rot(rig, 'Hips', 0, sway * 0.03, sway * 0.05);
+      rot(rig, 'Spine02', 0.02 + br * 0.035, -sway * 0.04, -sway * 0.03);
+      rot(rig, 'Spine', 0, -sway * 0.02, 0);
+      rot(rig, 'LeftUpLeg', 0, 0, Math.max(0, sway) * 0.05);
+      rot(rig, 'RightUpLeg', 0, 0, Math.min(0, sway) * 0.05);
+      rot(rig, 'LeftArm', -br * 0.02, 0, 0.09 + Math.max(0, sway) * 0.05);
+      rot(rig, 'RightArm', -br * 0.02, 0, -0.09 - Math.max(0, -sway) * 0.05);
+      rot(rig, 'LeftForeArm', -0.12 - br * 0.03, 0, 0);
+      rot(rig, 'RightForeArm', -0.12 - br * 0.03, 0, 0);
+      rot(rig, 'Head', Math.sin(t * 1.3) * 0.04 + sway * 0.02, Math.sin(t * 0.5) * 0.12, -sway * 0.03);
       if (hips) hips.position.y = rig.hipsRestY + br * 0.015;
       break;
     }
