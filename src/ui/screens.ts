@@ -45,7 +45,7 @@ export function buildScreens(hooks: Hooks) {
     <button class="big" id="onlineBtn">🌐 PLAY ONLINE</button>
     <button class="big" data-go="scrChar" style="background:var(--aqua);box-shadow:0 5px 0 #0E9CB2">PLAY OFFLINE</button>
     <button class="alt" id="tuneBtn">⚙️ TUNING</button>
-    <div class="settingRow"><span>CAMERA SHAKE</span><input id="shakeSlider" type="range" min="0" max="100" value="100"></div>
+    <div class="settingRow"><span>CAMERA SHAKE</span><input id="shakeSlider" type="range" min="0" max="100" value="0"></div>
     <div class="settingRow"><span>QUALITY</span>
       <select id="qualitySel">
         <option value="low">Low</option><option value="medium">Medium</option>
