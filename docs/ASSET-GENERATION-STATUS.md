@@ -210,7 +210,17 @@ offered.
 | ability | eager | DEPLOYING! | `5ff225c2-76c0-4a8b-868c-646c5c90a2cc` |
 | trash | snarky @Pix | Bird brain! Ha-ha-snort! | `19c9f995-835f-43fc-99f3-511e3cb8b88a` |
 
-## Progress: Zap ✅repo · Vex ✅repo · Luna ✅repo · Ollie ✅repo · Slam ✅repo · Rolo ✅gen. Next: Pix, Brutus.
+## Pix (pix) — Harper preset `47fb207f-63fe-449e-915b-27b3d8098fd1`, pitch +2/+3 (screechy), loudness +5/6 — GENERATED ✅ (awaiting user export → repo)
+| line | emotion | text | job id |
+|---|---|---|---|
+| spawn | cackling | Hehehe, LET'S PLAY! SQUAWK! | `e152360b-11b2-4407-a593-08ddad525bee` |
+| victory | wild | WINNER WINNER! CACAW! Ahahaha! | `9f4b90e3-5ac1-4ee6-86be-689fee9a2f22` |
+| losing | squawking mad | WAAARK! No fair! | `dafb928e-1f33-4a7c-a0e4-c6bda849d452` |
+| dodge | taunting | Can't catch a bird! Nyahaha! | `ca2688eb-3222-4bc4-ae55-df7a2a37491d` |
+| ability | gleeful | SURPRIIISE! | `2a070482-4e07-4dda-bc95-f4e780089c3f` |
+| trash | screechy @Rolo | Nice ears, carrot boy! AHAHAHA! | `673a92ff-be33-48fd-baf0-21de37e485e5` |
+
+## Progress: Zap ✅repo · Vex ✅repo · Luna ✅repo · Ollie ✅repo · Slam ✅repo · Rolo ✅repo · Pix ✅gen. Last: Brutus.
 
 ## Remaining heroes — preset plan (not yet generated)
 Vex=Vlad `e5666b9c-99a2-4fac-8b4e-abee078b186d`, Luna=Luna
