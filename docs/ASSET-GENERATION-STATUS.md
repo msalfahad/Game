@@ -220,7 +220,29 @@ offered.
 | ability | gleeful | SURPRIIISE! | `2a070482-4e07-4dda-bc95-f4e780089c3f` |
 | trash | screechy @Rolo | Nice ears, carrot boy! AHAHAHA! | `673a92ff-be33-48fd-baf0-21de37e485e5` |
 
-## Progress: Zap ✅repo · Vex ✅repo · Luna ✅repo · Ollie ✅repo · Slam ✅repo · Rolo ✅repo · Pix ✅gen. Last: Brutus.
+## Rolo (rolo) — Leo preset `73a45c18-0c56-4642-a61e-f6b303f8ded1` — USER-GENERATED ✅ + IN REPO ✅
+User generated Rolo's 6 in the app (anime-direction prompts, Leo preset). Line
+labels verified against job prompts via job_display — all correct.
+| line | text | job id |
+|---|---|---|
+| spawn | SYSTEMS ONLINE! Hehe-snort! | `474f6271-4f1d-4c7f-a75f-be3fbcde5934` |
+| victory | Victory calculated! Ha-ha-snort! | `d84861b0-12fb-454b-be4d-bea13f239fd0` |
+| losing | ERROR! ERROR! | `7ecf683a-8ed9-4c27-9d17-c2ebbf1512a6` |
+| dodge | Nope! Nope! Hehe! | `386e1dd2-babe-4794-946e-aa632c28aa90` |
+| ability | DEPLOYING! | `5ff225c2-76c0-4a8b-868c-646c5c90a2cc` |
+| trash | Bird brain! Ha-ha-snort! | `19c9f995-835f-43fc-99f3-511e3cb8b88a` |
+
+## Brutus (brutus) — Orion preset `ed69c516-92d2-4b30-a967-617737a342e5`, pitch -3 (deep), speech_rate -8..0 (slow), loudness +8 — GENERATED ✅ (awaiting user export → repo)
+| line | emotion | text | job id |
+|---|---|---|---|
+| spawn | menacing | BRUTUS… IS HERE. Grrr. | `2459fc5d-b058-49dd-b2bc-e47f84f4e93c` |
+| victory | thunderous | NOBODY beats Brutus! GRAHAHA! | `d7064dc0-3122-4164-b216-b1b9875f1063` |
+| losing | furious | RAAAAGH! BRUTUS ANGRY! | `d29e5900-a853-44fc-b21a-988c63698892` |
+| dodge | dismissive | Heh. Missed. | `b56c6eeb-99fc-449f-8489-94ef136598ae` |
+| ability | roaring | CRUUUSH! | `b45e597c-34a4-4c53-aafe-24f31b338369` |
+| trash | growling @Zap | Little lizard, BIG mouth! Grrhaha! | `1621c9e9-8a52-4963-9145-ac463fcb2f03` |
+
+## Progress: 7/8 heroes in repo (Zap, Vex, Luna, Ollie, Slam, Rolo, Pix = 42 clips). Brutus generated, awaiting export = final 6.
 
 ## Remaining heroes — preset plan (not yet generated)
 Vex=Vlad `e5666b9c-99a2-4fac-8b4e-abee078b186d`, Luna=Luna
