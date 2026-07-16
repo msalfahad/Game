@@ -166,6 +166,18 @@ re-done in this style later if desired.
 | ability | menacing | LIGHTS OUT! | `6b491eab-2267-4464-a38d-e038ac60d97d` |
 | trash | mocking @Luna | Go play with a doll! Hahahaha! | `033cd92f-839a-49f9-8e60-c3f21f4e9ed2` |
 
+## Luna (luna) — Luna preset `375a3398-e3b4-4f91-845d-42181e352899`, pitch +1 (melodic), varied rate/loudness — GENERATED ✅ (awaiting user export → repo)
+| line | emotion | text | job id |
+|---|---|---|---|
+| spawn | enchanting | The stars guide me~! | `2bf416e8-7272-43a1-ab77-22c42ac3b8cb` |
+| victory | delighted | The stars favor ME~! Ahahaha! | `5b14108c-d391-418f-ae15-b6f28c358d11` |
+| losing | sad | This… cannot be… | `ded4e349-773d-4ea8-a924-c851d4048771` |
+| dodge | playful | Too slow for magic~! Hmhm! | `fe12b7ae-877a-44e9-b217-1e02f480b1e2` |
+| ability | powerful | BEHOLD! | `21799a56-296a-46c4-bf2b-85b52ede1999` |
+| trash | teasing @Vex | Bad puppy! Go fetch! Hahaha~! | `11fcefee-c69c-4c18-9939-40eed38d89e9` |
+
+## Progress: Zap ✅repo · Vex ✅repo · Luna ✅gen. Next: Ollie, Slam, Rolo, Pix, Brutus.
+
 ## Remaining heroes — preset plan (not yet generated)
 Vex=Vlad `e5666b9c-99a2-4fac-8b4e-abee078b186d`, Luna=Luna
 `375a3398-e3b4-4f91-845d-42181e352899`, Ollie=Zoe
