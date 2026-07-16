@@ -8,7 +8,7 @@ import { buildOnlineScreens, enterOnline, showOnlineResults } from './ui/online'
 import { OnlineMatch } from './net/onlinematch';
 import { OnlineHockey } from './net/onlinehockey';
 import { OnlineFreeRoam } from './net/onlinefreeroam';
-import { gameById } from './data/maps';
+import { gameById, familyById } from './data/maps';
 
 // Boot: engine + input + match controller, screen flow, tuning, title.
 
@@ -39,7 +39,11 @@ buildOnlineScreens({
   onMatchStart: (m) => {
     match.stop();
     online?.stop();
-    const done = (end: Parameters<typeof showOnlineResults>[0], youSlot: number) => showOnlineResults(end, youSlot);
+    const done = (end: Parameters<typeof showOnlineResults>[0], youSlot: number) => {
+      SFX.playMusic('menu');
+      showOnlineResults(end, youSlot);
+    };
+    SFX.playMusic(familyById(gameById(m.gameId).familyId).id);
     const mech = gameById(m.gameId).mechanic;
     online =
       mech === 'goal' ? new OnlineHockey(engine, input, done)
@@ -57,6 +61,10 @@ muteBtn.addEventListener('pointerdown', (e) => {
   SFX.muted = !SFX.muted;
   muteBtn.textContent = SFX.muted ? '🔇' : '🔊';
 });
+
+// Kick off the menu theme on the first user interaction (also unlocks audio on
+// mobile). Match/online start switches to the arena mood; results return here.
+addEventListener('pointerdown', () => SFX.playMusic('menu'), { once: true });
 
 document.getElementById('loading')!.style.display = 'none';
 show('scrTitle');

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Engine } from '../core/engine';
 import { Input } from '../core/input';
 import { SFX } from '../core/audio';
+import { characterVoice } from '../core/voice-barks';
 import { Player } from './player';
 import { buildWorld } from './world';
 import { Hazards } from './hazards';
@@ -35,6 +36,12 @@ export class Match {
   private parts: { m: THREE.Mesh; vx: number; vy: number; vz: number; life: number }[] = [];
   private onFinish: StartOpts['onFinish'] | null = null;
 
+  // Voice-bark edge detection for the local player (players[0]): barks fire on
+  // state transitions this frame (ability used, dash started, rival KO'd).
+  private vPrevCd = 0;
+  private vPrevDash = 0;
+  private vPrevDead: boolean[] = [];
+
   constructor(engine: Engine, input: Input) {
     this.engine = engine;
     this.input = input;
@@ -51,6 +58,7 @@ export class Match {
     banner: (t, c) => HUD.banner(t, c),
     shake: (a) => this.engine.camera.shake(a),
     burst: (x, z, col, n = 16) => this.spawnBurst(x, z, col, n),
+    hitstop: (s) => this.engine.hitstop(s),
   };
 
   private spawnBurst(x: number, z: number, col: string, n: number) {
@@ -141,6 +149,11 @@ export class Match {
 
     this.engine.post.setGrade(FAMILY_GRADE[family.id] ?? {});
     this.game.init(this.ctx);
+    // Snapshot post-init state so the first loop frame doesn't read a stale
+    // cooldown as a fresh ability/dash and fire a spurious bark.
+    this.vPrevCd = players[0].cd;
+    this.vPrevDash = players[0].dashCd;
+    this.vPrevDead = players.map((p) => p.dead);
     HUD.showHud(true);
     HUD.setObjective(this.game.objective);
     this.input.setEnabled(true);
@@ -148,7 +161,9 @@ export class Match {
     this.running = true;
     SFX.unlock();
     SFX.start();
+    SFX.playMusic(family.id);
     HUD.banner(game.name + '!', '#' + new THREE.Color(family.theme.trim).getHexString());
+    characterVoice.spawn(opts.hero.key).catch(() => {});
 
     this.engine.start((dt, elapsed) => this.loop(dt, elapsed));
   }
@@ -165,7 +180,41 @@ export class Match {
 
     this.game.tick(dt, elapsed);
     this.ctx.world.tick(dt);
+    this.voiceBarks(you);
     this.tickParts(dt);
+  }
+
+  // Per-frame juice + voice barks off local-player state transitions this
+  // frame: ability use, dashes, and knockouts get hitstop/shake/burst plus the
+  // matching bark. dodge/ability/trash barks are throttled inside
+  // characterVoice so rapid events don't stack.
+  private voiceBarks(you: Player) {
+    if (!this.ctx) return;
+    const key = you.hero.key;
+    // Ability used: cooldown transitioned from ready to charging.
+    if (this.vPrevCd <= 0 && you.cd > 0) {
+      characterVoice.ability(key).catch(() => {});
+      this.engine.hitstop(0.04);
+      this.engine.camera.shake(0.3);
+    }
+    this.vPrevCd = you.cd;
+    // Dodge: a dash just started (dash cooldown began).
+    if (this.vPrevDash <= 0 && you.dashCd > 0) characterVoice.dodge(key).catch(() => {});
+    this.vPrevDash = you.dashCd;
+    // Knockouts this frame: freeze-frame + shake + spark burst. Bigger when
+    // it's you; a rival KO while you're alive also fires your trash bark.
+    const players = this.ctx.players;
+    for (let i = 0; i < players.length; i++) {
+      const p = players[i];
+      if (p.dead && !this.vPrevDead[i]) {
+        const isYou = i === 0;
+        this.engine.hitstop(isYou ? 0.12 : 0.07);
+        this.engine.camera.shake(isYou ? 0.9 : 0.55);
+        this.spawnBurst(p.x, p.z, isYou ? '#ff5a5a' : '#ffffff', isYou ? 22 : 14);
+        if (!isYou && !you.dead) characterVoice.trash(key).catch(() => {});
+      }
+    }
+    this.vPrevDead = players.map((q) => q.dead);
   }
 
   private finish(ranked: Player[], subtitle: string) {
@@ -174,10 +223,16 @@ export class Match {
     this.engine.stop();
     this.input.setEnabled(false);
     HUD.showHud(false);
+    SFX.playMusic('menu');
     const you = ranked.find((p) => p.you)!;
     const youWon = ranked[0] === you;
-    if (youWon) SFX.win();
-    else SFX.lose();
+    if (youWon) {
+      characterVoice.victory(you.hero.key).catch(() => {});
+      SFX.win();
+    } else {
+      characterVoice.losing(you.hero.key).catch(() => {});
+      SFX.lose();
+    }
     // Finishing-order parade before the results screen.
     const isClimb = this.ctx?.game.mechanic === 'climb';
     const labels = ranked.map((p) => String((p as any)._res ?? ''));

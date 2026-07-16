@@ -1,4 +1,5 @@
 import { HEROES, heroImg, type Hero } from '../data/characters';
+import { portraitImg, attachPortraitFallback } from './portrait';
 import { GAMES, FAMILIES } from '../data/maps';
 import { net, resolveServerUrl, rememberServerUrl, savedName } from '../net/client';
 import type { MatchEndMsg, MatchStartMsg } from '../net/protocol';
@@ -90,7 +91,7 @@ export function buildOnlineScreens(h: OnlineHooks) {
   HEROES.forEach((hh, i) => {
     const d = document.createElement('div');
     d.className = 'cc' + (i === 0 ? ' sel' : '');
-    d.innerHTML = `<img src="${heroImg(hh)}"><div class="n" style="color:${hh.col}">${hh.name.toUpperCase()}</div>`;
+    d.innerHTML = `${portraitImg(hh)}<div class="n" style="color:${hh.col}">${hh.name.toUpperCase()}</div>`;
     d.onclick = () => {
       hero = hh;
       grid.querySelectorAll('.cc').forEach((e) => e.classList.remove('sel'));
@@ -99,6 +100,7 @@ export function buildOnlineScreens(h: OnlineHooks) {
     };
     grid.appendChild(d);
   });
+  attachPortraitFallback(grid);
 
   document.getElementById('onlineBack')!.addEventListener('click', () => show('scrTitle'));
   document.getElementById('btnQuickPlay')!.addEventListener('click', () => {
