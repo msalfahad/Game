@@ -28,8 +28,9 @@ export function victoryWalk(
     p.group.scale.setScalar(1);
     p.setStatusIcon(`${MEDALS[i] ?? i + 1 + '.'} ${labels[i] ?? ''}`.trim(), 6);
   });
-  // Camera: zoom IN on the line-up (also resets any climb follow offset).
-  engine.camera.frame(13, 1);
+  // Camera: frame the WHOLE line-up (4 heroes span ~22 units) with headroom
+  // for the medals + the winner's jump — not a tight zoom on the middle two.
+  engine.camera.frame(30, 1);
 
   let t = 0;
   engine.start((dt, elapsed) => {
@@ -64,7 +65,8 @@ export function victoryWalk(
       p.bob(elapsed, p.index);
       p.tickEffects(dt);
     });
-    if (t > 4.4) {
+    // Run to the line (~1.15s) then celebrate for a full 5s before results.
+    if (t > 6.2) {
       ranked[0].group.rotation.y = 0;
       engine.stop();
       done();

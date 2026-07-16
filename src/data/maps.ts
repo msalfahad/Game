@@ -69,7 +69,7 @@ const TIER = ['', 'Learn', 'Adapt', 'Master', 'Survive'] as const;
 export const FAMILIES: FamilyDef[] = [
   {
     id: 'frost', name: 'Frostbite Arena', icon: '❄️', style: 'ice', surface: 'ice',
-    theme: { skyTop: '#243A7E', skyBot: '#0A1230', fog: '#1E2E5E', ground: '#12203E', trim: 0x9ae8ff, light: 0xd8ecff, ambient: 'snow' },
+    theme: { skyTop: '#5B86C4', skyBot: '#2E4E8A', fog: '#4E74B0', ground: '#3A5E96', trim: 0x9ae8ff, light: 0xeaf4ff, ambient: 'snow' },
     blurb: 'Aurora skies, sliding ice, blizzards & icicles.',
   },
   {
