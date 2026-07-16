@@ -186,7 +186,21 @@ re-done in this style later if desired.
 | ability | proud | CHECK THIS OUT! | `6ada3000-b7ae-4e84-9815-2cfdfe941d17` |
 | trash | cheeky @Slam | Big muscles, tiny brain! Hahaha! | `642d3b58-194e-4cbc-ba74-f379046e2c6f` |
 
-## Progress: Zap ✅repo · Vex ✅repo · Luna ✅repo · Ollie ✅gen. Next: Slam, Rolo, Pix, Brutus.
+## Slam (slam) — Roman preset `7e63ac18-5fcd-4aba-8078-a86d4e11c127`, pitch -2 (deep), loudness +7/8 — GENERATED ✅ (awaiting user export → repo)
+| line | emotion | text | job id |
+|---|---|---|---|
+| spawn | roaring | GAME TIIIME! | `2352b196-aef2-4243-b137-83811b24933b` |
+| victory | booming | SCOREBOARD, BABY! HAHAHA! | `00510a56-5191-409d-9838-d0d250d09543` |
+| losing | raging | REF! RAAAGH! | `fb867e91-a141-43e9-a3db-817ab2c19ebf` |
+| dodge | cocky | Swing and a MISS! Ha! | `dc1ee157-a0cb-450f-a851-ab141b6abcf5` |
+| ability | warning | HEADS UP! | `e8bfc33a-6784-4c65-89b4-a6747b01878c` |
+| trash | booming @Ollie | Nap time, junior! Ho ho ho! | `cd1f4b9d-12ac-4127-bf59-7ed2b2f86724` |
+
+Note: user feedback — avoid over-pitched/baby (Ollie +5) and breathy/sultry
+takes; keep pitch moderate from Slam onward. Ollie re-gen at lower pitch
+offered.
+
+## Progress: Zap ✅repo · Vex ✅repo · Luna ✅repo · Ollie ✅repo · Slam ✅gen. Next: Rolo, Pix, Brutus.
 
 ## Remaining heroes — preset plan (not yet generated)
 Vex=Vlad `e5666b9c-99a2-4fac-8b4e-abee078b186d`, Luna=Luna
