@@ -70,21 +70,50 @@ export function hideClimbMap() {
   climbDots = [];
 }
 
+// Each player's "power" shows as a BAR (in their hero colour) rather than a
+// number — the bars fill relative to the current leader, so the panel reads
+// like a live race at a glance.
+let hudList: Player[] = [];
+const hudVal = new Map<Player, number>();
+const hudFill = new Map<Player, HTMLElement>();
+
+function num(v: string | number): number {
+  const n = typeof v === 'number' ? v : parseFloat(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function refreshBars() {
+  let max = 0;
+  for (const p of hudList) max = Math.max(max, hudVal.get(p) ?? 0);
+  max = Math.max(max, 1);
+  for (const p of hudList) {
+    const fill = hudFill.get(p);
+    if (fill) fill.style.width = Math.max(0, Math.min(1, (hudVal.get(p) ?? 0) / max)) * 100 + '%';
+  }
+}
+
 export function makeHeads(players: Player[], initialScore: string | number) {
   headsEl.innerHTML = '';
+  hudList = players.slice();
+  hudVal.clear();
+  hudFill.clear();
   for (const p of players) {
     const d = document.createElement('div');
     d.className = 'head' + (p.you ? ' you' : '');
     d.style.borderColor = p.you ? '#FFD23F' : p.hero.col + '66';
-    d.innerHTML = `<img src="${heroImg(p.hero)}"><div class="sc">${initialScore}</div>`;
+    d.innerHTML = `<img src="${heroImg(p.hero)}"><div class="pbar"><div class="pfill" style="background:${p.hero.col};color:${p.hero.col}"></div></div>`;
     headsEl.appendChild(d);
     p.headEl = d;
-    p.scoreEl = d.querySelector('.sc');
+    p.scoreEl = d.querySelector('.pfill');
+    hudFill.set(p, d.querySelector('.pfill') as HTMLElement);
+    hudVal.set(p, num(initialScore));
   }
+  refreshBars();
 }
 
 export function setScore(p: Player, text: string | number) {
-  if (p.scoreEl) p.scoreEl.textContent = String(text);
+  hudVal.set(p, num(text));
+  refreshBars();
 }
 
 export function markDead(p: Player) {
