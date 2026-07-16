@@ -18,7 +18,10 @@ export class Engine {
 
   constructor() {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    // Phones have very high device-pixel-ratios; rendering at full 2x is the
+    // biggest cause of mobile frame drops. Cap tighter on touch/small screens.
+    const isMobile = matchMedia('(pointer: coarse)').matches || innerWidth < 820;
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, isMobile ? 1.4 : 2));
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -39,7 +42,10 @@ export class Engine {
 
   /** Graphics quality: pixel ratio cap + post-fx tier (Low..Ultra). */
   setQuality(tier: 'low' | 'medium' | 'high' | 'ultra') {
-    const cap = { low: 1, medium: 1.5, high: 2, ultra: Math.min(devicePixelRatio, 3) }[tier];
+    const isMobile = matchMedia('(pointer: coarse)').matches || innerWidth < 820;
+    const cap = isMobile
+      ? { low: 1, medium: 1.25, high: 1.4, ultra: 1.75 }[tier]
+      : { low: 1, medium: 1.5, high: 2, ultra: Math.min(devicePixelRatio, 3) }[tier];
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, cap));
     this.renderer.setSize(innerWidth, innerHeight);
     this.post.setSize();
