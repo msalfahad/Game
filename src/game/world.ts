@@ -69,7 +69,7 @@ export function buildWorld(
   const sun = new THREE.DirectionalLight(t.light, 0.9);
   sun.position.set(24, 95, -12);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.mapSize.set(2048, 2048); // crisper contact shadows for the 3D heroes
   sun.shadow.camera.left = -halfSize * 1.6;
   sun.shadow.camera.right = halfSize * 1.6;
   sun.shadow.camera.top = halfSize * 1.6;

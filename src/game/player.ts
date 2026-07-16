@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { Hero } from '../data/characters';
 import { heroImg } from '../data/characters';
+import { hasCharModel, makeCharInstance } from './char3d';
+import { poseRig, type Rig, type AnimState } from './charanim';
 
 // Identical hitboxes for every hero (SPEC section 3) — the disc radius does NOT
 // scale with stats. Stats only change feel (speed/knockback), never reach.
@@ -202,6 +204,18 @@ export class Player {
   private frameIdx = -1;
   private strideT = 0;
   private facing = 1; // 1 = right (sheet frames face right)
+  // Real 3D model mode (public/models/<key>.glb). When active the 2D sprite /
+  // frame / puppet path is bypassed entirely and the mesh is rotated to face
+  // the way the hero moves (or, in hockey, across the rink at the opponent).
+  private model3d: THREE.Group | null = null;
+  private rig3d: Rig | null = null;
+  private use3d = false;
+  private faceAngle = 0; // smoothed Y rotation of the 3D model
+  private bobPhase = 0;
+  private stridePhase = 0; // locomotion phase for the skeletal walk/run cycle
+  private animAmt = 0; // eased 0..1 blend so motion starts/stops smoothly
+  /** Force a one-shot animation (celebration dance / wave) regardless of movement. */
+  celebrate = false;
 
   scoreEl: HTMLElement | null = null;
   headEl: HTMLElement | null = null;
@@ -244,18 +258,44 @@ export class Player {
     startSprite.position.y = this.baseH * 0.5 + 0.15;
     // Hide until the texture has decoded — an unloaded texture renders as an
     // opaque BLACK box, which is the "black square" characters at match start.
+    // For heroes with a 3D model we keep it hidden entirely (the base webp has
+    // a dark backdrop that reads as a black box); the ring marks the player
+    // until the GLB loads a moment later.
     startSprite.visible = false;
-    onCharTex(this.hero, () => { startSprite.visible = true; });
+    if (!hasCharModel(this.hero.key)) onCharTex(this.hero, () => { startSprite.visible = true; });
     grp.add(startSprite);
     this.sprite = startSprite;
     this.charGroup = new THREE.Group();
     grp.add(this.charGroup);
 
-    // Prefer REAL animation frames when the hero has a sliced sheet; puppet
-    // otherwise. The plain sprite stands in while either loads.
+    // Prefer a REAL 3D model when the hero has one (public/models/<key>.glb):
+    // it shows the back, has depth, and can turn to face the opponent. The
+    // plain sprite stands in until it loads; on a miss we fall back to the 2D
+    // animation frames / puppet.
     this.frameM = null;
     this.frameTex = null;
     this.frameIdx = -1;
+    if (hasCharModel(this.hero.key)) {
+      makeCharInstance(this.hero.key, this.baseH, (inst) => {
+        if (!grp.parent) return;
+        if (!inst) { this.load2D(grp, startSprite, W); return; } // model failed → 2D
+        grp.remove(startSprite);
+        this.model3d = inst.model;
+        this.rig3d = inst.rig;
+        this.use3d = true;
+        this.charGroup.add(this.model3d);
+        this.sprite = this.model3d as unknown as THREE.Object3D;
+      });
+    } else {
+      this.load2D(grp, startSprite, W);
+    }
+
+    this.group = grp;
+    scene.add(grp);
+  }
+
+  /** Load the 2D animation frames (or puppet fallback) onto the rider group. */
+  private load2D(grp: THREE.Group, startSprite: THREE.Object3D, W: number) {
     loadAnim(this.hero, (sheet) => {
       if (!grp.parent) return;
       if (sheet) {
@@ -314,9 +354,6 @@ export class Player {
       this.torsoY = hipY - H * 0.08;
       this.sprite = this.torsoM;
     });
-
-    this.group = grp;
-    scene.add(grp);
   }
 
   /**
@@ -334,6 +371,78 @@ export class Player {
     const dist = Math.hypot(dx, dz);
     const speed = Math.min(1, (dist * 60) / 16);
     const airborne = this.y > 0.4;
+
+    // --- REAL 3D model (GLB): rotate to face heading / opponent + procedural
+    // liveliness (breathe, run-lean, jump). The mesh already stands feet-on-
+    // ground, centred, at hero height. ---
+    if (this.use3d && this.model3d) {
+      // Which way should the hero look? Meshy builds the mesh facing +Z (out of
+      // the screen, toward the iso camera) — that's our idle "face the player".
+      let target = this.faceAngle;
+      if (this.riding) {
+        // Hockey: every rider looks straight ACROSS the rink at the opponent on
+        // the opposite wall. You (bottom) face -z, so you see your hero's back;
+        // the rider in front of you (top) faces you; the left and right riders
+        // face each other. Lateral input then reads as sideways strafing.
+        // (Meshy models face +z at rotation 0, so angle = atan2(dirX, dirZ).)
+        target =
+          this.side === 'top' ? 0 // faces +z (toward the bottom player / camera)
+          : this.side === 'left' ? Math.PI / 2 // faces +x (toward the right wall)
+          : this.side === 'right' ? -Math.PI / 2 // faces -x (toward the left wall)
+          : Math.PI; // bottom: faces -z (back to the camera)
+      } else {
+        // Face the way we move (velocity is the true heading; fall back to the
+        // position delta). +Z is forward, so angle = atan2(x, z).
+        const hx = Math.abs(this.vx) > 0.6 ? this.vx : dx * 60;
+        const hz = Math.abs(this.vz) > 0.6 ? this.vz : dz * 60;
+        if (Math.hypot(hx, hz) > 1.2) target = Math.atan2(hx, hz);
+      }
+      // Shortest-arc smoothing toward the target angle.
+      let d = target - this.faceAngle;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      this.faceAngle += d * 0.25;
+      this.model3d.rotation.y = this.faceAngle;
+
+      if (this.wasAirborne && !airborne) this.landSquash = 1;
+      this.wasAirborne = airborne;
+      this.landSquash = Math.max(0, this.landSquash - 0.08);
+
+      // --- skeletal animation --------------------------------------------------
+      if (this.rig3d) {
+        const moving = !airborne && speed > 0.06 && !this.celebrate;
+        this.animAmt += ((moving ? 1 : 0) - this.animAmt) * 0.2;
+        let state: AnimState;
+        if (this.celebrate) state = 'dance';
+        else if (airborne) state = 'jump';
+        else if (this.riding) state = moving ? 'sidewalk' : 'idle';
+        else state = speed > 0.45 ? 'run' : moving ? 'walk' : 'idle';
+        const loco = state === 'walk' || state === 'run' || state === 'sidewalk';
+        if (loco) this.stridePhase += dist * (state === 'run' ? 0.55 : 0.95) + 0.015;
+        poseRig(this.rig3d, state, this.stridePhase, elapsed + seed, loco ? this.animAmt : 1);
+        this.charGroup.position.y += (0 - this.charGroup.position.y) * 0.2;
+        this.model3d.rotation.x += (0 - this.model3d.rotation.x) * 0.2;
+      } else {
+        // No rig (unexpected): fall back to a whole-body bob + lean.
+        this.bobPhase += 0.13 + speed * 0.32;
+        if (airborne) {
+          this.charGroup.position.y += (0.6 - this.charGroup.position.y) * 0.2;
+          this.model3d.rotation.x += (-0.12 - this.model3d.rotation.x) * 0.2;
+        } else if (speed > 0.05) {
+          const bounce = Math.abs(Math.sin(this.bobPhase)) * (0.25 + speed * 0.45);
+          this.charGroup.position.y += (bounce - this.charGroup.position.y) * 0.4;
+          this.model3d.rotation.x += (-0.08 * speed - this.model3d.rotation.x) * 0.2;
+        } else {
+          const breathe = Math.sin(elapsed * 2.2 + seed) * 0.06;
+          this.charGroup.position.y += (breathe - this.charGroup.position.y) * 0.15;
+          this.model3d.rotation.x += (0 - this.model3d.rotation.x) * 0.1;
+        }
+      }
+      // Flinch: quick recoil twist away from the hit (on the whole model).
+      if (this.flinchT > 0) this.model3d.rotation.z = -this.facing * this.flinchT * 0.4 * Math.sin(this.flinchT * 18);
+      else this.model3d.rotation.z += (0 - this.model3d.rotation.z) * 0.3;
+      return;
+    }
 
     // --- REAL frame animation (sliced from the hero's own sheet) ---
     if (this.frameM) {

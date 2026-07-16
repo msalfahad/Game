@@ -54,9 +54,11 @@ export function victoryWalk(
         p.vx = 0;
         p.vz = 0;
         if (i === 0) {
-          // WINNER DANCE: bouncy jumps with a little spin and shimmy.
+          // WINNER DANCE: the 3D hero does a full skeletal celebration dance
+          // (arms overhead, hips sway) on top of a bouncy hop + shimmy.
+          p.celebrate = true;
           const dtT = t - 1.15;
-          p.y = Math.abs(Math.sin(dtT * 5)) * 2.6;
+          p.y = Math.abs(Math.sin(dtT * 5)) * 2.0;
           p.group.rotation.y = Math.sin(dtT * 2.5) * 0.5;
           p.x = s.x + Math.sin(dtT * 5) * 0.7;
         }
@@ -68,6 +70,7 @@ export function victoryWalk(
     // Run to the line (~1.15s) then celebrate for a full 5s before results.
     if (t > 6.2) {
       ranked[0].group.rotation.y = 0;
+      ranked[0].celebrate = false;
       engine.stop();
       done();
     }

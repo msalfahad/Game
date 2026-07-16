@@ -92,10 +92,13 @@ export class PostFX {
     this.renderPass = new RenderPass(scene, camera);
     this.composer.addPass(this.renderPass);
 
-    // Ambient occlusion — grounds characters/props with soft contact shadow.
+    // Ambient occlusion. DISABLED: GTAOPass renders a hard black rectangular
+    // artifact at the centre of the arena floor (the "black square in the
+    // middle of the map") on some GPUs. The 3D heroes are grounded by the
+    // directional-light shadows instead, so the scene reads fine without it.
     this.gtao = new GTAOPass(scene, camera, innerWidth, innerHeight);
     (this.gtao as any).output = (GTAOPass as any).OUTPUT?.Default ?? 0;
-    this.gtao.enabled = true;
+    this.gtao.enabled = false;
     this.composer.addPass(this.gtao);
 
     // Bloom — lava glow, ice sparkle, neon, ability FX.
@@ -133,7 +136,7 @@ export class PostFX {
 
   setTier(tier: PostTier) {
     this.enabled = tier !== 'off';
-    if (this.gtao) this.gtao.enabled = tier === 'high' || tier === 'ultra';
+    if (this.gtao) this.gtao.enabled = false; // GTAO disabled (center-square artifact)
     this.bloom.enabled = tier !== 'off';
     // Cheaper bloom resolution on low.
     this.bloom.strength = tier === 'low' ? 0.35 : this.bloom.strength;
