@@ -2,6 +2,28 @@
 
 _Session 2026-07-15. Read this together with `docs/NEW-SESSION-RUNBOOK.md`._
 
+## Session 2026-07-16 addendum #3 — 3D roster + portrait bg + model sheet
+
+All generated in Higgsfield, awaiting user export (egress blocks download).
+
+- **3D character meshes (image_to_3d, textured+PBR+rigged, a-pose)** — full roster:
+  | hero | 3D job id |
+  |---|---|
+  | zip | `fd38597a-1622-425e-bbda-0787e23b1bd4` |
+  | rax | `0393f3f1-4a77-4913-a87e-5fbf0af31a99` |
+  | luna | `d285984d-8da3-462d-aa7d-b3e2c7d9b1be` |
+  | ollie | `c10fdda5-8770-41af-ac7a-e6f2f7f1efd8` |
+  | slam | `56522169-e37f-4554-8ffc-ff619e24699d` |
+  | rolo | `6e2db754-42ff-47d9-8f91-7f0a44d7b1bb` |
+  | pix | `3f76db11-0ff0-44f6-9e6a-f6acdc3f4e54` |
+  | brutus | `3d326ee5-1c1a-46bd-8e88-e11d2470e77d` |
+  Export GLBs → integrate via GLTFLoader (replace sprite billboards).
+- **Pix model-sheet test** (nano_banana_pro, turnaround+walk/run+expressions):
+  job `a57d7cee-4563-41e9-86a9-9928efcaf754`.
+- **Portrait (3:4) frost background test** (for phone-fit backgrounds; landscape
+  maps crop badly on tall screens): job `19ca3823-5867-499a-ba0b-b6e0641fdde0`.
+  If good, generate 3:4 versions per family → export → wire cover-fit.
+
 ## Session 2026-07-16 addendum #2 — arena backgrounds + character cutouts
 
 - **In-match arena backgrounds** (shipped, PR #2 merged to main): `world.ts` now
