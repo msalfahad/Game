@@ -160,6 +160,7 @@ export class Match {
     this.running = true;
     SFX.unlock();
     SFX.start();
+    SFX.playMusic(family.id);
     HUD.banner(game.name + '!', '#' + new THREE.Color(family.theme.trim).getHexString());
     characterVoice.spawn(opts.hero.key).catch(() => {});
 
@@ -213,6 +214,7 @@ export class Match {
     this.engine.stop();
     this.input.setEnabled(false);
     HUD.showHud(false);
+    SFX.playMusic('menu');
     const you = ranked.find((p) => p.you)!;
     const youWon = ranked[0] === you;
     if (youWon) {
