@@ -380,10 +380,16 @@ export class Player {
       // the screen, toward the iso camera) — that's our idle "face the player".
       let target = this.faceAngle;
       if (this.riding) {
-        // Hockey: turn to look ACROSS the rink at the opponent, so the player
-        // sees the hero's BACK. 'bottom' defends +z and attacks toward -z;
-        // 'top' the reverse. Lateral input then reads as sideways strafing.
-        target = this.side === 'top' ? 0 : Math.PI;
+        // Hockey: every rider looks straight ACROSS the rink at the opponent on
+        // the opposite wall. You (bottom) face -z, so you see your hero's back;
+        // the rider in front of you (top) faces you; the left and right riders
+        // face each other. Lateral input then reads as sideways strafing.
+        // (Meshy models face +z at rotation 0, so angle = atan2(dirX, dirZ).)
+        target =
+          this.side === 'top' ? 0 // faces +z (toward the bottom player / camera)
+          : this.side === 'left' ? Math.PI / 2 // faces +x (toward the right wall)
+          : this.side === 'right' ? -Math.PI / 2 // faces -x (toward the left wall)
+          : Math.PI; // bottom: faces -z (back to the camera)
       } else {
         // Face the way we move (velocity is the true heading; fall back to the
         // position delta). +Z is forward, so angle = atan2(x, z).
