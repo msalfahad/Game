@@ -28,18 +28,22 @@ export function buildWorld(
   // 3D arena (the immersive "sky behind the rink" look). Flat theme colour is
   // the fallback until the image loads, or if a family has no art.
   scene.background = new THREE.Color(t.skyBot);
-  new THREE.TextureLoader().load(
-    `maps/${family.id}.webp`,
-    (tex) => {
-      tex.colorSpace = THREE.SRGBColorSpace;
-      scene.background = tex;
-      // Brighten the backdrop so the scenic art reads clearly through the
-      // cinematic grade (otherwise the tone curve + vignette crush it to near
-      // black at the screen edges).
-      scene.backgroundIntensity = 1.35;
-    },
+  const loader = new THREE.TextureLoader();
+  const applyBg = (tex: THREE.Texture) => {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    scene.background = tex;
+    // Brighten the backdrop so the scenic art reads clearly through the
+    // cinematic grade (otherwise the tone curve + vignette crush it dark).
+    scene.backgroundIntensity = 2.6;
+  };
+  // Prefer a portrait, phone-composed background (maps/<id>-bg.png) so the
+  // scene fills a tall screen without cropping out the sky; fall back to the
+  // landscape card art, then to the flat theme colour.
+  loader.load(
+    `maps/${family.id}-bg.png`,
+    applyBg,
     undefined,
-    () => {}, // no art for this family — keep the fallback colour
+    () => loader.load(`maps/${family.id}.webp`, applyBg, undefined, () => {}),
   );
   scene.fog = new THREE.Fog(new THREE.Color(t.fog).getHex(), halfSize * 3.0, halfSize * 7.5);
   void auroraSky; void gradientSky; // retained for the single-file/legacy path
