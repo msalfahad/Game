@@ -105,7 +105,10 @@ export class Powerups {
       new THREE.IcosahedronGeometry(1.3),
       new THREE.MeshStandardMaterial({ color: COLORS[kind], emissive: COLORS[kind], emissiveIntensity: 0.5, roughness: 0.3, metalness: 0.4 }),
     );
-    core.castShadow = true;
+    // No cast shadow: a small floating orb throws a hard, blocky shadow blob
+    // onto the ground (the "black square in the middle of the map"). It glows
+    // and has a halo, so it reads fine without one.
+    core.castShadow = false;
     grp.add(core);
     const halo = new THREE.Mesh(
       new THREE.TorusGeometry(2, 0.14, 6, 24),

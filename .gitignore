@@ -6,3 +6,6 @@ dist/
 server/dist/
 server-data/
 server/server-data/
+
+# Raw un-optimized Meshy character GLBs (kept locally for re-processing; only optimized public/models ship)
+models-src/

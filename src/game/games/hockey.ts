@@ -94,7 +94,9 @@ export class HockeyGame implements GameModule {
       new THREE.SphereGeometry(0.9, 16, 16),
       new THREE.MeshStandardMaterial({ color: 0xff8a2e, emissive: 0x7a3000, roughness: 0.3, metalness: 0.3 }),
     );
-    m.castShadow = true;
+    // No cast shadow: the small puck throws a hard blocky shadow square on the
+    // ice at low shadow-map density. It sits flat on the rink and reads fine.
+    m.castShadow = false;
     this.ctx.scene.add(m);
     const s = cornerServe(this.half, 36);
     this.balls.push({ x: s.x, z: s.z, vx: s.vx, vz: s.vz, y: 1.4, vy: 0, power: 0, grace: 0.7, slow: 0, m });
