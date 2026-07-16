@@ -9,7 +9,7 @@ export class IsoCamera {
   readonly cam: THREE.PerspectiveCamera;
   private base = new THREE.Vector3();
   private shakeT = 0;
-  private shakeScale = 1; // accessibility multiplier, 0 disables shake
+  private shakeScale = 0; // default OFF (user request); slider re-enables it
   private halfSize = 30;
   private zoom = 1;
   private followZ = 0;

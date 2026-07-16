@@ -96,12 +96,12 @@ export class HockeyGame implements GameModule {
     );
     m.castShadow = true;
     this.ctx.scene.add(m);
-    const s = cornerServe(this.half, 25);
+    const s = cornerServe(this.half, 36);
     this.balls.push({ x: s.x, z: s.z, vx: s.vx, vz: s.vz, y: 1.4, vy: 0, power: 0, grace: 0.7, slow: 0, m });
   }
 
   private resetBall(b: Puck) {
-    const s = cornerServe(this.half, 23);
+    const s = cornerServe(this.half, 34);
     b.x = s.x; b.z = s.z; b.vx = s.vx; b.vz = s.vz;
     b.grace = 0.8; b.power = 0; b.slow = 0;
   }
@@ -255,10 +255,9 @@ export class HockeyGame implements GameModule {
       b.vx += wind.x * dt;
       b.vz += wind.z * dt;
       b.x += b.vx * dt; b.z += b.vz * dt;
-      b.y += b.vy * dt; b.vy -= 34 * dt;
-      if (b.y < 1.4) { b.y = 1.4; b.vy = Math.abs(b.vy) * 0.7 + 6; }
+      b.y = 1.4; // puck stays flat on the ice — no vertical bounce/hop
       if (b.power > 0) b.power -= dt;
-      const cap = b.power > 0 ? 46 : 30;
+      const cap = b.power > 0 ? 58 : 42; // faster puck
       const sp = Math.hypot(b.vx, b.vz);
       if (sp > cap) { b.vx *= cap / sp; b.vz *= cap / sp; }
       // Never let the puck crawl to a halt mid-rink: if it's been sluggish for
@@ -290,7 +289,6 @@ export class HockeyGame implements GameModule {
           const steer = ((p as any)._pvel ?? 0) * this.half * 2 * 0.85;
           if (axis === 'z') { b.vz = (p.side === 'bottom' ? -1 : 1) * Math.abs(b.vz) * mult; b.vx += (b.x - px) * 0.9 + steer; }
           else { b.vx = (p.side === 'right' ? -1 : 1) * Math.abs(b.vx) * mult; b.vz += (b.z - pz) * 0.9 + steer; }
-          b.vy = 8;
           if (powered) {
             p.armed = false; p.cd = 6; b.power = 2.5;
             this.ctx.fx.shake(3); SFX.power(); this.ctx.fx.banner('POWER SHOT!', '#FF4D4D');

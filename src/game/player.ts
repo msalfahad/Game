@@ -7,13 +7,24 @@ import { heroImg } from '../data/characters';
 export const HITBOX_RADIUS = 3.0;
 
 const texCache: Record<string, THREE.Texture> = {};
+const texLoaded: Record<string, boolean> = {};
+const texWaiters: Record<string, (() => void)[]> = {};
 function charTex(h: Hero): THREE.Texture {
   if (texCache[h.key]) return texCache[h.key];
-  const t = new THREE.TextureLoader().load(heroImg(h));
+  const t = new THREE.TextureLoader().load(heroImg(h), () => {
+    texLoaded[h.key] = true;
+    for (const cb of texWaiters[h.key] ?? []) cb();
+    texWaiters[h.key] = [];
+  });
   t.magFilter = THREE.LinearFilter;
   t.colorSpace = THREE.SRGBColorSpace;
   texCache[h.key] = t;
   return t;
+}
+/** Run cb once the hero's base texture has actually decoded (never before). */
+function onCharTex(h: Hero, cb: () => void) {
+  if (texLoaded[h.key]) cb();
+  else (texWaiters[h.key] ??= []).push(cb);
 }
 
 // --- real animation frames ---------------------------------------------------
@@ -231,6 +242,10 @@ export class Player {
     const startSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: charTex(this.hero), transparent: true, depthWrite: false }));
     startSprite.scale.set(W, this.baseH, 1);
     startSprite.position.y = this.baseH * 0.5 + 0.15;
+    // Hide until the texture has decoded — an unloaded texture renders as an
+    // opaque BLACK box, which is the "black square" characters at match start.
+    startSprite.visible = false;
+    onCharTex(this.hero, () => { startSprite.visible = true; });
     grp.add(startSprite);
     this.sprite = startSprite;
     this.charGroup = new THREE.Group();
@@ -326,13 +341,20 @@ export class Player {
       this.wasAirborne = airborne;
       this.landSquash = Math.max(0, this.landSquash - 0.08);
       if (this.riding) {
-        // Mounted on the hockey ride: face forward, glide sideways instead of
-        // running — no facing flip, no run cycle, just a gentle idle bob.
-        this.frameM.scale.x += (1 - this.frameM.scale.x) * 0.3;
+        // On the hockey ride: face the way you slide and WALK (never the fast
+        // run cycle) — idle when still. (A true "face your opponent" back view
+        // needs the 3D character art.)
+        const headX = Math.abs(this.vx) > 0.6 ? this.vx : dx * 60;
+        if (Math.abs(headX) > 1.0) this.facing = headX > 0 ? 1 : -1;
+        this.frameM.scale.x += (this.facing - this.frameM.scale.x) * 0.4;
         this.frameM.rotation.z += (0 - this.frameM.rotation.z) * 0.2;
-        this.setFrame(IDLE_F);
-        const breathe = Math.sin(elapsed * 2.4 + seed);
-        this.frameM.scale.y += (1 + breathe * 0.02 - this.frameM.scale.y) * 0.15;
+        if (speed > 0.05) {
+          this.strideT += dist * 0.14;
+          this.setFrame(WALK_F + (Math.floor(this.strideT * 8) % 8));
+        } else {
+          this.setFrame(IDLE_F);
+        }
+        this.frameM.scale.y += (1 - this.frameM.scale.y) * 0.2;
         return;
       }
       // Face the way we move (sheet faces right); keep facing when idle.
