@@ -14,6 +14,7 @@ export class Engine {
   private clock = new THREE.Clock();
   private raf = 0;
   private update: ((dt: number, elapsed: number) => void) | null = null;
+  private hitstopT = 0;
 
   constructor() {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -55,14 +56,31 @@ export class Engine {
     this.update = null;
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
+    this.hitstopT = 0;
+  }
+
+  /**
+   * Freeze game-logic time for `sec` seconds to sell an impact (KO, big hit).
+   * Rendering and camera shake keep running in real time, so the pause reads
+   * as a punch rather than a stall. Calls stack by taking the longest freeze.
+   */
+  hitstop(sec: number) {
+    this.hitstopT = Math.max(this.hitstopT, sec);
   }
 
   private loop = () => {
     if (!this.update) return;
-    const dt = Math.min(this.clock.getDelta(), 0.05);
+    const raw = Math.min(this.clock.getDelta(), 0.05);
+    // During hitstop, hand the game a dt of 0 (no movement/integration) while
+    // shake + render advance on real time.
+    let dt = raw;
+    if (this.hitstopT > 0) {
+      this.hitstopT = Math.max(0, this.hitstopT - raw);
+      dt = 0;
+    }
     this.update(dt, this.clock.elapsedTime);
-    this.camera.tickShake(dt);
-    this.post.render(dt);
+    this.camera.tickShake(raw);
+    this.post.render(raw);
     this.raf = requestAnimationFrame(this.loop);
   };
 

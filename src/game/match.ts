@@ -58,6 +58,7 @@ export class Match {
     banner: (t, c) => HUD.banner(t, c),
     shake: (a) => this.engine.camera.shake(a),
     burst: (x, z, col, n = 16) => this.spawnBurst(x, z, col, n),
+    hitstop: (s) => this.engine.hitstop(s),
   };
 
   private spawnBurst(x: number, z: number, col: string, n: number) {
@@ -183,29 +184,37 @@ export class Match {
     this.tickParts(dt);
   }
 
-  // Fire the local player's voice barks off state transitions that happened
-  // this frame. dodge/ability/trash are throttled inside characterVoice so
-  // rapid events don't stack.
+  // Per-frame juice + voice barks off local-player state transitions this
+  // frame: ability use, dashes, and knockouts get hitstop/shake/burst plus the
+  // matching bark. dodge/ability/trash barks are throttled inside
+  // characterVoice so rapid events don't stack.
   private voiceBarks(you: Player) {
     if (!this.ctx) return;
     const key = you.hero.key;
     // Ability used: cooldown transitioned from ready to charging.
-    if (this.vPrevCd <= 0 && you.cd > 0) characterVoice.ability(key).catch(() => {});
+    if (this.vPrevCd <= 0 && you.cd > 0) {
+      characterVoice.ability(key).catch(() => {});
+      this.engine.hitstop(0.04);
+      this.engine.camera.shake(0.3);
+    }
     this.vPrevCd = you.cd;
     // Dodge: a dash just started (dash cooldown began).
     if (this.vPrevDash <= 0 && you.dashCd > 0) characterVoice.dodge(key).catch(() => {});
     this.vPrevDash = you.dashCd;
-    // Trash talk: a rival just got knocked out while you're still alive.
-    if (!you.dead) {
-      const players = this.ctx.players;
-      for (let i = 1; i < players.length; i++) {
-        if (players[i].dead && !this.vPrevDead[i]) {
-          characterVoice.trash(key).catch(() => {});
-          break;
-        }
+    // Knockouts this frame: freeze-frame + shake + spark burst. Bigger when
+    // it's you; a rival KO while you're alive also fires your trash bark.
+    const players = this.ctx.players;
+    for (let i = 0; i < players.length; i++) {
+      const p = players[i];
+      if (p.dead && !this.vPrevDead[i]) {
+        const isYou = i === 0;
+        this.engine.hitstop(isYou ? 0.12 : 0.07);
+        this.engine.camera.shake(isYou ? 0.9 : 0.55);
+        this.spawnBurst(p.x, p.z, isYou ? '#ff5a5a' : '#ffffff', isYou ? 22 : 14);
+        if (!isYou && !you.dead) characterVoice.trash(key).catch(() => {});
       }
     }
-    this.vPrevDead = this.ctx.players.map((p) => p.dead);
+    this.vPrevDead = players.map((q) => q.dead);
   }
 
   private finish(ranked: Player[], subtitle: string) {

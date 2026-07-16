@@ -12,6 +12,8 @@ export interface Fx {
   banner(text: string, col?: string): void;
   shake(amount: number): void;
   burst(x: number, z: number, col: string, n?: number): void;
+  /** Freeze game-logic time briefly to sell an impact (seconds). */
+  hitstop(seconds: number): void;
 }
 
 // Difficulty knobs shared by every bot (SPEC section 13). `cap` limits bot top
