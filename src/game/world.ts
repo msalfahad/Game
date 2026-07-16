@@ -2,8 +2,26 @@ import * as THREE from 'three';
 import type { FamilyDef, GameDef } from '../data/maps';
 import type { SurfaceKind } from '../data/surfaces';
 import { auroraSky, gradientSky, styledFloor } from './textures';
-import { makeSkyDome } from './skydome';
-import { makeBackdrop } from './backdrop';
+
+// Fit a background texture to the viewport with "cover" behaviour (fill the
+// frame, crop the overflow) instead of stretching it — recomputed on resize.
+function coverBackground(tex: THREE.Texture) {
+  const img = tex.image as { width: number; height: number };
+  const apply = () => {
+    if (!img?.width) return;
+    const winAspect = innerWidth / innerHeight;
+    const imgAspect = img.width / img.height;
+    tex.matrixAutoUpdate = true;
+    tex.center.set(0.5, 0.5);
+    if (winAspect > imgAspect) {
+      tex.repeat.set(1, imgAspect / winAspect); // window wider → crop top/bottom
+    } else {
+      tex.repeat.set(winAspect / imgAspect, 1); // window taller → crop sides
+    }
+  };
+  apply();
+  addEventListener('resize', apply);
+}
 
 // Builds the themed arena for a game: sky, fog, lights, ground, floor (square
 // or circle), neon trim, per-family decorative props, and ambient particles.
@@ -26,11 +44,20 @@ export function buildWorld(
   const t = family.theme;
   const style = family.style;
 
-  // Living shader skydome (aurora / embers / clouds / stars per family). The
-  // flat gradient stays as a fallback background color behind the dome.
+  // The family's generated arena key art fills the whole background behind the
+  // 3D arena (the immersive "sky behind the rink" look). Flat theme colour is
+  // the fallback until the image loads, or if a family has no art.
   scene.background = new THREE.Color(t.skyBot);
-  const skyDome = makeSkyDome(scene, family);
-  makeBackdrop(scene, family); // photoreal horizon vista (skipped if no art)
+  new THREE.TextureLoader().load(
+    `maps/${family.id}.webp`,
+    (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      coverBackground(tex);
+      scene.background = tex;
+    },
+    undefined,
+    () => {}, // no art for this family — keep the fallback colour
+  );
   scene.fog = new THREE.Fog(new THREE.Color(t.fog).getHex(), halfSize * 3.0, halfSize * 7.5);
   void auroraSky; void gradientSky; // retained for the single-file/legacy path
 
@@ -125,7 +152,6 @@ export function buildWorld(
     surfaceAt,
     tick(dt: number) {
       tickAmbient(ambientPts, family, dt);
-      skyDome.tick(dt);
     },
   };
 }
