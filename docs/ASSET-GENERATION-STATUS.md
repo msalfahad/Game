@@ -176,7 +176,17 @@ re-done in this style later if desired.
 | ability | powerful | BEHOLD! | `21799a56-296a-46c4-bf2b-85b52ede1999` |
 | trash | teasing @Vex | Bad puppy! Go fetch! Hahaha~! | `11fcefee-c69c-4c18-9939-40eed38d89e9` |
 
-## Progress: Zap ✅repo · Vex ✅repo · Luna ✅gen. Next: Ollie, Slam, Rolo, Pix, Brutus.
+## Ollie (ollie) — Zoe preset `d0374db1-44b9-4f05-939e-0a9ae9dbbe6a`, pitch +5 (kid), speech_rate +20/25/30 — GENERATED ✅ (awaiting user export → repo)
+| line | emotion | text | job id |
+|---|---|---|---|
+| spawn | excited | GADGETS READY! Hehehe! | `b3f8e7b6-bf2e-4f52-b374-ac2ee81d4291` |
+| victory | ecstatic | I'M WINNING I'M WINNING! WOOHOO! | `573aa3d4-f115-4b45-b7cd-f47d31e04b83` |
+| losing | whiny | Aw man, RECALCULATING! | `afea7b80-6e7d-493c-862e-e6a0abf3d7c7` |
+| dodge | giggling | Missed! Missed again! Heehee! | `fd173910-12ce-4d36-ae17-522428a6b6ca` |
+| ability | proud | CHECK THIS OUT! | `6ada3000-b7ae-4e84-9815-2cfdfe941d17` |
+| trash | cheeky @Slam | Big muscles, tiny brain! Hahaha! | `642d3b58-194e-4cbc-ba74-f379046e2c6f` |
+
+## Progress: Zap ✅repo · Vex ✅repo · Luna ✅repo · Ollie ✅gen. Next: Slam, Rolo, Pix, Brutus.
 
 ## Remaining heroes — preset plan (not yet generated)
 Vex=Vlad `e5666b9c-99a2-4fac-8b4e-abee078b186d`, Luna=Luna
