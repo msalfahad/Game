@@ -200,7 +200,17 @@ Note: user feedback — avoid over-pitched/baby (Ollie +5) and breathy/sultry
 takes; keep pitch moderate from Slam onward. Ollie re-gen at lower pitch
 offered.
 
-## Progress: Zap ✅repo · Vex ✅repo · Luna ✅repo · Ollie ✅repo · Slam ✅gen. Next: Rolo, Pix, Brutus.
+## Rolo (rolo) — Leo preset `73a45c18-0c56-4642-a61e-f6b303f8ded1`, pitch +2 (chipper), speech_rate +15/20 — GENERATED ✅ (awaiting user export → repo)
+| line | emotion | text | job id |
+|---|---|---|---|
+| spawn | chipper | SYSTEMS ONLINE! Hehe-snort! | `474f6271-4f1d-4c7f-a75f-be3fbcde5934` |
+| victory | giddy | Victory calculated! Ha-ha-snort! | `d84861b0-12fb-454b-be4d-bea13f239fd0` |
+| losing | panicked | ERROR! ERROR! | `7ecf683a-8ed9-4c27-9d17-c2ebbf1512a6` |
+| dodge | playful | Nope! Nope! Hehe! | `386e1dd2-babe-4794-946e-aa632c28aa90` |
+| ability | eager | DEPLOYING! | `5ff225c2-76c0-4a8b-868c-646c5c90a2cc` |
+| trash | snarky @Pix | Bird brain! Ha-ha-snort! | `19c9f995-835f-43fc-99f3-511e3cb8b88a` |
+
+## Progress: Zap ✅repo · Vex ✅repo · Luna ✅repo · Ollie ✅repo · Slam ✅repo · Rolo ✅gen. Next: Pix, Brutus.
 
 ## Remaining heroes — preset plan (not yet generated)
 Vex=Vlad `e5666b9c-99a2-4fac-8b4e-abee078b186d`, Luna=Luna
