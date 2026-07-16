@@ -162,6 +162,8 @@ export class Player {
 
   pos = 0.5;
   side: 'bottom' | 'top' | 'left' | 'right' = 'bottom';
+  /** Hockey: mounted on a sliding ride — lock facing, no sideways run cycle. */
+  riding = false;
 
   // Three.js
   group = new THREE.Group();
@@ -323,6 +325,16 @@ export class Player {
       if (this.wasAirborne && !airborne) this.landSquash = 1;
       this.wasAirborne = airborne;
       this.landSquash = Math.max(0, this.landSquash - 0.08);
+      if (this.riding) {
+        // Mounted on the hockey ride: face forward, glide sideways instead of
+        // running — no facing flip, no run cycle, just a gentle idle bob.
+        this.frameM.scale.x += (1 - this.frameM.scale.x) * 0.3;
+        this.frameM.rotation.z += (0 - this.frameM.rotation.z) * 0.2;
+        this.setFrame(IDLE_F);
+        const breathe = Math.sin(elapsed * 2.4 + seed);
+        this.frameM.scale.y += (1 + breathe * 0.02 - this.frameM.scale.y) * 0.15;
+        return;
+      }
       // Face the way we move (sheet faces right); keep facing when idle.
       // Use VELOCITY, not position deltas: online reconciliation nudges the
       // local player's rendered position backwards while running, which made

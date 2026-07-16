@@ -2,6 +2,26 @@
 
 _Session 2026-07-15. Read this together with `docs/NEW-SESSION-RUNBOOK.md`._
 
+## Session 2026-07-16 addendum #2 — arena backgrounds + character cutouts
+
+- **In-match arena backgrounds** (shipped, PR #2 merged to main): `world.ts` now
+  renders `maps/<family>.webp` as the full-frame `scene.background` (cover-fit),
+  replacing the flat colour. Verified via headless match drive (frost + inferno).
+- **Character cutouts** (background-removed, awaiting user export): ran
+  `remove_background` on each hero image job → transparent PNGs. User exports
+  from Higgsfield app, then wire into `public/chars/hd/<key>.png` and switch
+  `heroPortrait()` in `characters.ts` from `.webp` to `.png`.
+  | hero | cutout job id |
+  |---|---|
+  | zip | `d4d51a52-6792-49a7-8e27-2a8eea2cf5de` |
+  | rax | `f404b2f7-2c96-42c3-ad77-e63ee171cf94` |
+  | luna | `2c9528d7-a16e-4787-9c5c-dcc35400eb84` |
+  | ollie | `d39e52ce-47fd-4839-a4b7-7f67875b137f` |
+  | slam | `9b1cf18c-1712-45c2-9df9-72842783aab0` |
+  | rolo | `65f003be-bbdc-4d2d-a63d-89c056fda0df` |
+  | pix | `2156e0a1-2169-4b30-a076-71e9e371e948` |
+  | brutus | `19469361-62fb-4983-b3a0-b8d0b0a7ecf0` |
+
 ## Session 2026-07-16 addendum — voices done + engine improvements + 3D started
 
 - **Voices (48/48) delivered to repo** — see the voice-batch section far below.

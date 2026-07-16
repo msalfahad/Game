@@ -19,6 +19,7 @@ interface Puck {
   x: number; z: number; y: number;
   vx: number; vz: number; vy: number;
   power: number; grace: number;
+  slow: number; // seconds the puck has been sluggish (used to re-serve it)
   m: THREE.Mesh;
 }
 
@@ -50,6 +51,8 @@ export class HockeyGame implements GameModule {
       p.want = 0.5;
       p.vx = 0; p.vz = 0;
       p.buildRider(ctx.scene);
+      p.riding = true;
+      this.addRide(p);
     }
     makeHeads(ctx.players, 10);
     this.deco = decorateRink(ctx.scene, this.half, ctx.players.map((p) => p.hero.col));
@@ -67,6 +70,25 @@ export class HockeyGame implements GameModule {
 
   private deco!: RinkDeco;
 
+  // A rounded icy hover-disc in the player's colour that they glide on instead
+  // of running sideways along their wall.
+  private addRide(p: Player) {
+    const col = new THREE.Color(p.hero.col).getHex();
+    const disc = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.8, 2.1, 0.5, 24),
+      new THREE.MeshStandardMaterial({ color: col, roughness: 0.35, metalness: 0.45, emissive: col, emissiveIntensity: 0.18 }),
+    );
+    disc.position.y = 0.05;
+    disc.castShadow = true;
+    const rim = new THREE.Mesh(
+      new THREE.TorusGeometry(1.95, 0.24, 10, 28),
+      new THREE.MeshStandardMaterial({ color: 0xdff4ff, roughness: 0.2, metalness: 0.6, transparent: true, opacity: 0.9 }),
+    );
+    rim.rotation.x = -Math.PI / 2;
+    rim.position.y = 0.28;
+    p.group.add(disc, rim);
+  }
+
   private spawnBall() {
     const m = new THREE.Mesh(
       new THREE.SphereGeometry(0.9, 16, 16),
@@ -75,13 +97,13 @@ export class HockeyGame implements GameModule {
     m.castShadow = true;
     this.ctx.scene.add(m);
     const s = cornerServe(this.half, 25);
-    this.balls.push({ x: s.x, z: s.z, vx: s.vx, vz: s.vz, y: 1.4, vy: 0, power: 0, grace: 0.7, m });
+    this.balls.push({ x: s.x, z: s.z, vx: s.vx, vz: s.vz, y: 1.4, vy: 0, power: 0, grace: 0.7, slow: 0, m });
   }
 
   private resetBall(b: Puck) {
     const s = cornerServe(this.half, 23);
     b.x = s.x; b.z = s.z; b.vx = s.vx; b.vz = s.vz;
-    b.grace = 0.8; b.power = 0;
+    b.grace = 0.8; b.power = 0; b.slow = 0;
   }
 
   private updateRiders() {
@@ -239,6 +261,14 @@ export class HockeyGame implements GameModule {
       const cap = b.power > 0 ? 46 : 30;
       const sp = Math.hypot(b.vx, b.vz);
       if (sp > cap) { b.vx *= cap / sp; b.vz *= cap / sp; }
+      // Never let the puck crawl to a halt mid-rink: if it's been sluggish for
+      // a beat, retire it and serve a fresh, fast one from a corner.
+      if (sp < 8 && b.grace <= 0) {
+        b.slow += dt;
+        if (b.slow > 0.7) { this.resetBall(b); this.ctx.fx.burst(b.x, b.z, '#bfefff', 12); }
+      } else {
+        b.slow = 0;
+      }
       cornerBounce(b, this.half); // corner posts guard the seams between walls
 
       for (const p of this.ctx.players) {
