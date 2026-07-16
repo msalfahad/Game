@@ -147,6 +147,25 @@ original `8621d05c…` spawn — pending user confirm it's the intended take.
 | ability | showoff | WATCH THIS! | `ada9a30a-55ed-4120-8c3c-0e3258304c34` | 0.70 |
 | trash | mocking @Brutus | Too slow, big guy! Hahaha! | `a7e30970-7161-41f7-8cf2-40a4b67ad3b3` | 1.91 |
 
+## Prompt style (adopted from Vex onward)
+Per-line prompt now carries an **anime acting direction** in brackets, then the
+line text: `[anime fight-scene voice bark, <hero voice character>, <emotion>
+delivery, screamed/growled/sung over-the-top like an anime character, ending
+with <tail>] <THE LINE>`. Verified on Zap-spawn A/B: seed_audio treats the
+bracketed direction as a **style cue, not spoken text** (40-word direction →
+1.97s clip, not 12–15s). Zap's committed clips used words-only prompts; can be
+re-done in this style later if desired.
+
+## Vex (rax) — Vlad preset `e5666b9c-99a2-4fac-8b4e-abee078b186d`, loudness +8, pitch 0/-1 — GENERATED ✅ (awaiting user export → repo)
+| line | emotion | text | job id |
+|---|---|---|---|
+| spawn | dramatic | SHOWTIME! Heh heh heh… | `d0985d2d-b2c0-40c6-b704-7ada6aecc3f4` |
+| victory | gloating | Bow to the KING! Ahahaha! | `fe1b8383-3255-4126-a07b-0db8cd7ee370` |
+| losing | furious | GRRR… you'll PAY for that! | `bde4d782-f180-4c1e-bac8-2a7e6fa8e968` |
+| dodge | smug | Pathetic! Heh heh! | `ca140c22-c44f-4551-a346-6b72a69769e8` |
+| ability | menacing | LIGHTS OUT! | `6b491eab-2267-4464-a38d-e038ac60d97d` |
+| trash | mocking @Luna | Go play with a doll! Hahahaha! | `033cd92f-839a-49f9-8e60-c3f21f4e9ed2` |
+
 ## Remaining heroes — preset plan (not yet generated)
 Vex=Vlad `e5666b9c-99a2-4fac-8b4e-abee078b186d`, Luna=Luna
 `375a3398-e3b4-4f91-845d-42181e352899`, Ollie=Zoe
