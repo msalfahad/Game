@@ -117,3 +117,37 @@ single-image rigs are rough) — confirm with user before spending.
 
 ## Credits
 Start 997.86 → ~968 after 15 images (~30 cr). No further spend this session.
+
+---
+
+# Voice-bark batch — session 2026-07-16 (VOICE-BATCH-RUNBOOK.md)
+
+Executing `docs/VOICE-BATCH-RUNBOOK.md` (8 heroes × 6 lines = 48 clips). Line
+keys: `spawn, victory, losing, dodge, ability, trash`. Model `seed_audio`,
+wav/24 kHz, ~0.1 cr each. Egress is **blocked** (upload host, result CDN, and
+`d1xarpci4ikg0w` all 403 CONNECT), so clips **cannot be downloaded/committed** —
+user exports each `.wav` from the Higgsfield app. Voice sourcing (this session):
+**Zap = Brooks preset** (custom clone couldn't upload — egress); heroes 2–8 =
+best-fit presets, tuned. Delivery target on disk stays
+`public/audio/voices/<key>-<line>.wav`.
+
+Pacing: one character per batch; user copies from Higgsfield, then next hero.
+
+## Zap (zip) — Brooks preset `c2acff45-84b2-4974-892d-89fa2d4e5598`, pitch +2 / speech_rate +20 (losing +15) / loudness +5 — GENERATED ✅
+| line | emotion | text | job id | dur (s) |
+|---|---|---|---|---|
+| spawn | hyped | LET'S GOOO! | `8621d05c-f565-4c11-a9ae-bc7d725f3533` | 0.63 |
+| victory | gloating | I'M WINNING! Woo-hoo-hoo! Hahaha! | `49f7567d-c143-4d77-970d-f67786b4f91d` | 2.62 |
+| losing | angry | No no NO! Grrr! | `73d7c2ec-22a8-49ec-9695-69227aaba860` | 1.38 |
+| dodge | mocking | You CAN'T hit me! Hehehe! | `c8a92808-ce30-4430-83d5-d4399aa42538` | 1.30 |
+| ability | showoff | WATCH THIS! | `ada9a30a-55ed-4120-8c3c-0e3258304c34` | 0.70 |
+| trash | mocking @Brutus | Too slow, big guy! Hahaha! | `a7e30970-7161-41f7-8cf2-40a4b67ad3b3` | 1.91 |
+
+## Remaining heroes — preset plan (not yet generated)
+Vex=Vlad `e5666b9c-99a2-4fac-8b4e-abee078b186d`, Luna=Luna
+`375a3398-e3b4-4f91-845d-42181e352899`, Ollie=Zoe
+`d0374db1-44b9-4f05-939e-0a9ae9dbbe6a`, Slam=Roman
+`7e63ac18-5fcd-4aba-8078-a86d4e11c127`, Rolo=Leo
+`73a45c18-0c56-4642-a61e-f6b303f8ded1`, Pix=Harper
+`47fb207f-63fe-449e-915b-27b3d8098fd1`, Brutus=Orion
+`ed69c516-92d2-4b30-a967-617737a342e5`. (Picks not locked — approve per hero.)
