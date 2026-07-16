@@ -3,26 +3,6 @@ import type { FamilyDef, GameDef } from '../data/maps';
 import type { SurfaceKind } from '../data/surfaces';
 import { auroraSky, gradientSky, styledFloor } from './textures';
 
-// Fit a background texture to the viewport with "cover" behaviour (fill the
-// frame, crop the overflow) instead of stretching it — recomputed on resize.
-function coverBackground(tex: THREE.Texture) {
-  const img = tex.image as { width: number; height: number };
-  const apply = () => {
-    if (!img?.width) return;
-    const winAspect = innerWidth / innerHeight;
-    const imgAspect = img.width / img.height;
-    tex.matrixAutoUpdate = true;
-    tex.center.set(0.5, 0.5);
-    if (winAspect > imgAspect) {
-      tex.repeat.set(1, imgAspect / winAspect); // window wider → crop top/bottom
-    } else {
-      tex.repeat.set(winAspect / imgAspect, 1); // window taller → crop sides
-    }
-  };
-  apply();
-  addEventListener('resize', apply);
-}
-
 // Builds the themed arena for a game: sky, fog, lights, ground, floor (square
 // or circle), neon trim, per-family decorative props, and ambient particles.
 
@@ -52,8 +32,11 @@ export function buildWorld(
     `maps/${family.id}.webp`,
     (tex) => {
       tex.colorSpace = THREE.SRGBColorSpace;
-      coverBackground(tex);
       scene.background = tex;
+      // Brighten the backdrop so the scenic art reads clearly through the
+      // cinematic grade (otherwise the tone curve + vignette crush it to near
+      // black at the screen edges).
+      scene.backgroundIntensity = 1.35;
     },
     undefined,
     () => {}, // no art for this family — keep the fallback colour
