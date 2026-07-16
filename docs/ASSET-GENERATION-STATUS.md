@@ -2,6 +2,27 @@
 
 _Session 2026-07-15. Read this together with `docs/NEW-SESSION-RUNBOOK.md`._
 
+## Session 2026-07-16 addendum — voices done + engine improvements + 3D started
+
+- **Voices (48/48) delivered to repo** — see the voice-batch section far below.
+  Now **wired live in-match**: all 6 barks per hero trigger on
+  spawn/victory/losing/dodge(dash)/ability/trash(KO) (`voice-barks.ts`,
+  `match.ts`).
+- **Original procedural music** added in-engine (`audio.ts`): per-arena moods +
+  menu theme. Higgsfield's audio tool only does speech, so music/SFX cannot come
+  from it — this is synthesized in-engine.
+- **Mechanics: hitstop** impact-freeze (`engine.ts` + `Fx.hitstop`); KO/ability
+  events get freeze + shake + spark burst (`match.ts`).
+- **3D models (Meshy `image_to_3d`) started.** Hero image jobs from this
+  manifest are still reachable, so they feed generate_3d directly by job_id (no
+  upload — dodges egress). Cost: 35 cr textured+PBR+rigged, ~280 cr for all 8.
+  Balance 881 cr (plus plan). **Test mesh — Zap:** job
+  `fd38597a-1622-425e-bbda-0787e23b1bd4` (should_texture+enable_pbr+
+  enable_rigging, a-pose, 30k polys). GLBs download-blocked by egress → user
+  exports from Higgsfield app, same as voices. Integration (GLTFLoader replacing
+  the sprite billboard in `player.ts`) is a larger follow-up, pending quality
+  review of this test.
+
 ## TL;DR
 
 15 photoreal 2K images (8 heroes + 7 arenas) were **generated in Higgsfield**
