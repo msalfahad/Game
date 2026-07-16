@@ -2,12 +2,13 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { buildRig, type Rig } from './charanim';
 
 // Real 3D hero models (Higgsfield/Meshy rigged GLBs in public/models/<key>.glb).
 // Loaded once per hero and cloned per player (SkeletonUtils handles the rig).
 // Heroes without a GLB fall back to the 2D billboard in player.ts.
 
-const MODEL_KEYS = new Set(['zip', 'rax', 'luna', 'ollie', 'rolo', 'pix', 'brutus']);
+const MODEL_KEYS = new Set(['zip', 'rax', 'luna', 'ollie', 'rolo', 'pix', 'brutus', 'slam']);
 export function hasCharModel(key: string): boolean {
   return MODEL_KEYS.has(key);
 }
@@ -90,6 +91,7 @@ export interface CharInstance {
   model: THREE.Group;
   mixer: THREE.AnimationMixer | null;
   clips: THREE.AnimationClip[];
+  rig: Rig | null; // procedural skeletal animation (null if the rig is missing)
 }
 
 /**
@@ -116,8 +118,9 @@ export function makeCharInstance(key: string, height: number, onReady: (inst: Ch
         m.frustumCulled = false;
       }
     });
-    const mixer = l.clips.length ? new THREE.AnimationMixer(model) : null;
-    if (mixer && l.clips[0]) mixer.clipAction(l.clips[0]).play();
-    onReady({ model, mixer, clips: l.clips });
+    // Skip the baked clip (Meshy ships only a static rest pose) — we animate
+    // the skeleton procedurally instead, so a mixer would just fight the pose.
+    const rig = buildRig(model);
+    onReady({ model, mixer: null, clips: l.clips, rig });
   });
 }

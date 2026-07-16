@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Hero } from '../data/characters';
 import { heroImg } from '../data/characters';
 import { hasCharModel, makeCharInstance } from './char3d';
+import { poseRig, type Rig, type AnimState } from './charanim';
 
 // Identical hitboxes for every hero (SPEC section 3) — the disc radius does NOT
 // scale with stats. Stats only change feel (speed/knockback), never reach.
@@ -207,10 +208,14 @@ export class Player {
   // frame / puppet path is bypassed entirely and the mesh is rotated to face
   // the way the hero moves (or, in hockey, across the rink at the opponent).
   private model3d: THREE.Group | null = null;
-  private mixer3d: THREE.AnimationMixer | null = null;
+  private rig3d: Rig | null = null;
   private use3d = false;
   private faceAngle = 0; // smoothed Y rotation of the 3D model
   private bobPhase = 0;
+  private stridePhase = 0; // locomotion phase for the skeletal walk/run cycle
+  private animAmt = 0; // eased 0..1 blend so motion starts/stops smoothly
+  /** Force a one-shot animation (celebration dance / wave) regardless of movement. */
+  celebrate = false;
 
   scoreEl: HTMLElement | null = null;
   headEl: HTMLElement | null = null;
@@ -276,7 +281,7 @@ export class Player {
         if (!inst) { this.load2D(grp, startSprite, W); return; } // model failed → 2D
         grp.remove(startSprite);
         this.model3d = inst.model;
-        this.mixer3d = inst.mixer;
+        this.rig3d = inst.rig;
         this.use3d = true;
         this.charGroup.add(this.model3d);
         this.sprite = this.model3d as unknown as THREE.Object3D;
@@ -371,8 +376,6 @@ export class Player {
     // liveliness (breathe, run-lean, jump). The mesh already stands feet-on-
     // ground, centred, at hero height. ---
     if (this.use3d && this.model3d) {
-      if (this.mixer3d) this.mixer3d.update(1 / 60);
-
       // Which way should the hero look? Meshy builds the mesh facing +Z (out of
       // the screen, toward the iso camera) — that's our idle "face the player".
       let target = this.faceAngle;
@@ -395,27 +398,41 @@ export class Player {
       this.faceAngle += d * 0.25;
       this.model3d.rotation.y = this.faceAngle;
 
-      // Procedural life: gentle breathing when idle, a springy bounce + slight
-      // forward lean while moving, a stretch in the air.
       if (this.wasAirborne && !airborne) this.landSquash = 1;
       this.wasAirborne = airborne;
       this.landSquash = Math.max(0, this.landSquash - 0.08);
-      this.bobPhase += 0.13 + speed * 0.32;
-      // Bounce rides on charGroup so the model keeps its baked feet-on-ground
-      // offset; lean/flinch/facing ride on the model itself.
-      if (airborne) {
-        this.charGroup.position.y += (0.6 - this.charGroup.position.y) * 0.2;
-        this.model3d.rotation.x += (-0.12 - this.model3d.rotation.x) * 0.2;
-      } else if (speed > 0.05) {
-        const bounce = Math.abs(Math.sin(this.bobPhase)) * (0.25 + speed * 0.45);
-        this.charGroup.position.y += (bounce - this.charGroup.position.y) * 0.4;
-        this.model3d.rotation.x += (-0.08 * speed - this.model3d.rotation.x) * 0.2;
+
+      // --- skeletal animation --------------------------------------------------
+      if (this.rig3d) {
+        const moving = !airborne && speed > 0.06 && !this.celebrate;
+        this.animAmt += ((moving ? 1 : 0) - this.animAmt) * 0.2;
+        let state: AnimState;
+        if (this.celebrate) state = 'dance';
+        else if (airborne) state = 'jump';
+        else if (this.riding) state = moving ? 'sidewalk' : 'idle';
+        else state = speed > 0.45 ? 'run' : moving ? 'walk' : 'idle';
+        const loco = state === 'walk' || state === 'run' || state === 'sidewalk';
+        if (loco) this.stridePhase += dist * (state === 'run' ? 0.55 : 0.95) + 0.015;
+        poseRig(this.rig3d, state, this.stridePhase, elapsed + seed, loco ? this.animAmt : 1);
+        this.charGroup.position.y += (0 - this.charGroup.position.y) * 0.2;
+        this.model3d.rotation.x += (0 - this.model3d.rotation.x) * 0.2;
       } else {
-        const breathe = Math.sin(elapsed * 2.2 + seed) * 0.06;
-        this.charGroup.position.y += (breathe - this.charGroup.position.y) * 0.15;
-        this.model3d.rotation.x += (0 - this.model3d.rotation.x) * 0.1;
+        // No rig (unexpected): fall back to a whole-body bob + lean.
+        this.bobPhase += 0.13 + speed * 0.32;
+        if (airborne) {
+          this.charGroup.position.y += (0.6 - this.charGroup.position.y) * 0.2;
+          this.model3d.rotation.x += (-0.12 - this.model3d.rotation.x) * 0.2;
+        } else if (speed > 0.05) {
+          const bounce = Math.abs(Math.sin(this.bobPhase)) * (0.25 + speed * 0.45);
+          this.charGroup.position.y += (bounce - this.charGroup.position.y) * 0.4;
+          this.model3d.rotation.x += (-0.08 * speed - this.model3d.rotation.x) * 0.2;
+        } else {
+          const breathe = Math.sin(elapsed * 2.2 + seed) * 0.06;
+          this.charGroup.position.y += (breathe - this.charGroup.position.y) * 0.15;
+          this.model3d.rotation.x += (0 - this.model3d.rotation.x) * 0.1;
+        }
       }
-      // Flinch: quick recoil twist away from the hit.
+      // Flinch: quick recoil twist away from the hit (on the whole model).
       if (this.flinchT > 0) this.model3d.rotation.z = -this.facing * this.flinchT * 0.4 * Math.sin(this.flinchT * 18);
       else this.model3d.rotation.z += (0 - this.model3d.rotation.z) * 0.3;
       return;
