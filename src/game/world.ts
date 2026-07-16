@@ -14,6 +14,23 @@ export interface World {
   tick: (dt: number) => void;
 }
 
+// Radial alpha for the ground: opaque around the arena, fading to transparent
+// toward the rim so the plane blends into the scenic background.
+function groundFade(halfSize: number): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d')!;
+  const R = 128;
+  const inner = Math.min(0.4, (halfSize * 2.4) / 250) * R; // solid out to here
+  const outer = Math.min(0.98, (halfSize * 5.5) / 250) * R; // gone by here
+  const grd = g.createRadialGradient(128, 128, inner, 128, 128, outer);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 256, 256);
+  return new THREE.CanvasTexture(c);
+}
+
 export function buildWorld(
   scene: THREE.Scene,
   family: FamilyDef,
@@ -62,18 +79,23 @@ export function buildWorld(
   rim.position.set(0, 40, -40);
   scene.add(rim);
 
-  // Surrounding ground plane. Lava glows.
-  // 500² keeps the corners (half-diagonal ≈354) inside the r=370 backdrop ring.
+  // Surrounding ground plane, radially FADED to transparent at the rim so the
+  // arena dissolves into the scenic background instead of sitting on a hard
+  // flat disc — keeps map + backdrop reading as one image.
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(500, 500),
     new THREE.MeshStandardMaterial({
       color: new THREE.Color(t.ground).getHex(),
       roughness: 1,
       emissive: style === 'lava' ? 0x2a0c04 : 0x000000,
+      alphaMap: groundFade(halfSize),
+      transparent: true,
+      depthWrite: false,
     }),
   );
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -2;
+  ground.renderOrder = -1;
   ground.receiveShadow = true;
   scene.add(ground);
 
