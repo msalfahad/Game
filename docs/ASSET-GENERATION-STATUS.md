@@ -133,7 +133,11 @@ best-fit presets, tuned. Delivery target on disk stays
 
 Pacing: one character per batch; user copies from Higgsfield, then next hero.
 
-## Zap (zip) — Brooks preset `c2acff45-84b2-4974-892d-89fa2d4e5598`, pitch +2 / speech_rate +20 (losing +15) / loudness +5 — GENERATED ✅
+## Zap (zip) — Brooks preset `c2acff45-84b2-4974-892d-89fa2d4e5598`, pitch +2 / speech_rate +20 (losing +15) / loudness +5 — GENERATED ✅ + DELIVERED TO REPO ✅
+All 6 clips exported by user from Higgsfield app and committed to
+`public/audio/voices/zip-<line>.wav`. NOTE: `zip-spawn.wav` is a user
+re-generation (job `75a375b9-bc73-477f-bd68-67448105ac83`, ~2.7s), not the
+original `8621d05c…` spawn — pending user confirm it's the intended take.
 | line | emotion | text | job id | dur (s) |
 |---|---|---|---|---|
 | spawn | hyped | LET'S GOOO! | `8621d05c-f565-4c11-a9ae-bc7d725f3533` | 0.63 |
