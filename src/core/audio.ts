@@ -31,7 +31,8 @@ const MOODS: Record<string, Mood> = {
 class AudioEngine {
   private ac: AudioContext | null = null;
   private master: GainNode | null = null;
-  muted = false;
+  muted = false; // master: silences SFX + music + voice
+  musicMuted = false; // music-only mute (independent of master)
 
   // Music-layer state.
   private musicGain: GainNode | null = null;
@@ -145,11 +146,13 @@ class AudioEngine {
     if (!this.ac || !this.musicGain || !this.musicMood) return;
     const ac = this.ac;
     const m = MOODS[this.musicMood] ?? MOODS.menu;
-    // Duck to silence while muted but keep the clock running so it resumes.
-    this.musicGain.gain.setTargetAtTime(this.muted ? 0 : this.musicVol, ac.currentTime, 0.08);
+    // Duck to silence while muted (master or music-only) but keep the clock
+    // running so it resumes cleanly when unmuted.
+    const off = this.muted || this.musicMuted;
+    this.musicGain.gain.setTargetAtTime(off ? 0 : this.musicVol, ac.currentTime, 0.08);
     const sixteenth = 60 / m.tempo / 4;
     while (this.musicNextTime < ac.currentTime + 0.12) {
-      if (!this.muted) this.musicStep(this.musicStepIdx, this.musicNextTime, m);
+      if (!off) this.musicStep(this.musicStepIdx, this.musicNextTime, m);
       this.musicNextTime += sixteenth;
       this.musicStepIdx = (this.musicStepIdx + 1) & 63;
     }

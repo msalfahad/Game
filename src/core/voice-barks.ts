@@ -40,6 +40,7 @@ export async function playVoiceBark(
   fallbackSfx: () => void,
   volume: number = 0.8,
 ): Promise<void> {
+  if (SFX.muted) return; // master mute silences voice too
   try {
     const audio = await loadVoiceBark(url);
     audio.volume = volume;

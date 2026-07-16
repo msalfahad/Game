@@ -55,11 +55,17 @@ buildOnlineScreens({
 document.getElementById('onlineBtn')!.addEventListener('click', () => enterOnline());
 
 // Mute toggle.
+// In-game speaker button = master (all sound) mute. Persists + syncs the title
+// toggles so the two never disagree.
 const muteBtn = document.getElementById('mute')!;
+SFX.muted = localStorage.getItem('muteAll') === '1';
+muteBtn.textContent = SFX.muted ? '🔇' : '🔊';
 muteBtn.addEventListener('pointerdown', (e) => {
   e.stopPropagation();
   SFX.muted = !SFX.muted;
+  localStorage.setItem('muteAll', SFX.muted ? '1' : '0');
   muteBtn.textContent = SFX.muted ? '🔇' : '🔊';
+  (globalThis as any).__refreshAudioUI?.();
 });
 
 // Kick off the menu theme on the first user interaction (also unlocks audio on

@@ -1,4 +1,5 @@
 import { HEROES, type Hero } from '../data/characters';
+import { SFX } from '../core/audio';
 import { portraitImg, attachPortraitFallback } from './portrait';
 import { FAMILIES, familyGames, gameById, type GameDef } from '../data/maps';
 import type { Player } from '../game/player';
@@ -52,6 +53,8 @@ export function buildScreens(hooks: Hooks) {
         <option value="high" selected>High</option><option value="ultra">Ultra</option>
       </select>
     </div>
+    <div class="settingRow"><span>MUSIC</span><button id="musicToggle" class="alt">🎵 ON</button></div>
+    <div class="settingRow"><span>ALL SOUND</span><button id="soundToggle" class="alt">🔊 ON</button></div>
   </div>
 
   <div id="scrChar" class="screen hidden">
@@ -123,6 +126,31 @@ export function buildScreens(hooks: Hooks) {
   shake.addEventListener('input', () => hooks.onShakeChange(Number(shake.value) / 100));
   const quality = document.getElementById('qualitySel') as HTMLSelectElement;
   quality.addEventListener('change', () => hooks.onQualityChange(quality.value as 'low' | 'medium' | 'high' | 'ultra'));
+
+  // Audio toggles: music-only + master (all sound: SFX, music, voice). Persist
+  // the choice, and keep the in-game speaker button (#mute) in sync.
+  const musicBtn = document.getElementById('musicToggle')!;
+  const soundBtn = document.getElementById('soundToggle')!;
+  SFX.musicMuted = localStorage.getItem('muteMusic') === '1';
+  SFX.muted = localStorage.getItem('muteAll') === '1';
+  const refreshAudioUI = () => {
+    musicBtn.textContent = SFX.musicMuted ? '🔇 OFF' : '🎵 ON';
+    soundBtn.textContent = SFX.muted ? '🔇 OFF' : '🔊 ON';
+    const mb = document.getElementById('mute');
+    if (mb) mb.textContent = SFX.muted ? '🔇' : '🔊';
+  };
+  (globalThis as any).__refreshAudioUI = refreshAudioUI;
+  musicBtn.addEventListener('click', () => {
+    SFX.musicMuted = !SFX.musicMuted;
+    localStorage.setItem('muteMusic', SFX.musicMuted ? '1' : '0');
+    refreshAudioUI();
+  });
+  soundBtn.addEventListener('click', () => {
+    SFX.muted = !SFX.muted;
+    localStorage.setItem('muteAll', SFX.muted ? '1' : '0');
+    refreshAudioUI();
+  });
+  refreshAudioUI();
 
   buildTuning();
 
