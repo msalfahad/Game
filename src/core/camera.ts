@@ -8,11 +8,13 @@ import * as THREE from 'three';
 export class IsoCamera {
   readonly cam: THREE.PerspectiveCamera;
   private base = new THREE.Vector3();
+  private look = new THREE.Vector3(0, -2, 0);
   private shakeT = 0;
   private shakeScale = 0; // default OFF (user request); slider re-enables it
   private halfSize = 30;
   private zoom = 1;
   private followZ = 0;
+  private topDown = false;
 
   constructor() {
     this.cam = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 600);
@@ -38,13 +40,34 @@ export class IsoCamera {
     const dist = halfSize * 2.25 * portrait * zoom * wide;
     const height = halfSize * 1.5 * portrait * zoom * wide;
     this.base.set(0, height, dist);
+    this.look.set(0, -2, -halfSize * 0.06);
+    this.topDown = false;
+    this.followZ = 0;
+    this.applyBase();
+  }
+
+  /**
+   * Steep near-overhead view (chase games) so the whole map reads at a glance
+   * while the 3D heroes stay recognisable — a high angle, not a flat top-down.
+   */
+  frameTopDown(halfSize: number) {
+    this.halfSize = halfSize;
+    this.zoom = 1;
+    const aspect = innerWidth / innerHeight;
+    this.cam.fov = 52;
+    this.cam.aspect = aspect;
+    this.cam.updateProjectionMatrix();
+    const portrait = Math.max(1, 0.66 / aspect);
+    this.base.set(0, halfSize * 3.0 * portrait, halfSize * 1.02 * portrait);
+    this.look.set(0, 0, 0);
+    this.topDown = true;
     this.followZ = 0;
     this.applyBase();
   }
 
   private applyBase() {
     this.cam.position.set(this.base.x, this.base.y, this.base.z + this.followZ);
-    this.cam.lookAt(0, -2, -this.halfSize * 0.06 + this.followZ);
+    this.cam.lookAt(this.look.x, this.look.y, this.look.z + this.followZ);
   }
 
   /** Track a world-z (the climb camera follows the local hero up the slope). */
@@ -57,7 +80,10 @@ export class IsoCamera {
   onResize() {
     this.cam.aspect = innerWidth / innerHeight;
     this.cam.updateProjectionMatrix();
-    if (this.base.lengthSq() > 0) this.frame(this.halfSize, this.zoom);
+    if (this.base.lengthSq() > 0) {
+      if (this.topDown) this.frameTopDown(this.halfSize);
+      else this.frame(this.halfSize, this.zoom);
+    }
   }
 
   /** 0 (off) .. 1 (full) accessibility scaling for screen shake. */
