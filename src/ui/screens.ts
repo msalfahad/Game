@@ -258,8 +258,8 @@ function updInfo() {
   // Stats (0..10) shown as coloured BARS in the hero's colour rather than
   // numbers, so strengths/weaknesses read at a glance.
   const bar = (label: string, v: number) =>
-    `<div class="stat"><span class="sl">${label}</span>` +
-    `<span class="sbar"><span class="sfill" style="width:${Math.max(0, Math.min(10, v)) * 10}%;background:${sel.col}"></span></span></div>`;
+    `<span class="sl">${label}</span>` +
+    `<span class="sbar"><span class="sfill" style="width:${Math.max(0, Math.min(10, v)) * 10}%;background:${sel.col}"></span></span>`;
   el.innerHTML =
     `<div class="selName" style="color:${sel.col}">${sel.name.toUpperCase()} · ${sel.role}</div>` +
     `<div class="stats">${bar('SPD', sel.spd)}${bar('STR', sel.str)}${bar('ACC', sel.acc)}${bar('DEF', sel.def)}</div>` +
