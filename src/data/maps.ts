@@ -25,6 +25,7 @@ export type Mechanic =
   | 'collect' // grab the most pickups
   | 'paint' // claim floor tiles
   | 'mash' // smash pop-up targets
+  | 'musicalchairs' // circle the chairs; grab one when the song stops
   | 'lab'; // movement greybox
 
 export type AmbientKind = 'snow' | 'embers' | 'sand' | 'leaves' | 'stars' | 'bubbles' | 'none';
@@ -137,7 +138,7 @@ export const GAMES: GameDef[] = [
 
   // 3. Dune Clash
   g('dune-1', 'dune', 'Sand Soccer', '⚽', 1, 'goal', 'square', [], 'Soccer on drifting sand. Guard your goal line.'),
-  g('dune-2', 'dune', 'Shifting Sands', '⏳', 2, 'breaktiles', 'square', ['wind'], 'Tiles sink into the dunes... then resurface.', { decay: 'respawn' }),
+  g('dune-2', 'dune', 'Musical Chairs', '🎵', 2, 'musicalchairs', 'circle', [], 'Circle the chairs while the song plays. When it stops — grab a seat! No seat = out.'),
   g('dune-3', 'dune', 'Cactus Chaos', '🌵', 3, 'pushout', 'circle', ['wind', 'falling'], 'Shove rivals into the cactus ring.', { edge: 'cacti' }),
   g('dune-4', 'dune', 'Oasis Dash', '🏝️', 4, 'race', 'square', ['wind', 'falling', 'rollers'], 'Sprint gate to gate through the sandstorm.', { laps: 2 }),
 

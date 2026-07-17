@@ -139,8 +139,10 @@ export function buildWorld(
   scene.add(floorMesh);
 
   // Goal games skip the tall perimeter props (they blocked the near wall);
-  // rectangular corridors skip them too (the ring layout doesn't fit).
-  if (game.mechanic !== 'goal' && !rect) buildProps(scene, family, halfSize, trimMat);
+  // rectangular corridors skip them too (the ring layout doesn't fit); Musical
+  // Chairs wants a clean ring, and its tight framing put a prop in the
+  // foreground.
+  if (game.mechanic !== 'goal' && game.mechanic !== 'musicalchairs' && !rect) buildProps(scene, family, halfSize, trimMat);
   const ambientPts = buildAmbient(scene, family, halfSize);
 
   const surfaceAt = (x: number, z: number): SurfaceKind => {

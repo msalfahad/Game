@@ -25,7 +25,7 @@ export interface Rig {
   hipsRestY: number;
 }
 
-export type AnimState = 'idle' | 'walk' | 'run' | 'sidewalk' | 'jump' | 'dance' | 'wave';
+export type AnimState = 'idle' | 'walk' | 'run' | 'sidewalk' | 'jump' | 'dance' | 'wave' | 'sit';
 
 /** Find the animatable bones on a cloned model and snapshot their rest pose. */
 export function buildRig(model: THREE.Object3D): Rig | null {
@@ -157,6 +157,21 @@ export function poseRig(rig: Rig, state: AnimState, phase: number, t: number, am
       rot(rig, 'RightHand', 0, 0, w * 0.4);
       rot(rig, 'LeftArm', 0.05, 0, 0.1);
       rot(rig, 'Spine02', 0, w * 0.05, 0);
+      break;
+    }
+    case 'sit': {
+      // Seated: thighs forward ~90°, knees bent, torso a touch back, hands on
+      // the lap. The caller lowers the whole model onto the seat.
+      rot(rig, 'LeftUpLeg', -1.5, 0, 0.12);
+      rot(rig, 'RightUpLeg', -1.5, 0, -0.12);
+      rot(rig, 'LeftLeg', 1.5, 0, 0);
+      rot(rig, 'RightLeg', 1.5, 0, 0);
+      rot(rig, 'Spine02', -0.12, 0, 0);
+      rot(rig, 'LeftArm', 0.35, 0, 0.15);
+      rot(rig, 'RightArm', 0.35, 0, -0.15);
+      rot(rig, 'LeftForeArm', -0.5, 0, 0);
+      rot(rig, 'RightForeArm', -0.5, 0, 0);
+      rot(rig, 'Head', Math.sin(t * 1.5) * 0.05, Math.sin(t) * 0.1, 0);
       break;
     }
     case 'idle':

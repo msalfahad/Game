@@ -11,6 +11,7 @@ import { DodgeGame } from './dodge';
 import { CollectGame } from './collect';
 import { PaintGame } from './paint';
 import { MashGame } from './mash';
+import { MusicalChairsGame } from './musicalchairs';
 import { SurfaceLabGame } from './surfacelab';
 
 // Mechanic factory: every entry in the catalog resolves to one of these
@@ -28,6 +29,7 @@ export function makeGame(def: GameDef): GameModule {
     case 'collect': return new CollectGame();
     case 'paint': return new PaintGame();
     case 'mash': return new MashGame();
+    case 'musicalchairs': return new MusicalChairsGame();
     case 'lab': return new SurfaceLabGame();
   }
 }
