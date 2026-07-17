@@ -29,7 +29,16 @@ function base(): string {
 }
 
 function loadGltf(key: string, cb: (l: Loaded | null) => void) {
-  if (key in cache) return cb(cache[key]);
+  // Always resolve asynchronously — even on a cache hit — so callers can finish
+  // their synchronous setup first. buildRider() adds the player group to the
+  // scene AFTER requesting the model; a synchronous cache callback would run
+  // while grp.parent is still null and its !grp.parent guard would drop the
+  // model (which happens now that the hero-select screen preloads every model).
+  if (key in cache) {
+    const l = cache[key];
+    queueMicrotask(() => cb(l));
+    return;
+  }
   if (waiters[key]) {
     waiters[key].push(cb);
     return;

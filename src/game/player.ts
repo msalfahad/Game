@@ -177,6 +177,8 @@ export class Player {
   side: 'bottom' | 'top' | 'left' | 'right' = 'bottom';
   /** Hockey: mounted on a sliding ride — lock facing, no sideways run cycle. */
   riding = false;
+  /** Musical Chairs: seated on a chair — play the sit pose, don't walk. */
+  sitting = false;
 
   // Three.js
   group = new THREE.Group();
@@ -409,6 +411,14 @@ export class Player {
       this.landSquash = Math.max(0, this.landSquash - 0.08);
 
       // --- skeletal animation --------------------------------------------------
+      if (this.rig3d && this.sitting) {
+        // Seated on a chair: hold the sit pose, no bounce/lean.
+        poseRig(this.rig3d, 'sit', 0, elapsed + seed, 1);
+        this.charGroup.position.y += (0 - this.charGroup.position.y) * 0.2;
+        this.model3d.rotation.x += (0 - this.model3d.rotation.x) * 0.2;
+        this.model3d.rotation.z += (0 - this.model3d.rotation.z) * 0.2;
+        return;
+      }
       if (this.rig3d) {
         const moving = !airborne && speed > 0.06 && !this.celebrate;
         this.animAmt += ((moving ? 1 : 0) - this.animAmt) * 0.2;
