@@ -26,6 +26,7 @@ export type Mechanic =
   | 'paint' // claim floor tiles
   | 'mash' // smash pop-up targets
   | 'musicalchairs' // circle the chairs; grab one when the song stops
+  | 'chase' // 3 escapers flee 1 faster guard (top-down); hide behind crates
   | 'lab'; // movement greybox
 
 export type AmbientKind = 'snow' | 'embers' | 'sand' | 'leaves' | 'stars' | 'bubbles' | 'none';
@@ -139,7 +140,7 @@ export const GAMES: GameDef[] = [
   // 3. Dune Clash
   g('dune-1', 'dune', 'Sand Soccer', '⚽', 1, 'goal', 'square', [], 'Soccer on drifting sand. Guard your goal line.'),
   g('dune-2', 'dune', 'Musical Chairs', '🎵', 2, 'musicalchairs', 'circle', [], 'Circle the chairs while the song plays. When it stops — grab a seat! No seat = out.'),
-  g('dune-3', 'dune', 'Cactus Chaos', '🌵', 3, 'pushout', 'circle', ['wind', 'falling'], 'Shove rivals into the cactus ring.', { edge: 'cacti' }),
+  g('dune-3', 'dune', 'The Great Escape', '🏃', 3, 'chase', 'square', [], 'You broke into a forbidden yard! 3 escape, 1 guard chases with a stick. Hide behind crates, grab shoes/freeze/slingshots. Survive the guard.'),
   g('dune-4', 'dune', 'Oasis Dash', '🏝️', 4, 'race', 'square', ['wind', 'falling', 'rollers'], 'Sprint gate to gate through the sandstorm.', { laps: 2 }),
 
   // 4. Wildwood Arena
