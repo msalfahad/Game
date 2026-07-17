@@ -254,8 +254,16 @@ function buildTuning() {
 
 function updInfo() {
   const el = document.getElementById('selInfo');
-  if (el) el.textContent =
-    `${sel.name.toUpperCase()} · ${sel.role} — SPD ${sel.spd} · STR ${sel.str} · ACC ${sel.acc} · DEF ${sel.def} · ULT: ${sel.ultName}`;
+  if (!el) return;
+  // Stats (0..10) shown as coloured BARS in the hero's colour rather than
+  // numbers, so strengths/weaknesses read at a glance.
+  const bar = (label: string, v: number) =>
+    `<div class="stat"><span class="sl">${label}</span>` +
+    `<span class="sbar"><span class="sfill" style="width:${Math.max(0, Math.min(10, v)) * 10}%;background:${sel.col}"></span></span></div>`;
+  el.innerHTML =
+    `<div class="selName" style="color:${sel.col}">${sel.name.toUpperCase()} · ${sel.role}</div>` +
+    `<div class="stats">${bar('SPD', sel.spd)}${bar('STR', sel.str)}${bar('ACC', sel.acc)}${bar('DEF', sel.def)}</div>` +
+    `<div class="selUlt">ULT: ${sel.ultName}</div>`;
 }
 
 function openFamily(familyId: string) {
