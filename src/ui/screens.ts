@@ -1,6 +1,7 @@
 import { HEROES, type Hero } from '../data/characters';
 import { SFX } from '../core/audio';
 import { portraitImg, attachPortraitFallback } from './portrait';
+import { initCharSelect3d, startCharSelect3d, stopCharSelect3d, setCharSelectSelected } from './charselect3d';
 import { FAMILIES, familyGames, gameById, type GameDef } from '../data/maps';
 import type { Player } from '../game/player';
 import { TUNING, saveTuning, resetTuning } from '../core/tuning';
@@ -32,10 +33,14 @@ const ids = ['scrTitle', 'scrChar', 'scrFamilies', 'scrGames', 'scrVs', 'scrOver
 export function show(id: string) {
   for (const s of ids) document.getElementById(s)?.classList.add('hidden');
   document.getElementById(id)?.classList.remove('hidden');
+  // Only run the live hero animations while the select screen is on view.
+  if (id === 'scrChar') startCharSelect3d();
+  else stopCharSelect3d();
 }
 /** Hide every menu screen so the 3D canvas + HUD are visible during a match. */
 export function hideScreens() {
   for (const s of ids) document.getElementById(s)?.classList.add('hidden');
+  stopCharSelect3d();
 }
 
 export function buildScreens(hooks: Hooks) {
@@ -156,6 +161,7 @@ export function buildScreens(hooks: Hooks) {
 
   // Character grid.
   const grid = document.getElementById('charGrid')!;
+  const tile3d: { key: string; imgEl: HTMLElement }[] = [];
   HEROES.forEach((h, i) => {
     const d = document.createElement('div');
     d.className = 'cc' + (i === 0 ? ' sel' : '');
@@ -164,12 +170,17 @@ export function buildScreens(hooks: Hooks) {
       sel = h;
       grid.querySelectorAll('.cc').forEach((e) => e.classList.remove('sel'));
       d.classList.add('sel');
+      setCharSelectSelected(h.key); // the picked hero waves/shows off
       updInfo();
     };
     grid.appendChild(d);
+    tile3d.push({ key: h.key, imgEl: d.querySelector('img') as HTMLElement });
   });
   attachPortraitFallback(grid);
   updInfo();
+  // Live animated 3D heroes overlaid on the tiles (falls back to the static
+  // portraits if a model or WebGL is unavailable).
+  initCharSelect3d(tile3d);
 
   document.querySelectorAll('.diff').forEach((d) =>
     d.addEventListener('click', () => {
