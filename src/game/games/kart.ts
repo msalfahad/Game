@@ -143,20 +143,22 @@ export class KartGame implements GameModule {
       scene.add(dash);
     }
 
-    // Black & yellow chevron kerbs on the inner and outer edges.
-    this.buildKerb(this.outerR + 0.2, 0.9);
-    this.buildKerb(this.innerR - 0.2, 0.9);
+    // Black & yellow kerb rings ALIGNED just off the road edges (a clean striped
+    // circle, never on the driving surface): outer ring sits outside outerR,
+    // inner ring sits inside innerR against the hub.
+    this.buildKerb(this.outerR, +1);
+    this.buildKerb(this.innerR, -1);
 
-    // Raised centre hub (the infield island). castShadow OFF so it doesn't
-    // drop the whole ring into darkness; kept low and sandy-topped.
+    // Raised centre hub (the infield island), kept small so the inner kerb rings
+    // its base cleanly. castShadow OFF so it doesn't drop the ring into darkness.
     const hub = new THREE.Mesh(
-      new THREE.CylinderGeometry(this.innerR - 1, this.innerR - 0.4, 2, 40),
+      new THREE.CylinderGeometry(this.innerR - 2.1, this.innerR - 1.6, 2, 40),
       new THREE.MeshStandardMaterial({ color: 0x8a7550, roughness: 1, flatShading: true }),
     );
     hub.position.y = 1; hub.castShadow = false; hub.receiveShadow = true;
     scene.add(hub);
     const hubTop = new THREE.Mesh(
-      new THREE.CylinderGeometry(this.innerR - 1.6, this.innerR - 1, 0.6, 40),
+      new THREE.CylinderGeometry(this.innerR - 2.7, this.innerR - 2.1, 0.6, 40),
       new THREE.MeshStandardMaterial({ color: 0xc9a25b, roughness: 1 }),
     );
     hubTop.position.y = 2.2; scene.add(hubTop);
@@ -172,18 +174,24 @@ export class KartGame implements GameModule {
     this.buildDesert();
   }
 
-  private buildKerb(radius: number, y: number) {
+  /** A clean striped kerb ring hugging a road edge WITHOUT sitting on the road.
+   *  `dir` = +1 places it just OUTSIDE `edgeR`, -1 just INSIDE. Tangential bricks
+   *  tile the circle into an even black/yellow striped band. */
+  private buildKerb(edgeR: number, dir: 1 | -1) {
     const scene = this.ctx.scene;
-    const n = 48;
+    const bandW = 1.6, h = 0.9;
+    const radius = edgeR + dir * (bandW / 2 + 0.05); // road-facing face lands on edgeR
+    const n = Math.max(16, Math.round((Math.PI * 2 * radius) / 1.8));
+    const arcLen = ((Math.PI * 2 * radius) / n) * 1.04; // slight overlap → no gaps
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
-      const col = i % 2 === 0 ? 0x111111 : 0xf2c200;
+      const yellow = i % 2 === 0;
       const block = new THREE.Mesh(
-        new THREE.BoxGeometry(1.7, y, 1.7),
-        new THREE.MeshStandardMaterial({ color: col, roughness: 0.7, emissive: i % 2 ? 0x3a2c00 : 0x000000 }),
+        new THREE.BoxGeometry(arcLen, h, bandW),
+        new THREE.MeshStandardMaterial({ color: yellow ? 0xf2c200 : 0x111111, roughness: 0.7, emissive: yellow ? 0x3a2c00 : 0x000000 }),
       );
-      block.position.set(Math.cos(a) * radius, y / 2, Math.sin(a) * radius);
-      block.rotation.y = a;
+      block.position.set(Math.cos(a) * radius, h / 2, Math.sin(a) * radius);
+      block.rotation.y = Math.PI / 2 - a; // x → tangential, z → radial band
       block.castShadow = true;
       scene.add(block);
     }
@@ -231,15 +239,16 @@ export class KartGame implements GameModule {
     const duneMat = new THREE.MeshStandardMaterial({ color: 0xd7ad64, roughness: 1 });
     const cactusMat = new THREE.MeshStandardMaterial({ color: 0x3f7a34, roughness: 0.9 });
     const rockMat = new THREE.MeshStandardMaterial({ color: 0xa8794c, roughness: 1, flatShading: true });
-    // Low dunes ringing the track.
+    // Low dunes kept WELL clear of the track (their near edge never reaches the
+    // road) so the racing area stays clean sand around the ring.
     for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2 + 0.3, r = H * (1.15 + Math.random() * 0.5);
-      const dune = new THREE.Mesh(new THREE.SphereGeometry(10 + Math.random() * 10, 12, 6), duneMat);
+      const a = (i / 8) * Math.PI * 2 + 0.3, r = H * (1.7 + Math.random() * 0.5);
+      const dune = new THREE.Mesh(new THREE.SphereGeometry(7 + Math.random() * 5, 12, 6), duneMat);
       dune.scale.set(1, 0.16, 1); dune.position.set(Math.cos(a) * r, -0.5, Math.sin(a) * r); scene.add(dune);
     }
-    // A few saguaro cacti + rocks in the sand.
+    // A few saguaro cacti + rocks in the sand, out past the kerb.
     for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2 + 0.8, r = H * (1.08 + Math.random() * 0.25);
+      const a = (i / 5) * Math.PI * 2 + 0.8, r = H * (1.25 + Math.random() * 0.25);
       const g = new THREE.Group();
       const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 9, 8), cactusMat);
       trunk.position.y = 4.5; g.add(trunk);
@@ -250,7 +259,7 @@ export class KartGame implements GameModule {
       g.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); scene.add(g);
     }
     for (let i = 0; i < 10; i++) {
-      const a = Math.random() * Math.PI * 2, r = H * (1.05 + Math.random() * 0.4);
+      const a = Math.random() * Math.PI * 2, r = H * (1.28 + Math.random() * 0.4);
       const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(1 + Math.random() * 2, 0), rockMat);
       rock.position.set(Math.cos(a) * r, 0.3, Math.sin(a) * r); scene.add(rock);
     }
