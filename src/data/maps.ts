@@ -27,6 +27,7 @@ export type Mechanic =
   | 'mash' // smash pop-up targets
   | 'musicalchairs' // circle the chairs; grab one when the song stops
   | 'chase' // 3 escapers flee 1 faster guard (top-down); hide behind crates
+  | 'hotpotato' // pass the exploding watermelon; last one un-splatted wins
   | 'lab'; // movement greybox
 
 export type AmbientKind = 'snow' | 'embers' | 'sand' | 'leaves' | 'stars' | 'bubbles' | 'none';
@@ -146,7 +147,7 @@ export const GAMES: GameDef[] = [
   // 4. Wildwood Arena
   g('wild-1', 'wildwood', 'Tree Top Tumble', '🍃', 1, 'pushout', 'circle', [], 'Push rivals off the shrinking canopy platform.'),
   g('wild-2', 'wildwood', 'Rolling Logs', '🪵', 2, 'dodge', 'square', [], 'Logs sweep the grove. Jump or be flattened.', { hz: 'logs' }),
-  g('wild-3', 'wildwood', 'Poison Pond', '🐸', 3, 'breaktiles', 'square', ['falling'], 'Lilypads rot away over the poison pond.', { decay: 'ring', pond: true }),
+  g('wild-3', 'wildwood', 'Watermelon Bomb', '🍉', 3, 'hotpotato', 'square', [], 'The watermelon has a firecracker! Tap a rival to pass it. Whoever is holding it when it blows gets splatted. Last one dry wins.'),
   g('wild-4', 'wildwood', 'Jungle Race', '🦜', 4, 'race', 'square', ['falling', 'rollers'], 'Race the ruins as branches crash down.', { laps: 2 }),
 
   // 5. Sky Island Arena
