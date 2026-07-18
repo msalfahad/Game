@@ -60,6 +60,11 @@ export class KartGame implements GameModule {
   private shots: Shot[] = [];
   private pickupT = 2;
 
+  // Centre fountain (water + a kart perched on top).
+  private fountainKart: THREE.Group | null = null;
+  private fountainWater: THREE.Mesh[] = [];
+  private fountainSpray: THREE.Mesh | null = null;
+
   private boosting = false;
   private itemBtn!: HTMLButtonElement;
   private speedBtn!: HTMLButtonElement;
@@ -164,6 +169,9 @@ export class KartGame implements GameModule {
     );
     hubTop.position.y = 2.2; scene.add(hubTop);
 
+    // Fountain centrepiece (water + a kart on top) with a cactus & rock, on the hub.
+    this.buildCenterpiece();
+
     // Checkered black/white finish line across the track at θ = 0 (+x axis).
     this.buildFinishLine();
 
@@ -196,6 +204,71 @@ export class KartGame implements GameModule {
       block.castShadow = true;
       scene.add(block);
     }
+  }
+
+  /** The infield centrepiece: a tiered stone fountain with cascading water and a
+   *  kart perched on top, plus a cactus and a rock on the sandy hub. */
+  private buildCenterpiece() {
+    const scene = this.ctx.scene;
+    const y0 = 2.5; // hub top surface
+    const stone = new THREE.MeshStandardMaterial({ color: 0xc6cace, roughness: 0.9, flatShading: true });
+    const stoneD = new THREE.MeshStandardMaterial({ color: 0x9ea3a9, roughness: 1, flatShading: true });
+    const waterMat = new THREE.MeshStandardMaterial({ color: 0x45cdda, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.72, emissive: 0x0f6570, emissiveIntensity: 0.5 });
+
+    const g = new THREE.Group();
+    const cyl = (rt: number, rb: number, h: number, y: number, mat: THREE.Material) => {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, 28), mat);
+      m.position.y = y; m.castShadow = true; m.receiveShadow = true; g.add(m); return m;
+    };
+    // Two-step stone base.
+    cyl(5.0, 5.4, 0.5, 0.25, stoneD);
+    cyl(4.4, 4.7, 0.5, 0.7, stone);
+    // Lower basin bowl + a disc of water inside it.
+    cyl(4.3, 4.2, 0.7, 1.3, stone);
+    this.fountainWater.push(cyl(3.9, 3.9, 0.28, 1.55, waterMat));
+    // Central column.
+    cyl(1.0, 1.5, 2.0, 2.6, stone);
+    // Upper basin + water.
+    cyl(2.2, 1.9, 0.5, 3.7, stone);
+    this.fountainWater.push(cyl(1.7, 1.7, 0.24, 3.9, waterMat));
+    // Spout column to the kart.
+    cyl(0.5, 0.8, 1.3, 4.5, stone);
+    // Cascading water dome around the upper basin (animated).
+    const spray = new THREE.Mesh(
+      new THREE.SphereGeometry(2.7, 22, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+      waterMat.clone(),
+    );
+    (spray.material as THREE.MeshStandardMaterial).opacity = 0.32;
+    spray.position.y = 3.9; spray.scale.set(1, 0.75, 1); g.add(spray);
+    this.fountainSpray = spray;
+    // Central up-jet of water.
+    this.fountainWater.push(cyl(0.22, 0.5, 2.2, 5.7, waterMat));
+    // A kart perched on top of the fountain.
+    const kart = this.makeKart(0xffd23f);
+    kart.scale.setScalar(0.6); kart.position.y = 5.35; g.add(kart);
+    this.fountainKart = kart;
+
+    g.position.set(0, y0, 0);
+    scene.add(g);
+
+    // A saguaro cactus + a rock on the sandy hub, off to the sides of the fountain.
+    const cactusMat = new THREE.MeshStandardMaterial({ color: 0x3f7a34, roughness: 0.9 });
+    const cg = new THREE.Group();
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.65, 5, 8), cactusMat);
+    trunk.position.y = 2.5; trunk.castShadow = true; cg.add(trunk);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 1.5, 7), cactusMat);
+    arm.rotation.z = Math.PI / 2; arm.position.set(0.95, 3.0, 0); cg.add(arm);
+    const armUp = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 1.7, 7), cactusMat);
+    armUp.position.set(1.6, 3.75, 0); cg.add(armUp);
+    cg.position.set(6.6, y0, 4.4); cg.rotation.y = 0.6; scene.add(cg);
+
+    const rock = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(1.7, 0),
+      new THREE.MeshStandardMaterial({ color: 0xa8794c, roughness: 1, flatShading: true }),
+    );
+    rock.position.set(-6.8, y0 + 0.9, 4.6); rock.scale.set(1, 0.8, 1);
+    rock.rotation.set(Math.random(), Math.random() * 6, Math.random());
+    rock.castShadow = true; scene.add(rock);
   }
 
   private buildFinishLine() {
@@ -362,6 +435,7 @@ export class KartGame implements GameModule {
     this.tickPickups(dt);
     this.tickBananas();
     this.tickShots(dt);
+    this.tickFountain(elapsed);
 
     // Bots fire their held item after a beat.
     for (const p of ctx.players.slice(1)) {
@@ -372,6 +446,22 @@ export class KartGame implements GameModule {
 
     tickRoster(ctx, dt, elapsed);
     if (this.timeLeft <= 0) this.doFinish();
+  }
+
+  // Slowly turn the kart on the fountain, bob it, and shimmer the water.
+  private tickFountain(elapsed: number) {
+    if (this.fountainKart) {
+      this.fountainKart.rotation.y = elapsed * 0.7;
+      this.fountainKart.position.y = 5.35 + Math.sin(elapsed * 2) * 0.12;
+    }
+    if (this.fountainSpray) {
+      const s = 1 + Math.sin(elapsed * 3) * 0.06;
+      this.fountainSpray.scale.set(s, 0.75 + Math.sin(elapsed * 3.7) * 0.06, s);
+    }
+    for (const w of this.fountainWater) {
+      const m = w.material as THREE.MeshStandardMaterial;
+      m.emissiveIntensity = 0.4 + Math.sin(elapsed * 4 + w.position.y) * 0.18;
+    }
   }
 
   private driveKart(p: Player, dt: number) {
