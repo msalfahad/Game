@@ -69,8 +69,8 @@ muteBtn.addEventListener('pointerdown', (e) => {
 });
 
 // Kick off the menu theme on the first user interaction (also unlocks audio on
-// mobile). Match/online start switches to the arena mood; results return here.
-addEventListener('pointerdown', () => SFX.playMusic('menu'), { once: true });
+// mobile — prime iOS output synchronously in the gesture BEFORE scheduling).
+addEventListener('pointerdown', () => { SFX.unlock(); SFX.playMusic('menu'); }, { once: true });
 
 document.getElementById('loading')!.style.display = 'none';
 show('scrTitle');

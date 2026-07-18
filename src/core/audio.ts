@@ -40,7 +40,7 @@ class AudioEngine {
   private musicMood: string | null = null;
   private musicStepIdx = 0;
   private musicNextTime = 0;
-  private musicVol = 0.2;
+  private musicVol = 0.32; // prominent enough to clearly read as music on phones
 
   private ctx(): AudioContext {
     if (!this.ac) {
@@ -54,9 +54,23 @@ class AudioEngine {
     return this.ac;
   }
 
-  /** Call from a user gesture to unlock audio on mobile browsers. */
+  private primed = false;
+  /** Call from a user gesture to unlock audio on mobile browsers. iOS Safari
+   *  keeps a resumed context SILENT until a sound is started synchronously
+   *  inside the gesture, so play a 1-sample silent buffer to prime output. */
   unlock() {
-    this.ctx();
+    const ac = this.ctx();
+    if (!this.primed) {
+      try {
+        const buf = ac.createBuffer(1, 1, 22050);
+        const src = ac.createBufferSource();
+        src.buffer = buf;
+        src.connect(ac.destination);
+        src.start(0);
+        this.primed = true;
+      } catch { /* older browsers */ }
+    }
+    if (ac.state === 'suspended') ac.resume();
   }
 
   private tone(f0: number, f1: number, dur: number, type: OscillatorType, vol: number, delay = 0) {

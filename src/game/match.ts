@@ -237,10 +237,11 @@ export class Match {
     }
     // Finishing-order parade before the results screen.
     const isClimb = this.ctx?.game.mechanic === 'climb';
+    const isKart = this.ctx?.game.mechanic === 'kart';
     const labels = ranked.map((p) => String((p as any)._res ?? ''));
     victoryWalk(
       this.engine, ranked, labels,
-      { z: Math.min(this.ctx?.halfSize ?? 30, 30) * 0.24, follow: isClimb },
+      { z: Math.min(this.ctx?.halfSize ?? 30, 30) * 0.24, follow: isClimb, kart: isKart, laneZ: (this.ctx?.halfSize ?? 30) * 0.62 },
       () => this.onFinish?.(ranked, subtitle, youWon),
     );
   }

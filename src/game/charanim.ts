@@ -25,7 +25,7 @@ export interface Rig {
   hipsRestY: number;
 }
 
-export type AnimState = 'idle' | 'walk' | 'run' | 'sidewalk' | 'jump' | 'dance' | 'wave' | 'sit' | 'fall';
+export type AnimState = 'idle' | 'walk' | 'run' | 'sidewalk' | 'jump' | 'dance' | 'wave' | 'sit' | 'sitcheer' | 'fall';
 
 /** Find the animatable bones on a cloned model and snapshot their rest pose. */
 export function buildRig(model: THREE.Object3D): Rig | null {
@@ -188,6 +188,25 @@ export function poseRig(rig: Rig, state: AnimState, phase: number, t: number, am
       rot(rig, 'RightForeArm', -0.3, 0, 0);
       rot(rig, 'Spine02', 0.12, 0, 0);
       rot(rig, 'Head', 0.25, tw * 2, 0);
+      break;
+    }
+    case 'sitcheer': {
+      // Seated victory celebration — legs stay in the kart, but the arms punch
+      // up and wave overhead out of phase (hands-only dance). Slight torso bob.
+      const beat = t * 6;
+      const b = Math.sin(beat), b2 = Math.sin(beat + Math.PI / 2);
+      rot(rig, 'LeftUpLeg', -1.5, 0, 0.12);
+      rot(rig, 'RightUpLeg', -1.5, 0, -0.12);
+      rot(rig, 'LeftLeg', 1.5, 0, 0);
+      rot(rig, 'RightLeg', 1.5, 0, 0);
+      rot(rig, 'Spine02', -0.05 + Math.abs(b) * 0.08, -b * 0.08, 0);
+      rot(rig, 'LeftArm', -2.5 + b2 * 0.5, 0, 0.3);
+      rot(rig, 'RightArm', -2.5 - b2 * 0.5, 0, -0.3);
+      rot(rig, 'LeftForeArm', -0.3 + b * 0.4, 0, 0);
+      rot(rig, 'RightForeArm', -0.3 - b * 0.4, 0, 0);
+      rot(rig, 'LeftHand', 0, 0, b * 0.6);
+      rot(rig, 'RightHand', 0, 0, -b * 0.6);
+      rot(rig, 'Head', Math.abs(b) * 0.12, b * 0.18, 0);
       break;
     }
     case 'idle':
