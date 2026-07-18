@@ -179,6 +179,8 @@ export class Player {
   riding = false;
   /** Musical Chairs: seated on a chair — play the sit pose, don't walk. */
   sitting = false;
+  /** Hot Potato: stand in place facing this heading (radians) instead of moving. */
+  standFacing: number | null = null;
 
   // Three.js
   group = new THREE.Group();
@@ -392,6 +394,8 @@ export class Player {
           : this.side === 'left' ? Math.PI / 2 // faces +x (toward the right wall)
           : this.side === 'right' ? -Math.PI / 2 // faces -x (toward the left wall)
           : Math.PI; // bottom: faces -z (back to the camera)
+      } else if (this.standFacing != null) {
+        target = this.standFacing; // fixed stand (hot potato): face the circle
       } else {
         // Face the way we move (velocity is the true heading; fall back to the
         // position delta). +Z is forward, so angle = atan2(x, z).

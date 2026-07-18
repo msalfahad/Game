@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { GameModule, MatchContext } from '../context';
 import type { Player } from '../player';
-import { setupRoster, localMove, botMove, collidePlayers, tickRoster, rankBy } from '../freeroam';
+import { setupRoster, tickRoster, rankBy } from '../freeroam';
 import { matchTime } from '../../core/tuning';
 import { SFX } from '../../core/audio';
 import { markDead } from '../../ui/hud';
@@ -50,10 +50,68 @@ export class HotPotatoGame implements GameModule {
     this.outCount = 0;
 
     setupRoster(ctx, '', 0.55);
+    // Everyone stands STILL in a tight circle, facing the centre — the melon is
+    // just passed around, no running.
+    const R = 8.5;
+    ctx.players.forEach((p, i) => {
+      const a = (i / ctx.players.length) * Math.PI * 2 + Math.PI / 4;
+      p.x = Math.cos(a) * R;
+      p.z = Math.sin(a) * R;
+      p.vx = 0; p.vz = 0;
+      p.standFacing = Math.atan2(-p.x, -p.z); // look at the middle
+      p.group.position.set(p.x, 0, p.z);
+    });
     this.buildMelon();
+    this.buildScenery();
     this.buildUI();
     this.arm(Math.floor(Math.random() * ctx.players.length));
     ctx.fx.banner('🍉 HOT POTATO!', '#7ED321');
+  }
+
+  /** A grassy patch feel: a few whole watermelons resting on the ground + tufts. */
+  private buildScenery() {
+    const H = this.ctx.halfSize;
+    // 3 whole watermelons lying on the floor around the ring.
+    for (const [x, z] of [[-15, 12], [17, -9], [-4, -18]] as const) {
+      const w = this.makeGroundMelon();
+      w.position.set(x, 1.4, z);
+      w.rotation.set(Math.random(), Math.random() * 6, Math.PI / 2 + (Math.random() - 0.5) * 0.4);
+      this.ctx.scene.add(w);
+    }
+    // Grass tufts scattered on the field.
+    const grassMat = new THREE.MeshStandardMaterial({ color: 0x5aa83a, roughness: 1 });
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * Math.PI * 2, r = 6 + Math.random() * (H - 8);
+      const tuft = new THREE.Group();
+      for (let b = 0; b < 4; b++) {
+        const blade = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.6 + Math.random(), 4), grassMat);
+        blade.position.set((Math.random() - 0.5) * 1.2, 0.8, (Math.random() - 0.5) * 1.2);
+        blade.rotation.z = (Math.random() - 0.5) * 0.5;
+        tuft.add(blade);
+      }
+      tuft.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+      this.ctx.scene.add(tuft);
+    }
+  }
+
+  private makeGroundMelon(): THREE.Group {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.SphereGeometry(1.8, 18, 14),
+      new THREE.MeshStandardMaterial({ color: 0x2f9e34, roughness: 0.6, emissive: 0x0d3a12 }),
+    );
+    body.scale.y = 1.1;
+    body.castShadow = true;
+    g.add(body);
+    const stripeMat = new THREE.MeshStandardMaterial({ color: 0x165a1e, roughness: 0.7 });
+    for (let i = 0; i < 6; i++) {
+      const s = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.14, 6, 22), stripeMat);
+      s.rotation.z = Math.PI / 2;
+      s.rotation.y = (i / 6) * Math.PI;
+      s.scale.set(1, 1.1, 1);
+      g.add(s);
+    }
+    return g;
   }
 
   private alive(): Player[] { return this.ctx.players.filter((p) => !p.dead); }
@@ -101,22 +159,7 @@ export class HotPotatoGame implements GameModule {
     this.armT += dt;
     this.throwT = Math.max(0, this.throwT - dt);
 
-    // Movement (everyone roams freely).
-    localMove(ctx, dt);
-    for (const p of ctx.players.slice(1)) {
-      if (p.dead) continue;
-      p.retarget -= dt;
-      if (p.retarget <= 0) {
-        p.retarget = 0.4 + Math.random() * 0.4;
-        // The holder wanders; everyone else drifts AWAY from the holder.
-        if (p.index === this.holder) { p.tx = (Math.random() - 0.5) * ctx.halfSize; p.tz = (Math.random() - 0.5) * ctx.halfSize; }
-        else { const h = ctx.players[this.holder]; const ax = p.x - h.x, az = p.z - h.z, L = Math.hypot(ax, az) || 1;
-          p.tx = p.x + (ax / L) * 20 + (Math.random() - 0.5) * 14; p.tz = p.z + (az / L) * 20 + (Math.random() - 0.5) * 14; }
-      }
-      botMove(ctx, p, p.tx, p.tz, dt);
-    }
-    collidePlayers(ctx);
-
+    // Players stand still in the circle — the melon does the moving.
     // Bot holder gets nervous and passes — instantly once things feel hot.
     const holderP = ctx.players[this.holder];
     if (!holderP.you && this.elapsed >= this.canThrowAt && (this.armT > this.botThrowAt || this.armT > 7)) {
