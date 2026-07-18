@@ -47,7 +47,16 @@ export class MazeGame implements GameModule {
   private spot: (THREE.SpotLight | null)[] = [];
   private spotTarget: (THREE.Object3D | null)[] = [];
   private selfLantern: THREE.PointLight | null = null;
+  private torchGlow: (THREE.PointLight | null)[] = [];
   private labels: (THREE.Sprite | null)[] = [];
+
+  // Lights-on reveal: a 4s look at the whole map before night falls, plus two
+  // random 2s "lightning" flashes during the match.
+  private revealT = 4;
+  private flashTimes: number[] = [];
+  private flashed: boolean[] = [];
+  private nightFell = false;
+  private revealLight: THREE.AmbientLight | null = null;
 
   private ui!: HTMLElement;
   private exposeFill!: HTMLElement;
@@ -59,11 +68,20 @@ export class MazeGame implements GameModule {
     this.ctx = ctx;
     this.title = ctx.game.name;
     this.finished = false;
-    this.timeLeft = matchTime(80);
+    this.timeLeft = matchTime(60);
     this.walls = [];
     this.exposure = 0;
     this.outCount = 0;
-    this.startGrace = 2;
+    this.revealT = 4;          // 4s bright reveal before night
+    this.startGrace = 4;       // no catching / exposure during the reveal
+    this.nightFell = false;
+    // Two random 2s bright flashes somewhere in the middle of the match.
+    const T = this.timeLeft;
+    const a = 12 + Math.random() * (T - 26);
+    let bt = 12 + Math.random() * (T - 26);
+    while (Math.abs(bt - a) < 9) bt = 12 + Math.random() * (T - 26);
+    this.flashTimes = [Math.max(a, bt), Math.min(a, bt)]; // as timeLeft thresholds
+    this.flashed = [false, false];
 
     setupRoster(ctx, '', 0.72);
     this.policeIdx = Math.floor(Math.random() * ctx.players.length);
@@ -93,7 +111,7 @@ export class MazeGame implements GameModule {
       ? '🚔 Tag all 3 robbers from behind!'
       : '🔦 Torch the cop for 5s — mind your back!';
     setObjective(this.objective);
-    ctx.fx.banner(this.youPolice ? 'YOU ARE THE COP 🚔' : 'YOU ARE A ROBBER 🔦', this.youPolice ? '#4DA6FF' : '#FFD23F');
+    ctx.fx.banner(this.youPolice ? 'COP 🚔 — memorise the map!' : 'ROBBER 🔦 — memorise the map!', this.youPolice ? '#4DA6FF' : '#FFD23F');
   }
 
   private police(): Player { return this.ctx.players[this.policeIdx]; }
@@ -114,22 +132,17 @@ export class MazeGame implements GameModule {
       cap.position.set(cx, height + 0.05, cz); this.ctx.scene.add(cap);
       this.walls.push({ x: cx, z: cz, hw, hd });
     };
-    // A symmetric block maze with wide corridors, hiding nooks and sight-breaks.
-    const T = 1.3; // wall half-thickness
+    // An OPEN arena with scattered cover — thin, isolated blocks with wide gaps
+    // everywhere, an open middle and no enclosed rooms or dead-ends, so you can
+    // walk anywhere between them.
+    const T = 1.0; // thin walls
     const layout: [number, number, number, number][] = [
-      // central pinwheel
-      [0, 0, 6, T], [0, 0, T, 6],
-      // ring of mid walls
-      [15, 0, T, 7], [-15, 0, T, 7], [0, 15, 7, T], [0, -15, 7, T],
-      // corner rooms (L-shapes)
-      [15, 15, 5, T], [15, 15, T, 5],
-      [-15, 15, 5, T], [-15, 15, T, 5],
-      [15, -15, 5, T], [15, -15, T, 5],
-      [-15, -15, 5, T], [-15, -15, T, 5],
-      // scattered pillars for cover
-      [8, 8, T, T], [-8, 8, T, T], [8, -8, T, T], [-8, -8, T, T],
-      [22, 8, T, 4], [-22, 8, T, 4], [22, -8, T, 4], [-22, -8, T, 4],
-      [8, 22, 4, T], [-8, 22, 4, T], [8, -22, 4, T], [-8, -22, 4, T],
+      // 4 short mid walls (light cover around the centre)
+      [0, -13, 3.5, T], [0, 13, 3.5, T], [-13, 0, T, 3.5], [13, 0, T, 3.5],
+      // 4 inner pillars on the diagonals (open cross through the middle)
+      [-9, -9, 1.4, 1.4], [9, -9, 1.4, 1.4], [-9, 9, 1.4, 1.4], [9, 9, 1.4, 1.4],
+      // 4 outer short walls near the edges
+      [0, -21, 3.5, T], [0, 21, 3.5, T], [-21, 0, T, 3.5], [21, 0, T, 3.5],
     ];
     for (const [cx, cz, hw, hd] of layout) wall(cx, cz, hw, hd);
     void H;
@@ -149,19 +162,27 @@ export class MazeGame implements GameModule {
       this.selfLantern = new THREE.PointLight(0xffe8b0, 16, 14, 0);
       scene.add(this.selfLantern);
     }
-    // Every robber carries a torch (spotlight). The local robber's casts shadows
-    // so walls actually hide the cop; the others are cheap beam-only lights.
-    // decay 0 keeps the beam bright across the whole cone.
+    // Reveal fill — flips the whole scene bright during the 4s opening look and
+    // the two lightning flashes (drives the robber's view like the cop's).
+    this.revealLight = new THREE.AmbientLight(0xdce6ff, 0);
+    scene.add(this.revealLight);
+    // Every robber carries a torch (spotlight) plus a small glow so a lit-up
+    // robber is a visible beacon to the others (they can regroup). The local
+    // robber's torch casts shadows so walls hide the cop; a 512 map keeps it
+    // cheap. decay 0 keeps beams bright across the top-down distance.
     for (const p of this.robbers()) {
       const isLocal = p.index === 0;
       const s = new THREE.SpotLight(0xfff3d0, 0, RANGE_BY_BARS[3], CONE_BY_BARS[3], 0.35, 0);
       s.castShadow = isLocal;
-      if (isLocal) { s.shadow.mapSize.set(1024, 1024); s.shadow.camera.near = 1; s.shadow.camera.far = 30; }
+      if (isLocal) { s.shadow.mapSize.set(512, 512); s.shadow.camera.near = 1; s.shadow.camera.far = 30; }
       const tgt = new THREE.Object3D();
       scene.add(tgt); s.target = tgt;
       scene.add(s);
       this.spot[p.index] = s;
       this.spotTarget[p.index] = tgt;
+      const glow = new THREE.PointLight(0xffdf9a, 0, 9, 0);
+      scene.add(glow);
+      this.torchGlow[p.index] = glow;
     }
   }
 
@@ -201,8 +222,12 @@ export class MazeGame implements GameModule {
     }
   }
 
-  // Can the LOCAL robber currently see player p (self-lantern pool or torch cone)?
+  // Can the LOCAL robber currently see player p (self-lantern pool, torch cone,
+  // or — for a fellow robber — because THEIR torch is on, giving them away so
+  // the robbers can find and regroup with each other)?
   private litForLocal(p: Player, you: Player): boolean {
+    if (this.revealT > 0) return true; // everything visible during a reveal/flash
+    if (p.index !== this.policeIdx && this.emitting(p.index)) return true; // lit-up ally
     const d = Math.hypot(p.x - you.x, p.z - you.z);
     if (d < 7) return true;
     if (this.emitting(0)) {
@@ -240,6 +265,20 @@ export class MazeGame implements GameModule {
     ctx.setClock(this.timeLeft);
     this.startGrace = Math.max(0, this.startGrace - dt);
     const police = this.police();
+
+    // Reveal / flashes: 4s bright opening, then two random 2s flashes.
+    if (this.revealT > 0) {
+      this.revealT -= dt;
+      if (this.revealT <= 0 && !this.nightFell) { this.nightFell = true; ctx.fx.banner('🌙 LIGHTS OUT!', '#4DA6FF'); }
+    }
+    for (let k = 0; k < this.flashTimes.length; k++) {
+      if (!this.flashed[k] && this.nightFell && this.timeLeft <= this.flashTimes[k]) {
+        this.flashed[k] = true;
+        this.revealT = Math.max(this.revealT, 2);
+        ctx.fx.banner('⚡ LIGHTS!', '#ffe66d');
+      }
+    }
+    if (this.revealLight) this.revealLight.intensity = this.revealT > 0 ? 4.0 : 0;
 
     // Movement.
     if (this.policeIdx === 0) this.moveLocal(police, dt);
@@ -342,6 +381,8 @@ export class MazeGame implements GameModule {
       const fx = Math.sin(this.faceAng[p.index]), fz = Math.cos(this.faceAng[p.index]);
       s.position.set(p.x, 3.2, p.z);
       tgt.position.set(p.x + fx * 10, 1.2, p.z + fz * 10);
+      const glow = this.torchGlow[p.index];
+      if (glow) { glow.intensity = on ? 7 : 0; glow.position.set(p.x, 3, p.z); }
     }
     if (this.selfLantern) {
       const you = this.ctx.players[0];
