@@ -85,7 +85,7 @@ export class ChaseGame implements GameModule {
     this.crates = [];
     this.boxes = [];
     this.bolts = [];
-    this.boxT = 3;
+    this.boxT = 2 + Math.random() * 3;
     this.caughtOrder = 0;
     this.guardSlowT = 0;
     this.startGrace = 1.6;
@@ -97,7 +97,8 @@ export class ChaseGame implements GameModule {
     // Guard starts in the middle room; escapers wait out in the corridor
     // corners, so the guard has to break out through a gap to chase.
     const H = ctx.halfSize;
-    const corners = [[H * 0.78, H * 0.78], [-H * 0.78, H * 0.78], [-H * 0.78, -H * 0.78], [H * 0.78, -H * 0.78]];
+    // Open corridor corners (no rocks there now) so escapers never spawn stuck.
+    const corners = [[H * 0.68, H * 0.68], [-H * 0.68, H * 0.68], [-H * 0.68, -H * 0.68], [H * 0.68, -H * 0.68]];
     let ci = 0;
     ctx.players.forEach((p, i) => {
       p.invulnT = 0;
@@ -150,11 +151,11 @@ export class ChaseGame implements GameModule {
       wall(sx, -(gap + seg), thick, seg);
       wall(sx, gap + seg, thick, seg);
     }
-    // Boulders: two in the middle room + one per corridor corner, for cover.
+    // Small boulders for LIGHT cover, all in the OPEN middle room (diagonals,
+    // clear of the centre and the four entrance lanes). The corridors and
+    // corners stay clear so nobody gets trapped.
     const rocks: [number, number, number][] = [
-      [inner * 0.5, -inner * 0.4, 2.6], [-inner * 0.55, inner * 0.45, 2.4],
-      [inner * 1.55, inner * 1.55, 2.6], [-inner * 1.55, -inner * 1.55, 2.5],
-      [inner * 1.55, -inner * 1.55, 2.4], [-inner * 1.55, inner * 1.55, 2.5],
+      [8, 8, 1.9], [-8, -8, 1.9], [9, -7, 1.8], [-7, 9, 1.8],
     ];
     for (const [x, z, s] of rocks) { this.ctx.scene.add(this.makeRock(x, z, s)); this.crates.push({ x, z, hw: s, hd: s }); }
     this.buildDesert();
@@ -301,7 +302,7 @@ export class ChaseGame implements GameModule {
 
     // --- pickups + bolts ------------------------------------------------------
     this.boxT -= dt;
-    if (this.boxT <= 0 && this.boxes.length < 3) { this.boxT = 5; this.spawnBox(); }
+    if (this.boxT <= 0 && this.boxes.length < 3) { this.boxT = 3 + Math.random() * 5; this.spawnBox(); } // random timing
     for (const b of this.boxes) b.group.rotation.y += dt * 2;
     this.checkPickups();
     this.tickBolts(dt);
@@ -421,12 +422,14 @@ export class ChaseGame implements GameModule {
   // --- pickups ---------------------------------------------------------------
   private openSpot(): { x: number; z: number } {
     const H = this.ctx.halfSize - 4;
-    for (let tries = 0; tries < 30; tries++) {
+    for (let tries = 0; tries < 40; tries++) {
       const x = (Math.random() - 0.5) * 2 * H;
       const z = (Math.random() - 0.5) * 2 * H;
-      if (this.crates.every((c) => Math.abs(x - c.x) > c.hw + 2.5 || Math.abs(z - c.z) > c.hd + 2.5)) return { x, z };
+      const clearOfWalls = this.crates.every((c) => Math.abs(x - c.x) > c.hw + 2.5 || Math.abs(z - c.z) > c.hd + 2.5);
+      const clearOfBoxes = this.boxes.every((b) => Math.hypot(x - b.x, z - b.z) > 14); // never right next to another pickup
+      if (clearOfWalls && clearOfBoxes) return { x, z };
     }
-    return { x: 0, z: 0 };
+    return { x: (Math.random() - 0.5) * 2 * H, z: (Math.random() - 0.5) * 2 * H };
   }
 
   private spawnBox() {
