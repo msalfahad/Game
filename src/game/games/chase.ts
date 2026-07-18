@@ -23,6 +23,29 @@ const GUARD_SPEED = 1.26; // guard's flat speed advantage
 const SHOES_SPEED = 1.55; // escaper speed while shod (beats the guard)
 const CATCH_R = HITBOX_RADIUS * 2 + 2.5; // stick reach
 
+// Procedural wooden-crate face (planks + X-brace + frame), shared by all crates.
+let _crateTex: THREE.CanvasTexture | null = null;
+function crateTex(): THREE.CanvasTexture {
+  if (_crateTex) return _crateTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#c69049';
+  g.fillRect(0, 0, 128, 128);
+  // wood grain
+  g.strokeStyle = 'rgba(120,80,30,.28)';
+  g.lineWidth = 1;
+  for (let i = 0; i < 16; i++) { const y = Math.random() * 128; g.beginPath(); g.moveTo(0, y); g.lineTo(128, y); g.stroke(); }
+  g.strokeStyle = '#6b4a1e';
+  g.lineWidth = 7;
+  g.strokeRect(3, 3, 122, 122); // frame
+  g.lineWidth = 6;
+  g.beginPath(); g.moveTo(6, 6); g.lineTo(122, 122); g.moveTo(122, 6); g.lineTo(6, 122); g.stroke(); // X brace
+  _crateTex = new THREE.CanvasTexture(c);
+  _crateTex.colorSpace = THREE.SRGBColorSpace;
+  return _crateTex;
+}
+
 export class ChaseGame implements GameModule {
   readonly stickMode = 'float' as const;
   title = 'The Great Escape';
@@ -85,21 +108,123 @@ export class ChaseGame implements GameModule {
   // --- build -----------------------------------------------------------------
   private buildCrates() {
     const H = this.ctx.halfSize;
-    const mat = new THREE.MeshStandardMaterial({ color: 0xb9762f, roughness: 0.85, emissive: 0x2a1608 });
-    const add = (x: number, z: number, s = 2.4) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(s * 2, 5, s * 2), mat);
-      m.position.set(x, 2.5, z);
-      m.castShadow = true;
-      m.receiveShadow = true;
-      this.ctx.scene.add(m);
+    // Fewer, better-looking cover: a scatter of wooden crates + a couple of
+    // sandstone boulders. Each is one AABB the players slide around.
+    const spots: [number, number, number, 'crate' | 'rock'][] = [
+      [-H * 0.55, -H * 0.6, 2.6, 'crate'], [H * 0.55, -H * 0.6, 2.4, 'rock'],
+      [-H * 0.6, H * 0.55, 2.4, 'rock'], [H * 0.55, H * 0.58, 2.7, 'crate'],
+      [0, -H * 0.5, 2.5, 'crate'], [0, H * 0.52, 2.5, 'crate'],
+      [-H * 0.52, 0, 2.6, 'crate'], [H * 0.52, 0, 2.4, 'rock'],
+      [0, 0, 3.1, 'rock'], [-H * 0.24, -H * 0.22, 2.3, 'crate'], [H * 0.26, H * 0.2, 2.3, 'crate'],
+    ];
+    for (const [x, z, s, kind] of spots) {
+      this.ctx.scene.add(kind === 'crate' ? this.makeCrate(x, z, s) : this.makeRock(x, z, s));
       this.crates.push({ x, z, hw: s, hd: s });
+    }
+    this.buildDesert();
+  }
+
+  private makeCrate(x: number, z: number, s: number): THREE.Group {
+    const g = new THREE.Group();
+    const h = 5;
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(s * 2, h, s * 2),
+      new THREE.MeshStandardMaterial({ map: crateTex(), roughness: 0.85, emissive: 0x2a1608, emissiveIntensity: 0.35 }),
+    );
+    body.castShadow = true; body.receiveShadow = true;
+    g.add(body);
+    // Darker plank frame on the vertical edges for a real crate silhouette.
+    const beam = new THREE.MeshStandardMaterial({ color: 0x6b4a1e, roughness: 0.9 });
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.5, h + 0.1, 0.5), beam);
+      post.position.set(sx * s, 0, sz * s);
+      g.add(post);
+    }
+    g.position.set(x, h / 2, z);
+    g.rotation.y = Math.random() * 0.5 - 0.25;
+    return g;
+  }
+
+  private makeRock(x: number, z: number, s: number): THREE.Group {
+    const g = new THREE.Group();
+    const rock = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(s * 1.15, 0),
+      new THREE.MeshStandardMaterial({ color: 0xb08050, roughness: 1, flatShading: true, emissive: 0x241206 }),
+    );
+    rock.position.y = s * 0.7;
+    rock.scale.y = 0.9;
+    rock.rotation.set(Math.random(), Math.random() * 6, Math.random());
+    rock.castShadow = true; rock.receiveShadow = true;
+    g.add(rock);
+    g.position.set(x, 0, z);
+    return g;
+  }
+
+  /** Arizona backdrop OUTSIDE the yard: red mesas, saguaro cacti, dunes, rocks.
+   *  Everything sits low and just past the walls so it frames the top-down view
+   *  without looming over the play area. */
+  private buildDesert() {
+    const H = this.ctx.halfSize;
+    const scene = this.ctx.scene;
+    const mesaMats = [
+      new THREE.MeshStandardMaterial({ color: 0xb5651d, roughness: 1, flatShading: true }),
+      new THREE.MeshStandardMaterial({ color: 0x9c4f1a, roughness: 1, flatShading: true }),
+    ];
+    const duneMat = new THREE.MeshStandardMaterial({ color: 0xd9b06a, roughness: 1 });
+    const cactusMat = new THREE.MeshStandardMaterial({ color: 0x4e7a3a, roughness: 0.9 });
+
+    // Flat-topped red-rock buttes ringing the yard — small footprint, moderate
+    // height, set out past the walls so they read as distant formations.
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2 + 0.4;
+      const r = H * (1.7 + Math.random() * 0.6);
+      const rad = 8 + Math.random() * 7;
+      const hgt = 12 + Math.random() * 12;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(rad * 0.8, rad, hgt, 7), mesaMats[i % 2]);
+      m.position.set(x, hgt / 2 - 4, z);
+      scene.add(m);
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(rad * 0.45, rad * 0.62, hgt * 0.55, 7), mesaMats[(i + 1) % 2]);
+      top.position.set(x, hgt + hgt * 0.27 - 4, z);
+      scene.add(top);
+    }
+
+    // Saguaro cacti (trunk + upswept arms) just outside the walls.
+    const saguaro = (x: number, z: number, sc: number) => {
+      const g = new THREE.Group();
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.9 * sc, 1.1 * sc, 10 * sc, 8), cactusMat);
+      trunk.position.y = 5 * sc; g.add(trunk);
+      const arm = (side: number, y: number) => {
+        const horiz = new THREE.Mesh(new THREE.CylinderGeometry(0.5 * sc, 0.55 * sc, 2.4 * sc, 7), cactusMat);
+        horiz.rotation.z = Math.PI / 2; horiz.position.set(side * 1.5 * sc, y, 0); g.add(horiz);
+        const up = new THREE.Mesh(new THREE.CylinderGeometry(0.5 * sc, 0.55 * sc, 3 * sc, 7), cactusMat);
+        up.position.set(side * 2.6 * sc, y + 1.5 * sc, 0); g.add(up);
+      };
+      arm(1, 6 * sc); arm(-1, 7.5 * sc);
+      g.position.set(x, 0, z); g.rotation.y = Math.random() * 6;
+      scene.add(g);
     };
-    // Four crates along each edge (inset from the wall).
-    const inset = H - 6;
-    const spots = [-H * 0.6, -H * 0.2, H * 0.2, H * 0.6];
-    for (const s of spots) { add(s, -inset); add(s, inset); add(-inset, s); add(inset, s); }
-    // A few interior obstacles to break up the middle (like the yard's tyres).
-    add(0, 0, 3); add(-H * 0.34, -H * 0.3); add(H * 0.34, H * 0.3); add(H * 0.32, -H * 0.34); add(-H * 0.32, H * 0.34);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + 0.15;
+      const r = H * (1.15 + Math.random() * 0.25);
+      saguaro(Math.cos(a) * r, Math.sin(a) * r, 0.75 + Math.random() * 0.5);
+    }
+
+    // Low sand dunes + scattered rocks on the desert floor around the yard.
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2, r = H * (1.2 + Math.random() * 0.7);
+      const dune = new THREE.Mesh(new THREE.SphereGeometry(7 + Math.random() * 8, 10, 6), duneMat);
+      dune.scale.set(1, 0.2, 1);
+      dune.position.set(Math.cos(a) * r, -2, Math.sin(a) * r);
+      scene.add(dune);
+    }
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0xa8794c, roughness: 1, flatShading: true });
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2, r = H * (1.1 + Math.random() * 0.7);
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(1.2 + Math.random() * 2, 0), rockMat);
+      rock.position.set(Math.cos(a) * r, 0.4, Math.sin(a) * r);
+      scene.add(rock);
+    }
   }
 
   private attachStick() {
