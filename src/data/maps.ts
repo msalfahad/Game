@@ -28,6 +28,7 @@ export type Mechanic =
   | 'musicalchairs' // circle the chairs; grab one when the song stops
   | 'chase' // 3 escapers flee 1 faster guard (top-down); hide behind crates
   | 'hotpotato' // pass the exploding watermelon; last one un-splatted wins
+  | 'kart' // race karts round a ring track, grab item pickups, most laps wins
   | 'lab'; // movement greybox
 
 export type AmbientKind = 'snow' | 'embers' | 'sand' | 'leaves' | 'stars' | 'bubbles' | 'none';
@@ -139,7 +140,7 @@ export const GAMES: GameDef[] = [
   g('inferno-4', 'inferno', 'Volcano Rush', '🌋', 4, 'climb', 'square', [], 'Climb the erupting volcano! Dodge rolling lava rocks and the crater guardian\'s fireballs.', { volcano: 1 }),
 
   // 3. Dune Clash
-  g('dune-1', 'dune', 'Sand Soccer', '⚽', 1, 'goal', 'square', [], 'Soccer on drifting sand. Guard your goal line.'),
+  g('dune-1', 'dune', 'Race Kart', '🏎️', 1, 'kart', 'circle', [], 'Race karts around the desert ring! Grab items — balls, bananas, boosts, zaps and rockets — and rack up the most laps before time.'),
   g('dune-2', 'dune', 'Musical Chairs', '🎵', 2, 'musicalchairs', 'circle', [], 'Circle the chairs while the song plays. When it stops — grab a seat! No seat = out.'),
   g('dune-3', 'dune', 'The Great Escape', '🏃', 3, 'chase', 'square', [], 'You broke into a forbidden yard! 3 escape, 1 guard chases with a stick. Hide behind crates, grab shoes/freeze/slingshots. Survive the guard.'),
   g('dune-4', 'dune', 'Oasis Dash', '🏝️', 4, 'race', 'square', ['wind', 'falling', 'rollers'], 'Sprint gate to gate through the sandstorm.', { laps: 2 }),
