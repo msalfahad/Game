@@ -157,6 +157,10 @@ export class Input {
       // 'none': no analog stick at all (movement is button-driven, e.g. Musical
       // Chairs) — so a tap under the RUN/HIT buttons never spawns a phantom stick.
       if (this.mode === 'none') continue;
+      // A touch that starts on a game-control button (marked [data-nostick], e.g.
+      // the kart SPEED/ITEM buttons) must not also spawn a steering stick.
+      const tgt = t.target as HTMLElement | null;
+      if (tgt && tgt.closest && tgt.closest('[data-nostick]')) continue;
       if (this.stick.id !== null) continue;
       this.stick.id = t.identifier;
       this.stick.ox = t.clientX;
