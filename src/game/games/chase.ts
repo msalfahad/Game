@@ -8,20 +8,24 @@ import { SFX } from '../../core/audio';
 import { markDead, setScore, setObjective } from '../../ui/hud';
 
 // THE GREAT ESCAPE (Dune Clash). Top-down chase: 3 players are the ESCAPE TEAM,
-// 1 random player is the GUARD (faster, carries a stick). Touch = caught/out;
-// the guard works through them one at a time. Escapers hide behind crates and
-// grab pickups that spawn every 5s: SHOES (speed burst), FREEZE (freeze the
-// guard 2s), and a SLINGSHOT (auto-fires a bolt that slows the guard 4s from
-// range). Guard wins by catching all 3 before time; any survivor wins otherwise.
-// No power buttons — pure movement + automatic pickups/catches.
+// 1 random player is the GUARD (faster, carries a stick). Touch = caught/out.
+// The guard navigates the walled maze with a waypoint graph (string-pulled
+// shortest path) so it actually hunts you down instead of grinding on walls.
+// Escapers grab pickups that let them SABOTAGE each other (it's every runner
+// for themselves — outlast the others): SHOES (speed burst for yourself),
+// FREEZE (freeze the nearest rival in place → guard bait), and a STUN BOLT
+// (homing shot that stuns + knocks the nearest rival). With no rival left they
+// fall back onto the guard. Guard wins by catching all 3 before time; any
+// survivor wins otherwise. No power buttons — pure movement + auto pickups.
 
 interface Crate { x: number; z: number; hw: number; hd: number; }
 interface Box { x: number; z: number; kind: 'shoes' | 'freeze' | 'sling'; group: THREE.Group; }
-interface Bolt { x: number; z: number; vx: number; vz: number; group: THREE.Group; life: number; }
+interface Bolt { x: number; z: number; vx: number; vz: number; group: THREE.Group; life: number; target: Player; }
+interface NavNode { x: number; z: number; }
 
-const GUARD_SPEED = 1.26; // guard's flat speed advantage
-const SHOES_SPEED = 1.55; // escaper speed while shod (beats the guard)
-const CATCH_R = HITBOX_RADIUS * 2 + 2.5; // stick reach
+const GUARD_SPEED = 1.4; // guard's flat speed advantage — reels runners in
+const SHOES_SPEED = 1.62; // escaper speed while shod (still beats the guard)
+const CATCH_R = HITBOX_RADIUS * 2 + 3.2; // stick reach
 
 // --- pickup item models: each looks like the power it grants ----------------
 function makeShoe(): THREE.Group {
@@ -76,6 +80,8 @@ export class ChaseGame implements GameModule {
   private caughtOrder = 0;
   private guardSlowT = 0;
   private startGrace = 1.6;
+  private nav: NavNode[] = [];
+  private navEdges: number[][] = [];
 
   init(ctx: MatchContext) {
     this.ctx = ctx;
@@ -89,10 +95,13 @@ export class ChaseGame implements GameModule {
     this.caughtOrder = 0;
     this.guardSlowT = 0;
     this.startGrace = 1.6;
+    this.guardTarget = null;
+    this.guardTargetT = 0;
 
     setupRoster(ctx, '', 0.7);
     this.guardIdx = Math.floor(Math.random() * ctx.players.length);
     this.buildCrates();
+    this.buildNav();
 
     // Guard starts in the middle room; escapers wait out in the corridor
     // corners, so the guard has to break out through a gap to chase.
@@ -315,7 +324,19 @@ export class ChaseGame implements GameModule {
   }
 
   private speedMul(p: Player): number {
-    if (p.index === this.guardIdx) return GUARD_SPEED * (this.guardSlowT > 0 ? 0.5 : 1);
+    if (p.index === this.guardIdx) {
+      // The guard SPRINTS to close a big gap, then eases to base speed for the
+      // precise tag — so runners get reeled in, but a fresh pair of SHOES still
+      // outruns the guard at close range (the escape valve).
+      let boost = 1;
+      const prey = this.aliveEscapers();
+      if (prey.length) {
+        let d = Infinity;
+        for (const q of prey) d = Math.min(d, Math.hypot(q.x - p.x, q.z - p.z));
+        boost = d > 20 ? 1.42 : d > 12 ? 1.2 : 1;
+      }
+      return GUARD_SPEED * boost * (this.guardSlowT > 0 ? 0.5 : 1);
+    }
     return p.shoesT > 0 ? SHOES_SPEED : 1;
   }
 
@@ -324,33 +345,38 @@ export class ChaseGame implements GameModule {
     localMove(this.ctx, dt, { noClamp: true, speedMul: this.speedMul(p) });
   }
 
+  // --- guard bot: hunts the nearest escaper through the maze ------------------
+  private guardTarget: Player | null = null;
+  private guardTargetT = 0;
   private moveBotGuard(p: Player, dt: number) {
     if (p.freezeT > 0) return;
     p.retarget -= dt;
+    this.guardTargetT -= dt;
     const prey = this.aliveEscapers();
     if (!prey.length) return;
+
+    // Pick a prey to commit to. Keep the current one for a dwell period so the
+    // guard doesn't dither at a junction flipping between equidistant runners —
+    // only switch when it expires, the target dies, or someone is much closer.
+    let t = this.guardTarget && !this.guardTarget.dead ? this.guardTarget : null;
+    if (!t || this.guardTargetT <= 0) {
+      let best = Infinity, pick = prey[0];
+      for (const q of prey) { const d = Math.hypot(q.x - p.x, q.z - p.z); if (d < best) { best = d; pick = q; } }
+      if (t && t !== pick) {
+        const cur = Math.hypot(t.x - p.x, t.z - p.z);
+        if (cur > best * 1.6) t = pick; // current one drifted far — swap
+      } else t = pick;
+      this.guardTargetT = 1.6;
+    }
+    this.guardTarget = t;
+
     if (p.retarget <= 0) {
-      p.retarget = 0.2;
-      // Chase the nearest escaper, aiming slightly ahead of them.
-      let t = prey[0], best = Infinity;
-      for (const q of prey) { const d = Math.hypot(q.x - p.x, q.z - p.z); if (d < best) { best = d; t = q; } }
-      const nav = this.routeThroughGap(p, t.x + t.vx * 0.25, t.z + t.vz * 0.25);
-      p.tx = nav[0]; p.tz = nav[1];
+      p.retarget = 0.18;
+      // Lead the target (intercept, don't tail) then route around the walls.
+      const [nx, nz] = this.navTo(p, t.x + t.vx * 0.5, t.z + t.vz * 0.5);
+      p.tx = nx; p.tz = nz;
     }
     botMove(this.ctx, p, p.tx, p.tz, dt, { noClamp: true, speedMul: this.speedMul(p) });
-  }
-
-  /** If bot and target are on opposite sides of the inner wall, head to the
-   *  nearest entrance gap first so the guard doesn't grind against a wall. */
-  private routeThroughGap(p: Player, tx: number, tz: number): [number, number] {
-    const inner = this.inner;
-    const pIn = Math.abs(p.x) < inner - 1 && Math.abs(p.z) < inner - 1;
-    const tIn = Math.abs(tx) < inner - 1 && Math.abs(tz) < inner - 1;
-    if (pIn === tIn) return [tx, tz];
-    const gaps: [number, number][] = [[0, -inner], [0, inner], [-inner, 0], [inner, 0]];
-    let g = gaps[0], bd = Infinity;
-    for (const gg of gaps) { const d = Math.hypot(gg[0] - p.x, gg[1] - p.z); if (d < bd) { bd = d; g = gg; } }
-    return g;
   }
 
   private moveBotEscaper(p: Player, dt: number) {
@@ -361,18 +387,133 @@ export class ChaseGame implements GameModule {
       p.retarget = 0.25 + Math.random() * 0.2;
       const gd = Math.hypot(guard.x - p.x, guard.z - p.z);
       const box = this.nearestBox(p);
+      let tx: number, tz: number;
       // Grab a nearby pickup when the guard isn't breathing down your neck.
-      if (box && gd > 14 && Math.hypot(box.x - p.x, box.z - p.z) < 22) {
-        p.tx = box.x; p.tz = box.z;
+      if (box && gd > 14 && Math.hypot(box.x - p.x, box.z - p.z) < 24) {
+        tx = box.x; tz = box.z;
       } else {
-        // Flee directly away from the guard, biased along the walls.
-        const ax = p.x - guard.x, az = p.z - guard.z;
-        const L = Math.hypot(ax, az) || 1;
-        p.tx = p.x + (ax / L) * 30 + (Math.random() - 0.5) * 12;
-        p.tz = p.z + (az / L) * 30 + (Math.random() - 0.5) * 12;
+        // Flee roughly AWAY from the guard (with a little wobble). Natural, not
+        // superhuman — so a faster guard can corner you against a wall.
+        const ax = p.x - guard.x, az = p.z - guard.z, L = Math.hypot(ax, az) || 1;
+        const jitter = (Math.random() - 0.5) * 0.9;
+        const dirx = ax / L, dirz = az / L;
+        tx = p.x + (dirx * Math.cos(jitter) - dirz * Math.sin(jitter)) * 34;
+        tz = p.z + (dirx * Math.sin(jitter) + dirz * Math.cos(jitter)) * 34;
       }
+      const [nx, nz] = this.navTo(p, tx, tz);
+      p.tx = nx; p.tz = nz;
     }
     botMove(this.ctx, p, p.tx, p.tz, dt, { noClamp: true, speedMul: this.speedMul(p) });
+  }
+
+  // --- waypoint navigation ----------------------------------------------------
+  // A tiny graph the bots steer along so they route through the entrance gaps
+  // instead of grinding on the inner walls. Nodes: middle, the 4 gaps, and the
+  // 4 corridor corners; edges connect neighbours with clear line-of-sight.
+  private buildNav() {
+    const H = this.ctx.halfSize;
+    const inner = this.inner;
+    const cr = (inner + H) / 2; // radius of the outer corridor ring
+    // Every edge below is a straight, axis-aligned line that stays clear of the
+    // inner walls: centre↔gaps run along an axis through the room; gaps↔corridor
+    // mids run straight out through the opening; corridor mids↔corners run along
+    // the outer ring. No edge cuts a wall corner, so the guard never snags.
+    this.nav = [
+      { x: 0, z: 0 },          // 0  centre
+      { x: 0, z: -inner },     // 1  N gap
+      { x: 0, z: inner },      // 2  S gap
+      { x: inner, z: 0 },      // 3  E gap
+      { x: -inner, z: 0 },     // 4  W gap
+      { x: 0, z: -cr },        // 5  N corridor mid
+      { x: 0, z: cr },         // 6  S corridor mid
+      { x: cr, z: 0 },         // 7  E corridor mid
+      { x: -cr, z: 0 },        // 8  W corridor mid
+      { x: cr, z: -cr },       // 9  NE corner
+      { x: -cr, z: -cr },      // 10 NW corner
+      { x: cr, z: cr },        // 11 SE corner
+      { x: -cr, z: cr },       // 12 SW corner
+    ];
+    this.navEdges = [
+      [1, 2, 3, 4],     // 0  centre → gaps
+      [0, 5],           // 1  N gap ↔ centre, N mid
+      [0, 6],           // 2  S gap ↔ centre, S mid
+      [0, 7],           // 3  E gap ↔ centre, E mid
+      [0, 8],           // 4  W gap ↔ centre, W mid
+      [1, 9, 10],       // 5  N mid ↔ N gap, NE, NW
+      [2, 11, 12],      // 6  S mid ↔ S gap, SE, SW
+      [3, 9, 11],       // 7  E mid ↔ E gap, NE, SE
+      [4, 10, 12],      // 8  W mid ↔ W gap, NW, SW
+      [5, 7],           // 9  NE ↔ N mid, E mid
+      [5, 8],           // 10 NW ↔ N mid, W mid
+      [6, 7],           // 11 SE ↔ S mid, E mid
+      [6, 8],           // 12 SW ↔ S mid, W mid
+    ];
+  }
+
+  /** True if a straight line from (x0,z0) to (x1,z1) clears every wall/rock. */
+  private segClear(x0: number, z0: number, x1: number, z1: number): boolean {
+    const dx = x1 - x0, dz = z1 - z0;
+    const dist = Math.hypot(dx, dz);
+    const steps = Math.max(2, Math.ceil(dist / 1.2));
+    const pad = HITBOX_RADIUS + 0.3;
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps, x = x0 + dx * t, z = z0 + dz * t;
+      for (const c of this.crates) {
+        if (Math.abs(x - c.x) < c.hw + pad && Math.abs(z - c.z) < c.hd + pad) return false;
+      }
+    }
+    return true;
+  }
+
+  private nearestVisibleNode(x: number, z: number): number {
+    let best = -1, bd = Infinity;
+    for (let i = 0; i < this.nav.length; i++) {
+      const w = this.nav[i], d = Math.hypot(x - w.x, z - w.z);
+      if (d < bd && this.segClear(x, z, w.x, w.z)) { bd = d; best = i; }
+    }
+    if (best < 0) { // nothing visible — snap to the plain nearest as a fallback
+      for (let i = 0; i < this.nav.length; i++) {
+        const w = this.nav[i], d = Math.hypot(x - w.x, z - w.z);
+        if (d < bd) { bd = d; best = i; }
+      }
+    }
+    return best;
+  }
+
+  private bfs(a: number, b: number): number[] | null {
+    const prev = new Array(this.nav.length).fill(-1);
+    const seen = new Array(this.nav.length).fill(false);
+    const q = [a]; seen[a] = true;
+    while (q.length) {
+      const n = q.shift()!;
+      if (n === b) break;
+      for (const m of this.navEdges[n]) if (!seen[m]) { seen[m] = true; prev[m] = n; q.push(m); }
+    }
+    if (!seen[b]) return null;
+    const path: number[] = []; let cur = b;
+    while (cur !== -1) { path.unshift(cur); cur = prev[cur]; }
+    return path;
+  }
+
+  /** Immediate steering target toward (tx,tz), routed around walls. Uses
+   *  string-pulling: aim at the farthest path waypoint still in clear sight. */
+  private navTo(p: Player, tx: number, tz: number): [number, number] {
+    if (this.segClear(p.x, p.z, tx, tz)) return [tx, tz];
+    const start = this.nearestVisibleNode(p.x, p.z);
+    const goal = this.nearestVisibleNode(tx, tz);
+    if (start < 0 || goal < 0) return [tx, tz];
+    if (start === goal) return [this.nav[start].x, this.nav[start].z];
+    const path = this.bfs(start, goal);
+    if (!path) return [this.nav[start].x, this.nav[start].z];
+    // Farthest path node still in clear sight (string-pulling for smoothness)…
+    let aim = path[0];
+    for (const n of path) if (this.segClear(p.x, p.z, this.nav[n].x, this.nav[n].z)) aim = n;
+    // …but once we've basically reached that node, commit to the NEXT hop along
+    // the (hand-verified, traversable) graph edge so we don't stall on a node
+    // whose successor is hidden behind a wall corner.
+    const ai = path.indexOf(aim);
+    if (ai < path.length - 1 && Math.hypot(p.x - this.nav[aim].x, p.z - this.nav[aim].z) < 4.5) aim = path[ai + 1];
+    return [this.nav[aim].x, this.nav[aim].z];
   }
 
   private catchEscaper(p: Player) {
@@ -472,27 +613,48 @@ export class ChaseGame implements GameModule {
       this.ctx.scene.remove(b.group);
       this.boxes.splice(i, 1);
       if (b.kind === 'shoes') {
+        // Speed is the only self-buff — outrun the guard for a few seconds.
         taker.shoesT = Math.max(taker.shoesT, 5);
         this.ctx.fx.banner(taker.you ? '👟 SPEED!' : '', '#7ED321');
       } else if (b.kind === 'freeze') {
-        const g = this.guard();
-        g.freezeT = Math.max(g.freezeT, 2);
-        g.zapped = true;
-        SFX.zap();
-        this.ctx.fx.burst(g.x, g.z, '#4DA6FF', 14);
-        this.ctx.fx.banner(taker.you ? '❄️ GUARD FROZEN!' : '', '#4DA6FF');
+        // Freeze the nearest RIVAL escaper in place (guard bait). No rival? the
+        // guard gets it instead so the pickup is never wasted.
+        const victim = this.nearestRival(taker);
+        if (victim) {
+          victim.freezeT = Math.max(victim.freezeT, victim.index === this.guardIdx ? 2 : 1.8);
+          victim.zapped = true;
+          SFX.zap();
+          this.ctx.fx.burst(victim.x, victim.z, '#4DA6FF', 14);
+          const froze = victim.index === this.guardIdx ? 'GUARD FROZEN' : `${victim.hero.name} FROZEN`;
+          this.ctx.fx.banner(taker.you ? '❄️ ' + froze + '!' : victim.you ? '❄️ YOU\'RE FROZEN!' : '', '#4DA6FF');
+        }
       } else {
-        this.fireBolt(taker);
-        this.ctx.fx.banner(taker.you ? '🎯 SLINGSHOT!' : '', '#FF3D9E');
+        // Stun bolt: homing shot at the nearest rival (or the guard if alone).
+        const victim = this.nearestRival(taker);
+        if (victim) {
+          this.fireBolt(taker, victim);
+          this.ctx.fx.banner(taker.you ? '💫 STUN BOLT!' : '', '#FF3D9E');
+        }
       }
       SFX.power();
     }
   }
 
-  // --- slingshot bolt (homes on the guard, slows him 4s) ---------------------
-  private fireBolt(from: Player) {
-    const g = this.guard();
-    const dx = g.x - from.x, dz = g.z - from.z, L = Math.hypot(dx, dz) || 1;
+  /** Nearest OTHER alive escaper to attack; if you're the last runner, the
+   *  guard becomes the target so freeze/stun still do something. */
+  private nearestRival(p: Player): Player | null {
+    let best: Player | null = null, bd = Infinity;
+    for (const q of this.aliveEscapers()) {
+      if (q === p) continue;
+      const d = Math.hypot(q.x - p.x, q.z - p.z);
+      if (d < bd) { bd = d; best = q; }
+    }
+    return best ?? this.guard();
+  }
+
+  // --- stun bolt (homes on its target: stuns a rival, or slows the guard) -----
+  private fireBolt(from: Player, target: Player) {
+    const dx = target.x - from.x, dz = target.z - from.z, L = Math.hypot(dx, dz) || 1;
     const group = new THREE.Group();
     const m = new THREE.Mesh(
       new THREE.SphereGeometry(0.9, 10, 10),
@@ -502,29 +664,38 @@ export class ChaseGame implements GameModule {
     group.add(m);
     group.position.set(from.x, 0, from.z);
     this.ctx.scene.add(group);
-    this.bolts.push({ x: from.x, z: from.z, vx: (dx / L) * 46, vz: (dz / L) * 46, group, life: 2.5 });
+    this.bolts.push({ x: from.x, z: from.z, vx: (dx / L) * 46, vz: (dz / L) * 46, group, life: 2.5, target });
   }
 
   private tickBolts(dt: number) {
-    const g = this.guard();
     for (let i = this.bolts.length - 1; i >= 0; i--) {
       const b = this.bolts[i];
+      const tg = b.target;
       b.life -= dt;
-      // Gentle homing so it reliably connects.
-      const dx = g.x - b.x, dz = g.z - b.z, L = Math.hypot(dx, dz) || 1;
+      // Gentle homing so it reliably connects with whoever it's chasing.
+      const dx = tg.x - b.x, dz = tg.z - b.z, L = Math.hypot(dx, dz) || 1;
       b.vx += (dx / L) * 90 * dt; b.vz += (dz / L) * 90 * dt;
       const sp = Math.hypot(b.vx, b.vz) || 1; const cap = 52;
       if (sp > cap) { b.vx = (b.vx / sp) * cap; b.vz = (b.vz / sp) * cap; }
       b.x += b.vx * dt; b.z += b.vz * dt;
       b.group.position.set(b.x, 0, b.z);
-      if (L < HITBOX_RADIUS + 1.2) {
-        this.guardSlowT = Math.max(this.guardSlowT, 4);
+      if (!tg.dead && L < HITBOX_RADIUS + 1.2) {
         SFX.hit();
-        this.ctx.fx.burst(g.x, g.z, '#FF3D9E', 14);
-        if (g.you) this.ctx.fx.banner('SLOWED!', '#FF3D9E');
+        this.ctx.fx.burst(tg.x, tg.z, '#FF3D9E', 14);
+        if (tg.index === this.guardIdx) {
+          this.guardSlowT = Math.max(this.guardSlowT, 4);
+          if (tg.you) this.ctx.fx.banner('SLOWED!', '#FF3D9E');
+        } else {
+          // Stun a rival: brief freeze + a shove in the bolt's direction.
+          tg.freezeT = Math.max(tg.freezeT, 1.1);
+          tg.zapped = true;
+          const kl = Math.hypot(b.vx, b.vz) || 1;
+          tg.vx += (b.vx / kl) * 9; tg.vz += (b.vz / kl) * 9;
+          if (tg.you) this.ctx.fx.banner('💫 STUNNED!', '#FF3D9E');
+        }
         this.ctx.scene.remove(b.group);
         this.bolts.splice(i, 1);
-      } else if (b.life <= 0) {
+      } else if (b.life <= 0 || tg.dead) {
         this.ctx.scene.remove(b.group);
         this.bolts.splice(i, 1);
       }
