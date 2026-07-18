@@ -29,6 +29,7 @@ export type Mechanic =
   | 'chase' // 3 escapers flee 1 faster guard (top-down); hide behind crates
   | 'hotpotato' // pass the exploding watermelon; last one un-splatted wins
   | 'kart' // race karts round a ring track, grab item pickups, most laps wins
+  | 'maze' // night maze: 3 robbers with torches vs 1 fast cop who sees in the dark
   | 'lab'; // movement greybox
 
 export type AmbientKind = 'snow' | 'embers' | 'sand' | 'leaves' | 'stars' | 'bubbles' | 'none';
@@ -143,7 +144,7 @@ export const GAMES: GameDef[] = [
   g('dune-1', 'dune', 'Race Kart', '🏎️', 1, 'kart', 'circle', [], 'Race karts around the desert ring! Grab items — balls, bananas, boosts, zaps and rockets — and rack up the most laps before time.'),
   g('dune-2', 'dune', 'Musical Chairs', '🎵', 2, 'musicalchairs', 'circle', [], 'Circle the chairs while the song plays. When it stops — grab a seat! No seat = out.'),
   g('dune-3', 'dune', 'The Great Escape', '🏃', 3, 'chase', 'square', [], 'You broke into a forbidden yard! 3 escape, 1 guard chases with a stick. Hide behind crates, grab shoes/freeze/slingshots. Survive the guard.'),
-  g('dune-4', 'dune', 'Oasis Dash', '🏝️', 4, 'race', 'square', ['wind', 'falling', 'rollers'], 'Sprint gate to gate through the sandstorm.', { laps: 2 }),
+  g('dune-4', 'dune', 'Night Heist', '🔦', 4, 'maze', 'square', [], 'Lights out! 3 robbers with fading torches must blind the cop — hold 5s of torchlight on them to win. The cop sees in the dark, runs faster, and tags robbers from behind.'),
 
   // 4. Wildwood Arena
   g('wild-1', 'wildwood', 'Tree Top Tumble', '🍃', 1, 'pushout', 'circle', [], 'Push rivals off the shrinking canopy platform.'),

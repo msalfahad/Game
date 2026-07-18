@@ -40,11 +40,14 @@ export function buildWorld(
 ): World {
   const t = family.theme;
   const style = family.style;
+  // Night maze (Night Heist): a dark, moonlit theme where the map and the
+  // background match — torch-lit robbers vs a cop who sees in the dark.
+  const night = game.mechanic === 'maze';
 
   // The family's generated arena key art fills the whole background behind the
   // 3D arena (the immersive "sky behind the rink" look). Flat theme colour is
   // the fallback until the image loads, or if a family has no art.
-  scene.background = new THREE.Color(t.skyBot);
+  scene.background = new THREE.Color(night ? 0x070b18 : t.skyBot);
   const loader = new THREE.TextureLoader();
   const applyBg = (tex: THREE.Texture) => {
     tex.colorSpace = THREE.SRGBColorSpace;
@@ -55,18 +58,19 @@ export function buildWorld(
   };
   // Prefer a portrait, phone-composed background (maps/<id>-bg.png) so the
   // scene fills a tall screen without cropping out the sky; fall back to the
-  // landscape card art, then to the flat theme colour.
-  loader.load(
+  // landscape card art, then to the flat theme colour. Night keeps the flat
+  // dark sky so map + background read as one continuous night.
+  if (!night) loader.load(
     `maps/${family.id}-bg.png`,
     applyBg,
     undefined,
     () => loader.load(`maps/${family.id}.webp`, applyBg, undefined, () => {}),
   );
-  scene.fog = new THREE.Fog(new THREE.Color(t.fog).getHex(), halfSize * 3.0, halfSize * 7.5);
+  scene.fog = new THREE.Fog(new THREE.Color(night ? 0x070b18 : t.fog).getHex(), halfSize * (night ? 1.6 : 3.0), halfSize * (night ? 4.5 : 7.5));
   void auroraSky; void gradientSky; // retained for the single-file/legacy path
 
-  scene.add(new THREE.AmbientLight(t.light, 0.75));
-  const sun = new THREE.DirectionalLight(t.light, 0.9);
+  scene.add(new THREE.AmbientLight(night ? 0x2a3450 : t.light, night ? 0.18 : 0.75));
+  const sun = new THREE.DirectionalLight(night ? 0x5a6a9a : t.light, night ? 0.2 : 0.9);
   sun.position.set(24, 95, -12);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048); // crisper contact shadows for the 3D heroes
@@ -75,7 +79,7 @@ export function buildWorld(
   sun.shadow.camera.top = halfSize * 1.6;
   sun.shadow.camera.bottom = -halfSize * 1.6;
   scene.add(sun);
-  const rim = new THREE.PointLight(t.trim, 0.6, 300);
+  const rim = new THREE.PointLight(t.trim, night ? 0.15 : 0.6, 300);
   rim.position.set(0, 40, -40);
   scene.add(rim);
 
@@ -85,7 +89,7 @@ export function buildWorld(
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(500, 500),
     new THREE.MeshStandardMaterial({
-      color: new THREE.Color(t.ground).getHex(),
+      color: night ? 0x0a0e1e : new THREE.Color(t.ground).getHex(),
       roughness: 1,
       emissive: style === 'lava' ? 0x2a0c04 : 0x000000,
       alphaMap: groundFade(halfSize),
@@ -99,13 +103,14 @@ export function buildWorld(
   ground.receiveShadow = true;
   scene.add(ground);
 
-  // Arena floor.
+  // Arena floor. Night maze uses a plain dark ground so the torch beams read.
   const ftex = styledFloor(style);
   const shiny = style === 'ice' || style === 'sky';
   const fmat = new THREE.MeshStandardMaterial({
-    map: ftex,
-    roughness: shiny ? 0.6 : 0.85,
-    metalness: shiny ? 0.1 : 0.05,
+    map: night ? null : ftex,
+    color: night ? 0x2c3550 : 0xffffff,
+    roughness: night ? 1 : shiny ? 0.6 : 0.85,
+    metalness: shiny && !night ? 0.1 : 0.05,
     emissive: style === 'lava' ? 0x3a1008 : 0x000000,
     emissiveIntensity: style === 'lava' ? 0.6 : 0,
   });
@@ -142,7 +147,7 @@ export function buildWorld(
   // rectangular corridors skip them too (the ring layout doesn't fit); Musical
   // Chairs wants a clean ring, and its tight framing put a prop in the
   // foreground.
-  if (game.mechanic !== 'goal' && game.mechanic !== 'musicalchairs' && game.mechanic !== 'chase' && game.mechanic !== 'kart' && !rect) buildProps(scene, family, halfSize, trimMat);
+  if (game.mechanic !== 'goal' && game.mechanic !== 'musicalchairs' && game.mechanic !== 'chase' && game.mechanic !== 'kart' && game.mechanic !== 'maze' && !rect) buildProps(scene, family, halfSize, trimMat);
   const ambientPts = buildAmbient(scene, family, halfSize);
 
   const surfaceAt = (x: number, z: number): SurfaceKind => {
