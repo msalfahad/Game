@@ -30,6 +30,7 @@ export type Mechanic =
   | 'hotpotato' // pass the exploding watermelon; last one un-splatted wins
   | 'kart' // race karts round a ring track, grab item pickups, most laps wins
   | 'maze' // night maze: 3 robbers with torches vs 1 fast cop who sees in the dark
+  | 'lavafloor' // stand on tiles over real lava; they fall 1s after you step on
   | 'lab'; // movement greybox
 
 export type AmbientKind = 'snow' | 'embers' | 'sand' | 'leaves' | 'stars' | 'bubbles' | 'none';
@@ -136,7 +137,7 @@ export const GAMES: GameDef[] = [
 
   // 2. Inferno Arena
   g('inferno-1', 'inferno', 'Lava Hockey', '🔥', 1, 'goal', 'square', [], 'Hockey on obsidian. The ember puck burns.'),
-  g('inferno-2', 'inferno', 'Floor Is Lava', '🌋', 2, 'breaktiles', 'square', ['geysers'], 'Platforms crumble into lava. Stay on top.', { decay: 'ring' }),
+  g('inferno-2', 'inferno', 'Floor Is Lava', '🌋', 2, 'lavafloor', 'square', [], 'The floor is real lava! Tiles drop 1s after you step on them. Jump and double-jump across the gaps — last one out of the lava wins.'),
   g('inferno-3', 'inferno', 'Blast Zone', '💣', 3, 'throwfight', 'square', ['geysers', 'falling'], 'Grab bombs. Big blasts, big knockback.', { proj: 'bomb' }),
   g('inferno-4', 'inferno', 'Volcano Rush', '🌋', 4, 'climb', 'square', [], 'Climb the erupting volcano! Dodge rolling lava rocks and the crater guardian\'s fireballs.', { volcano: 1 }),
 
