@@ -142,7 +142,7 @@ export function buildWorld(
   // rectangular corridors skip them too (the ring layout doesn't fit); Musical
   // Chairs wants a clean ring, and its tight framing put a prop in the
   // foreground.
-  if (game.mechanic !== 'goal' && game.mechanic !== 'musicalchairs' && !rect) buildProps(scene, family, halfSize, trimMat);
+  if (game.mechanic !== 'goal' && game.mechanic !== 'musicalchairs' && game.mechanic !== 'chase' && !rect) buildProps(scene, family, halfSize, trimMat);
   const ambientPts = buildAmbient(scene, family, halfSize);
 
   const surfaceAt = (x: number, z: number): SurfaceKind => {
