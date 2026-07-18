@@ -179,6 +179,8 @@ export class Player {
   riding = false;
   /** Musical Chairs: seated on a chair — play the sit pose, don't walk. */
   sitting = false;
+  /** Musical Chairs: knocked flat by a HIT — lie on the floor, can't act. */
+  fallen = false;
   /** Hot Potato: stand in place facing this heading (radians) instead of moving. */
   standFacing: number | null = null;
 
@@ -415,6 +417,15 @@ export class Player {
       this.landSquash = Math.max(0, this.landSquash - 0.08);
 
       // --- skeletal animation --------------------------------------------------
+      if (this.rig3d && this.fallen) {
+        // Knocked flat: sprawl pose + tip the whole model onto its back, lowered
+        // to the ground so it clearly reads as "fell down".
+        poseRig(this.rig3d, 'fall', 0, elapsed + seed, 1);
+        this.charGroup.position.y += (0 - this.charGroup.position.y) * 0.2;
+        this.model3d.rotation.x += (-Math.PI / 2 - this.model3d.rotation.x) * 0.25;
+        this.model3d.rotation.z += (0 - this.model3d.rotation.z) * 0.2;
+        return;
+      }
       if (this.rig3d && this.sitting) {
         // Seated on a chair: hold the sit pose, no bounce/lean.
         poseRig(this.rig3d, 'sit', 0, elapsed + seed, 1);
