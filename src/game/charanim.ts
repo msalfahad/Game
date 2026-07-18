@@ -25,7 +25,7 @@ export interface Rig {
   hipsRestY: number;
 }
 
-export type AnimState = 'idle' | 'walk' | 'run' | 'sidewalk' | 'jump' | 'dance' | 'wave' | 'sit';
+export type AnimState = 'idle' | 'walk' | 'run' | 'sidewalk' | 'jump' | 'dance' | 'wave' | 'sit' | 'fall';
 
 /** Find the animatable bones on a cloned model and snapshot their rest pose. */
 export function buildRig(model: THREE.Object3D): Rig | null {
@@ -172,6 +172,22 @@ export function poseRig(rig: Rig, state: AnimState, phase: number, t: number, am
       rot(rig, 'LeftForeArm', -0.5, 0, 0);
       rot(rig, 'RightForeArm', -0.5, 0, 0);
       rot(rig, 'Head', Math.sin(t * 1.5) * 0.05, Math.sin(t) * 0.1, 0);
+      break;
+    }
+    case 'fall': {
+      // Knocked flat on the back: legs sprawled and lifted, arms flung out to
+      // the sides, a little dazed twitch. The caller lays the whole model down.
+      const tw = Math.sin(t * 9) * 0.06; // dazed twitch
+      rot(rig, 'LeftUpLeg', -0.5, 0, 0.5);
+      rot(rig, 'RightUpLeg', -0.5, 0, -0.5);
+      rot(rig, 'LeftLeg', 0.7 + tw, 0, 0);
+      rot(rig, 'RightLeg', 0.7 - tw, 0, 0);
+      rot(rig, 'LeftArm', 0, 0, 1.1 + tw);
+      rot(rig, 'RightArm', 0, 0, -1.1 - tw);
+      rot(rig, 'LeftForeArm', -0.3, 0, 0);
+      rot(rig, 'RightForeArm', -0.3, 0, 0);
+      rot(rig, 'Spine02', 0.12, 0, 0);
+      rot(rig, 'Head', 0.25, tw * 2, 0);
       break;
     }
     case 'idle':

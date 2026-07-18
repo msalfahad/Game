@@ -8,7 +8,7 @@ import { SFX } from './audio';
 //     hidden 1:1 direct-drag mode for 1-axis games like hockey.
 // Tap on the right side of the screen = ability.
 
-export type StickMode = 'float' | 'hidden';
+export type StickMode = 'float' | 'hidden' | 'none';
 
 export class Input {
   ax = 0; // -1..1 horizontal
@@ -154,6 +154,9 @@ export class Input {
         this.abilityQueued = true;
         continue;
       }
+      // 'none': no analog stick at all (movement is button-driven, e.g. Musical
+      // Chairs) — so a tap under the RUN/HIT buttons never spawns a phantom stick.
+      if (this.mode === 'none') continue;
       if (this.stick.id !== null) continue;
       this.stick.id = t.identifier;
       this.stick.ox = t.clientX;

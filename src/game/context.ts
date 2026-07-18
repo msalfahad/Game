@@ -63,8 +63,9 @@ export interface MatchContext {
 export interface GameModule {
   readonly title: string;
   readonly objective: string;
-  /** Stick control style: 'hidden' = 1:1 drag (hockey), 'float' = analog. */
-  readonly stickMode: 'hidden' | 'float';
+  /** Stick control style: 'hidden' = 1:1 drag (hockey), 'float' = analog,
+   *  'none' = no stick (button-driven movement, e.g. Musical Chairs). */
+  readonly stickMode: 'hidden' | 'float' | 'none';
   init(ctx: MatchContext): void;
   tick(dt: number, elapsed: number): void;
   ability(): void; // local player's ability / ultimate
