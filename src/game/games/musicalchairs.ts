@@ -24,13 +24,13 @@ interface Box { x: number; z: number; kind: 'stun' | 'stop'; group: THREE.Group;
 const CHAIR_R = 8.5;   // radius of the chair ring
 const WALK_R = 14;     // radius of the walk circle (outside the chairs)
 const SEAT_Y = 2.4;
-const SIT_WINDOW = 4.0;
-const ROUND_CAP = 26;
+const SIT_WINDOW = 3.0;
+const ROUND_CAP = 20;
 
-const WALK_OMEGA = 0.52;  // base clockwise march (rad/s)
-const RUN_IMPULSE = 1.5;  // angular burst added per RUN tap
+const WALK_OMEGA = 0.55;  // base clockwise march (rad/s)
+const RUN_IMPULSE = 0.5;  // angular burst added per RUN tap (a brisk dash, not a teleport)
 const RUN_DECAY = 3.4;    // how fast a run burst bleeds off
-const RUN_CAP = 7;
+const RUN_CAP = 1.6;      // max extra angular speed → ~4x walk pace, still smooth
 const HIT_REACH = HITBOX_RADIUS * 2 + 6;
 const HIT_WINDOW = 5;     // seconds the HIT power stays lit
 const STUN_TIME = 1.5;    // stun + fall duration when hit
@@ -62,6 +62,7 @@ export class MusicalChairsGame implements GameModule {
   private hitWinT: number[] = [];
   private hitCoolT: number[] = [];
   private fallT: number[] = []; // knocked-down timer, per player index
+  private prevHit0 = false;     // last-frame HIT-button visibility (DOM churn guard)
 
   private boxes: Box[] = [];
   private boxT = 4;
@@ -110,7 +111,7 @@ export class MusicalChairsGame implements GameModule {
     this.resolved = false;
     this.roundT = ROUND_CAP;
     this.musicOnT = 0;
-    this.musicStopAt = 5 + Math.random() * 10; // random, unannounced cut-out
+    this.musicStopAt = 4 + Math.random() * 5; // random, unannounced cut-out (snappy rounds)
     this.clearBoxes();
     this.boxT = 3 + Math.random() * 2;
 
@@ -140,12 +141,10 @@ export class MusicalChairsGame implements GameModule {
     SFX.out();
     this.setMusicPlaying(false);
     this.sitTextEl.style.opacity = '1';
-    // Bot reaction times — harder bots react faster; all within the sit window so
-    // exactly one player is left seatless. Fallen bots are slower (they scramble).
-    const win = this.sitT;
-    const react = Math.min(0.2 + (1 - this.ctx.diff.cap) * 0.9, win * 0.45);
+    // Bot reaction times — snappy so they dash to a seat quickly (no dawdling),
+    // still staggered so one is left standing. Fallen bots are a touch slower.
     this.botReact = this.ctx.players.map((p, i) =>
-      i === 0 ? Infinity : react + Math.random() * Math.max(0.15, win - react - 0.35) + (p.fallen ? 1.2 : 0));
+      i === 0 ? Infinity : 0.25 + Math.random() * 1.1 + (p.fallen ? 0.8 : 0));
     this.ctx.fx.banner('SIT!', '#FF4D4D');
     this.ctx.fx.shake(1.5);
     this.updateButtons();
@@ -326,7 +325,10 @@ export class MusicalChairsGame implements GameModule {
         if (this.hitCoolT[i] <= 0) this.hitWinT[i] = HIT_WINDOW;
       }
     }
-    this.updateButtons();
+    // Only touch the DOM when your HIT button should appear/disappear (avoids a
+    // per-frame style write that can hitch the walk animation on phones).
+    const hitNow = this.hitWinT[0] > 0;
+    if (hitNow !== this.prevHit0) { this.prevHit0 = hitNow; this.updateButtons(); }
 
     // Everyone marches clockwise; run bursts decay. Fallen/stunned stay put.
     for (const p of ctx.players) {

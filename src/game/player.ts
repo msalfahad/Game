@@ -427,8 +427,9 @@ export class Player {
         return;
       }
       if (this.rig3d && this.sitting) {
-        // Seated on a chair: hold the sit pose, no bounce/lean.
-        poseRig(this.rig3d, 'sit', 0, elapsed + seed, 1);
+        // Seated: hold the sit pose (or a hands-only cheer when celebrating in a
+        // kart), no bounce/lean.
+        poseRig(this.rig3d, this.celebrate ? 'sitcheer' : 'sit', 0, elapsed + seed, 1);
         this.charGroup.position.y += (0 - this.charGroup.position.y) * 0.2;
         this.model3d.rotation.x += (0 - this.model3d.rotation.x) * 0.2;
         this.model3d.rotation.z += (0 - this.model3d.rotation.z) * 0.2;

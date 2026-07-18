@@ -105,6 +105,7 @@ export class KartGame implements GameModule {
       kart.rotation.y = this.head[p.index];
       ctx.scene.add(kart);
       this.karts[p.index] = kart;
+      (p as any).kart = kart; // let the victory ceremony keep the driver in the kart
       setScore(p, 'Lap 1');
     });
 
