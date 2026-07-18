@@ -47,6 +47,7 @@ export class MazeGame implements GameModule {
   private spot: (THREE.SpotLight | null)[] = [];
   private spotTarget: (THREE.Object3D | null)[] = [];
   private selfLantern: THREE.PointLight | null = null;
+  private labels: (THREE.Sprite | null)[] = [];
 
   private ui!: HTMLElement;
   private exposeFill!: HTMLElement;
@@ -85,11 +86,12 @@ export class MazeGame implements GameModule {
     });
 
     this.setupLighting();
+    this.buildLabels();
     this.buildUI();
 
     this.objective = this.youPolice
-      ? '🚔 You are the COP — tag all 3 robbers from behind. Avoid the torchlight!'
-      : '🔦 You are a ROBBER — hold your torch on the cop for 5s. Don\'t get tagged from behind!';
+      ? '🚔 Tag all 3 robbers from behind!'
+      : '🔦 Torch the cop for 5s — mind your back!';
     setObjective(this.objective);
     ctx.fx.banner(this.youPolice ? 'YOU ARE THE COP 🚔' : 'YOU ARE A ROBBER 🔦', this.youPolice ? '#4DA6FF' : '#FFD23F');
   }
@@ -136,10 +138,11 @@ export class MazeGame implements GameModule {
   // --- lighting ---------------------------------------------------------------
   private setupLighting() {
     const scene = this.ctx.scene;
-    // If YOU are the cop you see in the dark — add a cool vision fill light.
+    // If YOU are the cop you see a bright, normal map so you can hunt.
     if (this.youPolice) {
-      scene.add(new THREE.AmbientLight(0xbcd4ff, 1.2));
-      const d = new THREE.DirectionalLight(0xdfeaff, 0.7); d.position.set(10, 60, 20); scene.add(d);
+      scene.add(new THREE.AmbientLight(0xdce6ff, 2.6));
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x445066, 1.6));
+      const d = new THREE.DirectionalLight(0xffffff, 1.4); d.position.set(10, 60, 20); scene.add(d);
     } else {
       // You're a robber: a faint self-lantern so you can just make out your feet
       // (decay 0 so it doesn't vanish at the top-down camera distance).
@@ -160,6 +163,57 @@ export class MazeGame implements GameModule {
       this.spot[p.index] = s;
       this.spotTarget[p.index] = tgt;
     }
+  }
+
+  // Floating role tags above each head: the cop is "FIND THEM" (red), the three
+  // robbers are "ESCAPE" (green). A robber only sees another player's tag when
+  // their own light is on them — so the cop still has to be found in the dark.
+  private buildLabels() {
+    for (const p of this.ctx.players) {
+      const cop = p.index === this.policeIdx;
+      const sp = this.makeLabel(cop ? 'FIND THEM' : 'ESCAPE', cop ? '#ff3b3b' : '#5cf07a');
+      sp.position.y = 7.2;
+      p.group.add(sp);
+      this.labels[p.index] = sp;
+    }
+  }
+
+  private makeLabel(text: string, color: string): THREE.Sprite {
+    const c = document.createElement('canvas'); c.width = 320; c.height = 72;
+    const x = c.getContext('2d')!;
+    x.font = '900 46px Bungee, Nunito, sans-serif';
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.lineWidth = 9; x.strokeStyle = 'rgba(0,0,0,0.9)'; x.strokeText(text, 160, 40);
+    x.fillStyle = color; x.fillText(text, 160, 40);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false }));
+    sp.scale.set(11, 2.5, 1);
+    return sp;
+  }
+
+  private updateLabels() {
+    const you = this.ctx.players[0];
+    for (const p of this.ctx.players) {
+      const lbl = this.labels[p.index];
+      if (!lbl) continue;
+      if (p.dead) { lbl.visible = false; continue; }
+      lbl.visible = p.index === 0 || this.youPolice || this.litForLocal(p, you);
+    }
+  }
+
+  // Can the LOCAL robber currently see player p (self-lantern pool or torch cone)?
+  private litForLocal(p: Player, you: Player): boolean {
+    const d = Math.hypot(p.x - you.x, p.z - you.z);
+    if (d < 7) return true;
+    if (this.emitting(0)) {
+      const b = this.bars(0);
+      if (d < RANGE_BY_BARS[b] && d > 0.001) {
+        const fx = Math.sin(this.faceAng[0]), fz = Math.cos(this.faceAng[0]);
+        const cosang = ((p.x - you.x) / d) * fx + ((p.z - you.z) / d) * fz;
+        if (cosang > Math.cos(CONE_BY_BARS[b]) && this.segClear(you.x, you.z, p.x, p.z)) return true;
+      }
+    }
+    return false;
   }
 
   // --- helpers ----------------------------------------------------------------
@@ -245,6 +299,7 @@ export class MazeGame implements GameModule {
 
     tickRoster(ctx, dt, elapsed);
     this.syncTorchMeshes();
+    this.updateLabels();
     this.updateUI();
 
     // Win / lose.
@@ -389,13 +444,16 @@ export class MazeGame implements GameModule {
     ui.id = 'mzUI';
     ui.style.cssText = 'position:fixed;inset:0;z-index:8;pointer-events:none;font-family:Nunito,system-ui,sans-serif;color:#fff;';
     ui.innerHTML = `
-      <div style="position:fixed;top:150px;left:50%;transform:translateX(-50%);text-align:center;">
+      <div style="position:fixed;top:120px;left:50%;transform:translateX(-50%);font-family:Bungee,cursive;font-size:22px;
+        letter-spacing:2px;text-shadow:0 3px 0 rgba(0,0,0,.6);color:${this.youPolice ? '#ff3b3b' : '#5cf07a'};white-space:nowrap;">
+        ${this.youPolice ? '🚔 FIND THEM' : '🏃 ESCAPE'}</div>
+      <div style="position:fixed;top:160px;left:50%;transform:translateX(-50%);text-align:center;">
         <div style="font-family:Bungee,cursive;font-size:13px;letter-spacing:1px;text-shadow:0 2px 0 rgba(0,0,0,.6);">🔦 COP BLINDED</div>
         <div style="width:200px;height:14px;background:rgba(0,0,0,.5);border-radius:8px;overflow:hidden;margin-top:3px;border:2px solid rgba(255,255,255,.25);">
           <div id="mzExpose" style="height:100%;width:0%;background:linear-gradient(90deg,#ffe66d,#ff9f1c);transition:width .1s;"></div>
         </div>
       </div>
-      <div id="mzInfo" style="position:fixed;top:200px;left:50%;transform:translateX(-50%);display:none;font-family:Bungee,cursive;font-size:15px;text-shadow:0 2px 0 rgba(0,0,0,.6);"></div>
+      <div id="mzInfo" style="position:fixed;top:212px;left:50%;transform:translateX(-50%);display:none;font-family:Bungee,cursive;font-size:15px;text-shadow:0 2px 0 rgba(0,0,0,.6);"></div>
       <div id="mzRobber" style="position:fixed;left:0;right:0;bottom:24px;display:none;flex-direction:column;align-items:center;gap:10px;">
         <div style="display:flex;gap:6px;">
           <span class="mzBar"></span><span class="mzBar"></span><span class="mzBar"></span>
@@ -440,6 +498,7 @@ export class MazeGame implements GameModule {
     if (this.finished) return;
     this.finished = true;
     document.getElementById('mzUI')?.remove();
+    for (const p of this.ctx.players) { const l = this.labels[p.index]; if (l) p.group.remove(l); }
     const ctx = this.ctx;
     ctx.players.forEach((p) => {
       if (p.index === this.policeIdx) (p as any)._res = policeWon ? '🚔 CAUGHT ALL' : '😵 BLINDED';
