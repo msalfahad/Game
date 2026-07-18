@@ -9,7 +9,7 @@ import { accuracyMult, strengthMult } from '../../data/characters';
 import { matchTime } from '../../core/tuning';
 import { SFX } from '../../core/audio';
 import { setScore, markDead } from '../../ui/hud';
-import { spawnBolt } from '../boltfx';
+import { spawnBolt, tickBolts, type Bolt } from '../boltfx';
 
 // THROWFIGHT — grab & hurl projectiles to drain rival HP (Snowball Smash,
 // Blast Zone, Cannon Blast, Crate Brawl). Projectile flavor changes damage,
@@ -53,6 +53,7 @@ export class ThrowFightGame implements GameModule {
   private snow = false;
   private perks: { m: THREE.Group; x: number; z: number; kind: 'shoes' | 'zap' | 'shield' }[] = [];
   private perkT = 6;
+  private bolts: Bolt[] = []; // zap lightning strikes — faded + culled each tick
   // "SLIPPERY" sign in the bottom-middle — solid cover to hide behind.
   // KEEP IN SYNC with server freesim + onlinefreeroam.
   private signZ = 0;
@@ -189,7 +190,7 @@ export class ThrowFightGame implements GameModule {
         if (q === p || q.dead) continue;
         q.freezeT = Math.max(q.freezeT, 3);
         q.zapped = true;
-        spawnBolt(ctx.scene, q.x, q.z);
+        this.bolts.push(spawnBolt(ctx.scene, q.x, q.z));
         ctx.fx.burst(q.x, q.z, '#FFD23F', 12);
       }
       ctx.fx.shake(2);
@@ -485,6 +486,7 @@ export class ThrowFightGame implements GameModule {
     });
 
     this.items.forEach((it) => (it.m.rotation.y += dt));
+    this.bolts = tickBolts(ctx.scene, this.bolts, dt); // fade + remove zap strikes
     tickRoster(ctx, dt, elapsed);
   }
 
