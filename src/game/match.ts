@@ -147,7 +147,7 @@ export class Match {
     // steep near-overhead view so the whole yard reads at a glance.
     const portrait = innerWidth < innerHeight;
     if (game.mechanic === 'chase') this.engine.camera.frameTopDown(halfSize);
-    else this.engine.camera.frame(isClimb ? 17 : halfSize, isGoal ? (portrait ? 1.62 : 1.28) : isIce ? 1.18 : 1.0);
+    else this.engine.camera.frame(isClimb ? 17 : halfSize, isGoal ? (portrait ? 1.62 : 1.28) : isIce ? 1.18 : game.mechanic === 'hotpotato' ? 1.7 : 1.0);
 
     this.engine.post.setGrade(FAMILY_GRADE[family.id] ?? {});
     this.game.init(this.ctx);
