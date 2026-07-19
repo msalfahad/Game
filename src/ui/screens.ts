@@ -50,7 +50,7 @@ export function buildScreens(hooks: Hooks) {
     <p class="tag">Original 2-4 player arcade brawler · ${countGames()} mini-games across ${FAMILIES.length - 1} themed worlds. Touch left side to move, tap right for ⚡. Keyboard: WASD/arrows · Space = ⚡ · Shift = jump. Gamepad supported.</p>
     <button class="big" id="onlineBtn">🌐 PLAY ONLINE</button>
     <button class="big" data-go="scrChar" style="background:var(--aqua);box-shadow:0 5px 0 #0E9CB2">PLAY OFFLINE</button>
-    <button class="alt" id="tuneBtn">⚙️ TUNING</button>
+    <button class="alt big" id="tuneBtn">⚙️ TUNING</button>
     <div class="settingRow"><span>CAMERA SHAKE</span><input id="shakeSlider" type="range" min="0" max="100" value="0"></div>
     <div class="settingRow"><span>QUALITY</span>
       <select id="qualitySel">

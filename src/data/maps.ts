@@ -31,6 +31,7 @@ export type Mechanic =
   | 'kart' // race karts round a ring track, grab item pickups, most laps wins
   | 'maze' // night maze: 3 robbers with torches vs 1 fast cop who sees in the dark
   | 'lavafloor' // stand on tiles over real lava; they fall 1s after you step on
+  | 'boat' // third-person speed-boat race down a winding forest river, grab weapons
   | 'lab'; // movement greybox
 
 export type AmbientKind = 'snow' | 'embers' | 'sand' | 'leaves' | 'stars' | 'bubbles' | 'none';
@@ -148,7 +149,7 @@ export const GAMES: GameDef[] = [
   g('dune-4', 'dune', 'Night Heist', '🔦', 4, 'maze', 'square', [], 'Lights out! 3 robbers with fading torches must blind the cop — hold 5s of torchlight on them to win. The cop sees in the dark, runs faster, and tags robbers from behind.'),
 
   // 4. Wildwood Arena
-  g('wild-1', 'wildwood', 'Tree Top Tumble', '🍃', 1, 'pushout', 'circle', [], 'Push rivals off the shrinking canopy platform.'),
+  g('wild-1', 'wildwood', 'Boat Bash Race', '🚤', 1, 'boat', 'square', [], 'Blast down a winding forest river in a speed boat! Ram rivals, grab weapons, and race to the checkered flag. First across or the furthest in 1 minute wins.'),
   g('wild-2', 'wildwood', 'Rolling Logs', '🪵', 2, 'dodge', 'square', [], 'Logs sweep the grove. Jump or be flattened.', { hz: 'logs' }),
   g('wild-3', 'wildwood', 'Watermelon Bomb', '🍉', 3, 'hotpotato', 'square', [], 'The watermelon has a firecracker! Tap a rival to pass it. Whoever is holding it when it blows gets splatted. Last one dry wins.'),
   g('wild-4', 'wildwood', 'Jungle Race', '🦜', 4, 'race', 'square', ['falling', 'rollers'], 'Race the ruins as branches crash down.', { laps: 2 }),
