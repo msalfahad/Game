@@ -3,6 +3,7 @@ import type { GameModule, MatchContext } from '../context';
 import type { Player } from '../player';
 import { HITBOX_RADIUS } from '../player';
 import { setupRoster, localMove, botMove, collidePlayers, tickRoster, localJump, rankBy } from '../freeroam';
+import { tryJump } from '../physics';
 import { fireUltimate, botMaybeUltimate, tickDecoys } from '../ultimates';
 import { Powerups } from '../powerups';
 import { matchTime } from '../../core/tuning';
@@ -36,6 +37,7 @@ export class DodgeGame implements GameModule {
   private duration = 75;
   private powerups!: Powerups;
   private finished = false;
+  private jumpBtn?: HTMLButtonElement;
 
   init(ctx: MatchContext) {
     this.ctx = ctx;
@@ -81,6 +83,32 @@ export class DodgeGame implements GameModule {
     }
 
     this.powerups = new Powerups(ctx, ['speed', 'shield'], () => this.leader());
+
+    // Touch JUMP button — the ability corner-tap owns the bottom-right 150px,
+    // so hop over logs/lasers with a dedicated button stacked ABOVE it (kept
+    // clear of that zone) and marked data-nostick so it never spawns a stick.
+    document.getElementById('dodgeUI')?.remove();
+    this.jumpBtn = undefined;
+    if (this.hz === 'logs' || this.hz === 'lasers') {
+      const ui = document.createElement('div');
+      ui.id = 'dodgeUI';
+      ui.style.cssText = 'position:fixed;inset:0;z-index:8;pointer-events:none;font-family:Bungee,system-ui,sans-serif;';
+      ui.innerHTML = `
+        <button id="djJump" data-nostick style="position:fixed;right:20px;bottom:150px;pointer-events:auto;
+          width:88px;height:88px;border-radius:50%;border:none;font-size:15px;font-weight:900;letter-spacing:1px;
+          color:#12142e;background:#7CF07C;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);
+          touch-action:none;user-select:none;">⤴<br>JUMP</button>`;
+      document.body.appendChild(ui);
+      this.jumpBtn = ui.querySelector('#djJump')!;
+      const hop = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        localJump(this.ctx);
+        this.jumpBtn!.style.filter = 'brightness(1.25)';
+        setTimeout(() => this.jumpBtn && (this.jumpBtn.style.filter = ''), 120);
+      };
+      this.jumpBtn.addEventListener('pointerdown', hop);
+    }
   }
 
   private leader(): Player | null {
@@ -172,6 +200,16 @@ export class DodgeGame implements GameModule {
           if (p.dead || p.invulnT > 0 || p.y > 2.6) continue;
           const along = l.vx !== 0 ? Math.abs(p.z - l.z) : Math.abs(p.x - l.x);
           const across = l.vx !== 0 ? Math.abs(p.x - l.x) : Math.abs(p.z - l.z);
+          // Bots hop imminent logs — commit a per-log dodge roll (skill scales
+          // with difficulty) once, then leap while still grounded and in range.
+          if (!p.you && p.grounded && p.freezeT <= 0 && along < ctx.halfSize * 0.55) {
+            const toward = l.vx !== 0 ? (p.x - l.x) * l.vx : (p.z - l.z) * l.vz;
+            if (toward > 0 && across < 7) {
+              const dec = ((l as any)._dec ??= {}) as Record<number, boolean>;
+              if (dec[p.index] === undefined) dec[p.index] = Math.random() < 0.35 + ctx.diff.cap * 0.5;
+              if (dec[p.index] && across < 6) tryJump(p);
+            }
+          }
           if (across < HITBOX_RADIUS + 1.6 && along < ctx.halfSize * 0.55) {
             const L = Math.hypot(l.vx, l.vz) || 1;
             p.vx += (l.vx / L) * 34;
@@ -293,6 +331,8 @@ export class DodgeGame implements GameModule {
   private doFinish(sub: string) {
     if (this.finished) return;
     this.finished = true;
+    document.getElementById('dodgeUI')?.remove();
+    this.jumpBtn = undefined;
     this.ctx.players.forEach((p) => ((p as any)._res = p.dead ? 'OUT' : `${Math.max(p.lives, 0)} lives · ${Math.round(p.score)}s`));
     this.ctx.finish(rankBy(this.ctx, (p) => (p.dead ? p.score * 0.001 - 10 : p.lives * 1000 + p.score)), sub);
   }
