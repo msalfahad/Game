@@ -56,11 +56,16 @@ export function buildWorld(
     // cinematic grade (otherwise the tone curve + vignette crush it dark).
     scene.backgroundIntensity = 2.6;
   };
+  // The croc raft lives in the sky family but wants a clean forest-river look —
+  // keep a flat sky-blue behind it instead of the bright cloud keyart (which
+  // blows out the scene).
+  const flatSky = game.mechanic === 'raft';
+  if (flatSky) scene.background = new THREE.Color(0x6fb0e6);
   // Prefer a portrait, phone-composed background (maps/<id>-bg.png) so the
   // scene fills a tall screen without cropping out the sky; fall back to the
   // landscape card art, then to the flat theme colour. Night keeps the flat
   // dark sky so map + background read as one continuous night.
-  if (!night) loader.load(
+  if (!night && !flatSky) loader.load(
     `maps/${family.id}-bg.png`,
     applyBg,
     undefined,
@@ -128,12 +133,16 @@ export function buildWorld(
     ringMesh.rotation.x = -Math.PI / 2;
     ringMesh.position.y = 0.4;
     scene.add(ringMesh);
-  } else if (game.mechanic === 'boat') {
-    // Boat race: a big forest floor covering the whole winding river course
-    // (the module lays the river + banks on top). No perimeter trim bars — the
-    // course isn't a bounded arena.
+  } else if (game.mechanic === 'boat' || game.mechanic === 'raft') {
+    // Boat race / croc raft: a big forest floor covering the whole winding
+    // river course (the module lays the river + banks on top). No perimeter
+    // trim bars — the course isn't a bounded arena. The raft lives in the sky
+    // family, so force a forest-green ground under it regardless of theme.
     const fw = halfSize * 3.2;
-    floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(fw * 2, fw * 2), fmat);
+    const rmat = game.mechanic === 'raft'
+      ? new THREE.MeshStandardMaterial({ color: 0x3f7a34, roughness: 1 })
+      : fmat;
+    floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(fw * 2, fw * 2), rmat);
   } else {
     const fw = rect ? rect.w : halfSize;
     const fl = rect ? rect.l : halfSize;
@@ -153,7 +162,7 @@ export function buildWorld(
   // rectangular corridors skip them too (the ring layout doesn't fit); Musical
   // Chairs wants a clean ring, and its tight framing put a prop in the
   // foreground.
-  if (game.mechanic !== 'goal' && game.mechanic !== 'musicalchairs' && game.mechanic !== 'chase' && game.mechanic !== 'kart' && game.mechanic !== 'maze' && game.mechanic !== 'lavafloor' && game.mechanic !== 'boat' && !rect) buildProps(scene, family, halfSize, trimMat);
+  if (game.mechanic !== 'goal' && game.mechanic !== 'musicalchairs' && game.mechanic !== 'chase' && game.mechanic !== 'kart' && game.mechanic !== 'maze' && game.mechanic !== 'lavafloor' && game.mechanic !== 'boat' && game.mechanic !== 'raft' && !rect) buildProps(scene, family, halfSize, trimMat);
   // Floor Is Lava: a bright, warm fill so the map + backdrop read as one glowing scene.
   if (game.mechanic === 'lavafloor') { scene.add(new THREE.AmbientLight(0xffd8a8, 1.5)); scene.fog = new THREE.Fog(new THREE.Color(0xff7a2e).getHex(), halfSize * 3.5, halfSize * 9); }
   const ambientPts = buildAmbient(scene, family, halfSize);
