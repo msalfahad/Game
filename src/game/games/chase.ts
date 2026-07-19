@@ -82,6 +82,7 @@ export class ChaseGame implements GameModule {
   private startGrace = 1.6;
   private nav: NavNode[] = [];
   private navEdges: number[][] = [];
+  private fleeGoalIdx: number[] = []; // per-escaper hideout nav node they're running to
 
   init(ctx: MatchContext) {
     this.ctx = ctx;
@@ -97,6 +98,7 @@ export class ChaseGame implements GameModule {
     this.startGrace = 1.6;
     this.guardTarget = null;
     this.guardTargetT = 0;
+    this.fleeGoalIdx = [];
 
     setupRoster(ctx, '', 0.7);
     this.guardIdx = Math.floor(Math.random() * ctx.players.length);
@@ -389,21 +391,50 @@ export class ChaseGame implements GameModule {
       const box = this.nearestBox(p);
       let tx: number, tz: number;
       // Grab a nearby pickup when the guard isn't breathing down your neck.
-      if (box && gd > 14 && Math.hypot(box.x - p.x, box.z - p.z) < 24) {
+      if (box && gd > 16 && Math.hypot(box.x - p.x, box.z - p.z) < 24) {
         tx = box.x; tz = box.z;
       } else {
-        // Flee roughly AWAY from the guard (with a little wobble). Natural, not
-        // superhuman — so a faster guard can corner you against a wall.
-        const ax = p.x - guard.x, az = p.z - guard.z, L = Math.hypot(ax, az) || 1;
-        const jitter = (Math.random() - 0.5) * 0.9;
-        const dirx = ax / L, dirz = az / L;
-        tx = p.x + (dirx * Math.cos(jitter) - dirz * Math.sin(jitter)) * 34;
-        tz = p.z + (dirx * Math.sin(jitter) + dirz * Math.cos(jitter)) * 34;
+        // RUN to the safest open hideout — the corridor spot FARTHEST from the
+        // guard — routed through the wall gaps. Fleeing straight "away" used to
+        // pin a corner-spawned runner into the wall (the guard starts dead
+        // centre, so "away" pointed into the corner); heading to a real hideout
+        // instead keeps them circling the yard and relocating as the guard
+        // closes in.
+        const g = this.pickHideout(p, guard);
+        tx = this.nav[g].x; tz = this.nav[g].z;
       }
       const [nx, nz] = this.navTo(p, tx, tz);
       p.tx = nx; p.tz = nz;
     }
     botMove(this.ctx, p, p.tx, p.tz, dt, { noClamp: true, speedMul: this.speedMul(p) });
+  }
+
+  /** Choose an outer-corridor hideout (nav nodes 5–12) for an escaper to run
+   *  to: the one farthest from the guard, biased slightly toward nearer spots
+   *  (so they don't sprint across the guard's lap) with a little randomness so
+   *  runners don't all pile onto the same corner. Commits to the current goal
+   *  until they nearly reach it or the guard gets close to it, so they don't
+   *  dither at junctions. */
+  private pickHideout(p: Player, guard: Player): number {
+    const cand = [5, 6, 7, 8, 9, 10, 11, 12];
+    const cur = this.fleeGoalIdx[p.index];
+    if (cur != null && cur >= 0) {
+      const w = this.nav[cur];
+      const gToGoal = Math.hypot(guard.x - w.x, guard.z - w.z);
+      const pToGoal = Math.hypot(p.x - w.x, p.z - w.z);
+      if (gToGoal > 16 && pToGoal > 4) return cur; // still a safe hideout we're mid-run to
+    }
+    let best = cand[0], bs = -Infinity;
+    for (const i of cand) {
+      if (i === cur) continue; // force a fresh spot so they keep moving
+      const w = this.nav[i];
+      const dg = Math.hypot(guard.x - w.x, guard.z - w.z);
+      const dp = Math.hypot(p.x - w.x, p.z - w.z);
+      const score = dg - dp * 0.1 + Math.random() * 5;
+      if (score > bs) { bs = score; best = i; }
+    }
+    this.fleeGoalIdx[p.index] = best;
+    return best;
   }
 
   // --- waypoint navigation ----------------------------------------------------
