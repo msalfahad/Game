@@ -5,21 +5,29 @@ import { HITBOX_RADIUS } from '../player';
 import { setupRoster, localMove, botMove, tickRoster, rankBy } from '../freeroam';
 import { matchTime } from '../../core/tuning';
 import { SFX } from '../../core/audio';
-import { markDead, setObjective } from '../../ui/hud';
+import { setObjective } from '../../ui/hud';
 
 // NIGHT HEIST (Dune Clash). A pitch-dark square MAZE, viewed top-down. One of the
-// four is the COP; the other three are ROBBERS. The cop sees in the dark and is
-// 1.5x faster, and tags robbers by touching them FROM BEHIND. The robbers are
-// blind except for a torch: hold the torch-beam on the cop for 5 seconds TOTAL
-// and the cop is blinded — robbers win. The torch has a 3-bar battery (3s per
-// bar); fewer bars = a shorter beam. It recharges (5s/bar) whenever it's off.
-// Cop wins by tagging all three robbers first.
+// four is the COP; the other three are ROBBERS. EVERYONE hunts in the dark now —
+// each side only sees a small radius of light around themselves (the cop's is a
+// wider night-vision glow). The cop is 1.5x faster and, by touching a robber
+// FROM BEHIND, STUNS them for 2s (they can't move or torch and everyone sees
+// they're down) — then he runs on; robbers are never eliminated. Robbers are
+// blind except for a torch: light the cop TOGETHER — the blind meter fills faster
+// the more beams hit him at once and bleeds off in the dark — for 6s of net
+// torchlight and he's blinded (robbers win). Torchlight never freezes the cop; he
+// keeps running. The cop wins by SURVIVING the night (outlasting the clock). The
+// torch has a 3-bar battery (3s/bar); fewer bars = a shorter beam; recharges
+// (5s/bar) whenever off.
 
 interface Wall { x: number; z: number; hw: number; hd: number; }
 
 const POLICE_SPEED = 1.5;
 const CATCH_R = HITBOX_RADIUS * 2 + 1.5;
-const EXPOSE_LIMIT = 5;          // cop blinded after 5s of torchlight
+const EXPOSE_LIMIT = 6;          // cop blinded after 6s of NET torchlight
+const EXPOSE_DECAY = 0.7;        // exposure bleeds off while the cop is in the dark
+const STUN_TIME = 2;             // the cop's tag stuns a robber for 2s (not out)
+const COP_VISION = 13;           // the cop hunts by a small night-vision radius
 const BATTERY_MAX = 9;           // 3 bars x 3s
 const BAR_SEC = 3;
 const RECHARGE_PER_SEC = 1 / 5;  // 5s per bar
@@ -37,7 +45,6 @@ export class MazeGame implements GameModule {
   private walls: Wall[] = [];
   private timeLeft = 80;
   private finished = false;
-  private outCount = 0;
   private exposure = 0;
   private startGrace = 2;
 
@@ -71,7 +78,6 @@ export class MazeGame implements GameModule {
     this.timeLeft = matchTime(60);
     this.walls = [];
     this.exposure = 0;
-    this.outCount = 0;
     this.revealT = 4;          // 4s bright reveal before night
     this.startGrace = 4;       // no catching / exposure during the reveal
     this.nightFell = false;
@@ -108,8 +114,8 @@ export class MazeGame implements GameModule {
     this.buildUI();
 
     this.objective = this.youPolice
-      ? '🚔 Tag all 3 robbers from behind!'
-      : '🔦 Torch the cop for 5s — mind your back!';
+      ? '🚔 Survive the night! Stun torchers from behind.'
+      : '🔦 Torch the cop together for 6s — mind your back!';
     setObjective(this.objective);
     ctx.fx.banner(this.youPolice ? 'COP 🚔 — memorise the map!' : 'ROBBER 🔦 — memorise the map!', this.youPolice ? '#4DA6FF' : '#FFD23F');
   }
@@ -151,17 +157,15 @@ export class MazeGame implements GameModule {
   // --- lighting ---------------------------------------------------------------
   private setupLighting() {
     const scene = this.ctx.scene;
-    // If YOU are the cop you see a bright, normal map so you can hunt.
-    if (this.youPolice) {
-      scene.add(new THREE.AmbientLight(0xdce6ff, 2.6));
-      scene.add(new THREE.HemisphereLight(0xffffff, 0x445066, 1.6));
-      const d = new THREE.DirectionalLight(0xffffff, 1.4); d.position.set(10, 60, 20); scene.add(d);
-    } else {
-      // You're a robber: a faint self-lantern so you can just make out your feet
-      // (decay 0 so it doesn't vanish at the top-down camera distance).
-      this.selfLantern = new THREE.PointLight(0xffe8b0, 16, 14, 0);
-      scene.add(this.selfLantern);
-    }
+    // EVERYONE hunts in the dark now — the cop included. A faint base keeps the
+    // maze from being pure black, then a self-lantern gives each side just a
+    // small radius of sight around themselves (the cop's is a cooler, slightly
+    // wider "night-vision" glow so he can still track robbers he gets near).
+    scene.add(new THREE.AmbientLight(0x28324c, this.youPolice ? 0.42 : 0.34));
+    this.selfLantern = this.youPolice
+      ? new THREE.PointLight(0xdfeaff, 26, COP_VISION + 2, 0)
+      : new THREE.PointLight(0xffe8b0, 16, 14, 0);
+    scene.add(this.selfLantern);
     // Reveal fill — flips the whole scene bright during the 4s opening look and
     // the two lightning flashes (drives the robber's view like the cop's).
     this.revealLight = new THREE.AmbientLight(0xdce6ff, 0);
@@ -235,9 +239,11 @@ export class MazeGame implements GameModule {
   // the robbers can find and regroup with each other)?
   private litForLocal(p: Player, you: Player): boolean {
     if (this.revealT > 0) return true; // everything visible during a reveal/flash
+    if (p.index !== this.policeIdx && p.freezeT > 0) return true; // a STUNNED robber is visible to everyone
     if (p.index !== this.policeIdx && this.emitting(p.index)) return true; // lit-up ally
     const d = Math.hypot(p.x - you.x, p.z - you.z);
-    if (d < 7) return true;
+    // The cop sees within his night-vision radius; a robber only right up close.
+    if (d < (this.youPolice ? COP_VISION : 7)) return true;
     if (this.emitting(0)) {
       const b = this.bars(0);
       if (d < RANGE_BY_BARS[b] && d > 0.001) {
@@ -292,6 +298,7 @@ export class MazeGame implements GameModule {
     if (this.policeIdx === 0) this.moveLocal(police, dt);
     else this.moveBotPolice(police, dt);
     for (const p of this.aliveRobbers()) {
+      if (p.freezeT > 0) { this.lightOn[p.index] = false; continue; } // stunned — can't move or torch
       if (p.index === 0) this.moveLocal(p, dt);
       else this.moveBotRobber(p, dt);
     }
@@ -313,33 +320,41 @@ export class MazeGame implements GameModule {
     // Torch battery + beams.
     this.tickTorches(dt);
 
-    // Exposure: is the cop caught in any live torch beam (in cone + line of sight)?
-    let lit = false;
-    for (const p of this.aliveRobbers()) {
-      if (!this.emitting(p.index)) continue;
+    // Exposure: COUNT how many robbers are lighting the cop (in cone + line of
+    // sight). Coordinated torches blind him fast; a single beam barely out-paces
+    // the decay — so the robbers must team up, and the cop can buy the meter back
+    // by scattering them. The cop is never frozen: torchlight only fills the
+    // meter, he keeps running.
+    let beams = 0;
+    for (const p of this.robbers()) {
+      if (p.freezeT > 0 || !this.emitting(p.index)) continue;
       const b = this.bars(p.index);
       const dx = police.x - p.x, dz = police.z - p.z, d = Math.hypot(dx, dz) || 1;
       if (d > RANGE_BY_BARS[b]) continue;
       const fx = Math.sin(this.faceAng[p.index]), fz = Math.cos(this.faceAng[p.index]);
-      const cosang = (dx / d) * fx + (dz / d) * fz;
-      if (cosang < Math.cos(CONE_BY_BARS[b])) continue;
+      if ((dx / d) * fx + (dz / d) * fz < Math.cos(CONE_BY_BARS[b])) continue;
       if (!this.segClear(p.x, p.z, police.x, police.z)) continue;
-      lit = true; break;
+      beams++;
     }
-    if (lit && this.startGrace <= 0) {
-      // The torchlight only fills the "blinded" meter — the cop is NOT frozen and
-      // can keep running away; just a spark cue so you can tell he's lit.
-      this.exposure = Math.min(EXPOSE_LIMIT, this.exposure + dt);
-      if (Math.random() < dt * 4) this.ctx.fx.burst(police.x, police.z, '#fff6c0', 4);
+    if (this.startGrace <= 0) {
+      if (beams > 0) {
+        this.exposure = Math.min(EXPOSE_LIMIT, this.exposure + dt * beams);
+        if (Math.random() < dt * 4) this.ctx.fx.burst(police.x, police.z, '#fff6c0', 4);
+      } else {
+        this.exposure = Math.max(0, this.exposure - dt * EXPOSE_DECAY);
+      }
     }
 
-    // Catches — the cop tags a robber only FROM BEHIND.
+    // The cop's tag STUNS a robber (from behind) for 2s instead of catching them
+    // — then he runs on. A stunned robber can't move or torch, and everyone can
+    // see they're down.
     if (this.startGrace <= 0 && this.exposure < EXPOSE_LIMIT) {
-      for (const p of this.aliveRobbers()) {
+      for (const p of this.robbers()) {
+        if (p.freezeT > 0) continue; // already stunned
         const dx = police.x - p.x, dz = police.z - p.z, d = Math.hypot(dx, dz);
         if (d > CATCH_R || d < 0.001) continue;
         const fx = Math.sin(this.faceAng[p.index]), fz = Math.cos(this.faceAng[p.index]);
-        if ((dx / d) * fx + (dz / d) * fz < -0.1) this.catchRobber(p); // cop is behind
+        if ((dx / d) * fx + (dz / d) * fz < -0.1) this.stunRobber(p); // cop is behind
       }
     }
 
@@ -348,10 +363,10 @@ export class MazeGame implements GameModule {
     this.updateLabels();
     this.updateUI();
 
-    // Win / lose.
-    if (this.exposure >= EXPOSE_LIMIT) this.doFinish(false, 'The cop was blinded — robbers escape!');
-    else if (this.aliveRobbers().length === 0) this.doFinish(true, 'The cop caught everyone!');
-    else if (this.timeLeft <= 0) this.doFinish(false, 'Dawn breaks — the robbers got away!');
+    // Win / lose. Robbers win by blinding the cop; the cop wins by surviving the
+    // night (outlasting the clock without being blinded).
+    if (this.exposure >= EXPOSE_LIMIT) this.doFinish(false, 'The cop was blinded — robbers win!');
+    else if (this.timeLeft <= 0) this.doFinish(true, 'Dawn breaks — the cop survived the night!');
   }
 
   private speedMul(p: Player): number { return p.index === this.policeIdx ? POLICE_SPEED : 1; }
@@ -359,6 +374,7 @@ export class MazeGame implements GameModule {
 
   private toggleLight() {
     const i = 0;
+    if (this.ctx.players[0].freezeT > 0) return; // stunned — can't torch
     if (this.battery[i] <= 0.1) return; // dead battery
     this.lightOn[i] = !this.lightOn[i];
     SFX.tick();
@@ -401,13 +417,18 @@ export class MazeGame implements GameModule {
   // --- bot AI -----------------------------------------------------------------
   private moveBotPolice(p: Player, dt: number) {
     p.retarget -= dt;
-    const prey = this.aliveRobbers();
+    const prey = this.robbers().filter((q) => q.freezeT <= 0); // ignore already-stunned
     if (!prey.length) return;
     if (p.retarget <= 0) {
       p.retarget = 0.3;
-      // Chase the nearest robber, aiming for the spot just BEHIND them.
+      // Go after whoever is TORCHING him first (shut down the blinding), else the
+      // nearest robber — aiming for the spot just BEHIND them to land the stun.
       let t = prey[0], best = Infinity;
-      for (const q of prey) { const d = Math.hypot(q.x - p.x, q.z - p.z); if (d < best) { best = d; t = q; } }
+      for (const q of prey) {
+        let d = Math.hypot(q.x - p.x, q.z - p.z);
+        if (this.emitting(q.index)) d -= 22; // strong pull toward active torchers
+        if (d < best) { best = d; t = q; }
+      }
       const fx = Math.sin(this.faceAng[t.index]), fz = Math.cos(this.faceAng[t.index]);
       p.tx = t.x - fx * 4; p.tz = t.z - fz * 4;
     }
@@ -442,18 +463,17 @@ export class MazeGame implements GameModule {
     botMove(this.ctx, p, p.tx, p.tz, dt, { noClamp: true });
   }
 
-  private catchRobber(p: Player) {
-    p.dead = true;
-    (p as any)._outAt = ++this.outCount;
+  private stunRobber(p: Player) {
+    p.freezeT = Math.max(p.freezeT, STUN_TIME);
+    p.zapped = true; // blacked-out "stunned" look
     this.lightOn[p.index] = false;
     const s = this.spot[p.index]; if (s) s.intensity = 0;
-    markDead(p);
+    p.setStatusIcon('💫', STUN_TIME); // everyone can see this one is stunned
     SFX.hit();
-    this.ctx.fx.burst(p.x, p.z, p.hero.col, 18);
-    this.ctx.fx.shake(1.6);
-    this.ctx.fx.banner(p.you ? 'YOU GOT NABBED!' : `${p.hero.name} nabbed!`, '#4DA6FF');
-    setObjective(`Robbers left: ${this.aliveRobbers().length}`);
-    this.startGrace = 0.5;
+    this.ctx.fx.burst(p.x, p.z, '#ffe66d', 16);
+    this.ctx.fx.shake(1.2);
+    this.ctx.fx.banner(p.you ? '💫 STUNNED!' : `${p.hero.name} STUNNED!`, '#ffe66d');
+    this.startGrace = 0.3; // brief beat before the next tag
   }
 
   // --- walls ------------------------------------------------------------------
@@ -528,7 +548,7 @@ export class MazeGame implements GameModule {
     if (!this.ui) return;
     this.exposeFill.style.width = `${(this.exposure / EXPOSE_LIMIT) * 100}%`;
     if (this.youPolice) {
-      this.infoEl.textContent = `🚔 Robbers left: ${this.aliveRobbers().length}`;
+      this.infoEl.textContent = `🚔 Survive: ${Math.max(0, Math.ceil(this.timeLeft))}s`;
     } else {
       const b = this.bars(0);
       const on = this.emitting(0);
@@ -555,13 +575,12 @@ export class MazeGame implements GameModule {
     }
     const ctx = this.ctx;
     ctx.players.forEach((p) => {
-      if (p.index === this.policeIdx) (p as any)._res = policeWon ? '🚔 CAUGHT ALL' : '😵 BLINDED';
-      else (p as any)._res = p.dead ? 'NABBED' : '🔦 ESCAPED';
+      if (p.index === this.policeIdx) (p as any)._res = policeWon ? '🚔 SURVIVED' : '😵 BLINDED';
+      else (p as any)._res = policeWon ? 'OUTLASTED' : '🔦 BLINDED THE COP';
     });
-    ctx.finish(rankBy(ctx, (p) => {
-      if (p.index === this.policeIdx) return policeWon ? 1e6 : -1;
-      if (!p.dead) return 1e5;
-      return (p as any)._outAt ?? 0;
-    }), subtitle);
+    // The whole robber crew shares the outcome (co-op vs the cop).
+    ctx.finish(rankBy(ctx, (p) =>
+      p.index === this.policeIdx ? (policeWon ? 1e6 : -1) : (policeWon ? 0 : 1e5),
+    ), subtitle);
   }
 }
