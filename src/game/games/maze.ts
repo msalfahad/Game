@@ -215,10 +215,18 @@ export class MazeGame implements GameModule {
   private updateLabels() {
     const you = this.ctx.players[0];
     for (const p of this.ctx.players) {
+      // Stealth reveal: you only see another character — their coloured marker
+      // RING/glow AND their role tag — when your torch is on them, they've lit
+      // their own torch, they're right next to you, or during a lights-on
+      // reveal. Your own marker always shows. The rings no longer give every
+      // position away in the dark, and the cop gets NO free reveal either (it
+      // must hunt by sight, not by everyone's coloured circle).
+      const visible = p.index === 0 || this.litForLocal(p, you);
+      const show = !p.dead && visible;
       const lbl = this.labels[p.index];
-      if (!lbl) continue;
-      if (p.dead) { lbl.visible = false; continue; }
-      lbl.visible = p.index === 0 || this.youPolice || this.litForLocal(p, you);
+      if (lbl) lbl.visible = show;
+      if (p.ring) p.ring.visible = show;
+      if (p.glow) p.glow.visible = show;
     }
   }
 
@@ -538,7 +546,13 @@ export class MazeGame implements GameModule {
     if (this.finished) return;
     this.finished = true;
     document.getElementById('mzUI')?.remove();
-    for (const p of this.ctx.players) { const l = this.labels[p.index]; if (l) p.group.remove(l); }
+    // Restore the marker rings for the results parade (they were stealth-hidden
+    // during the dark match).
+    for (const p of this.ctx.players) {
+      const l = this.labels[p.index]; if (l) p.group.remove(l);
+      if (p.ring) p.ring.visible = true;
+      if (p.glow) p.glow.visible = true;
+    }
     const ctx = this.ctx;
     ctx.players.forEach((p) => {
       if (p.index === this.policeIdx) (p as any)._res = policeWon ? '🚔 CAUGHT ALL' : '😵 BLINDED';
