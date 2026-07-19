@@ -319,11 +319,10 @@ export class MazeGame implements GameModule {
       lit = true; break;
     }
     if (lit && this.startGrace <= 0) {
+      // The torchlight only fills the "blinded" meter — the cop is NOT frozen and
+      // can keep running away; just a spark cue so you can tell he's lit.
       this.exposure = Math.min(EXPOSE_LIMIT, this.exposure + dt);
-      police.zapped = true; police.freezeT = Math.max(police.freezeT, 0.1); // flash white/black tint
-      if (Math.random() < dt * 3) this.ctx.fx.burst(police.x, police.z, '#fff6c0', 4);
-    } else {
-      police.zapped = false;
+      if (Math.random() < dt * 4) this.ctx.fx.burst(police.x, police.z, '#fff6c0', 4);
     }
 
     // Catches — the cop tags a robber only FROM BEHIND.
