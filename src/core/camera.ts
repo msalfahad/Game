@@ -15,6 +15,7 @@ export class IsoCamera {
   private zoom = 1;
   private followZ = 0;
   private topDown = false;
+  private chasing = false;
 
   constructor() {
     this.cam = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 600);
@@ -42,6 +43,35 @@ export class IsoCamera {
     this.base.set(0, height, dist);
     this.look.set(0, -2, -halfSize * 0.06);
     this.topDown = false;
+    this.chasing = false;
+    this.followZ = 0;
+    this.applyBase();
+  }
+
+  /**
+   * Third-person chase view sitting BEHIND a moving target (the boat race),
+   * looking a little ahead of it. `heading` is the target's facing (model faces
+   * +z at 0, so forward = (sin h, cos h)). The rig eases toward the ideal spot
+   * each frame so bends feel smooth, and it composes with `tickShake` because it
+   * writes `base`/`look` just like the fixed framings do.
+   */
+  chaseBehind(tx: number, ty: number, tz: number, heading: number, dist = 13, height = 7.5) {
+    const aspect = innerWidth / innerHeight;
+    this.cam.fov = 62;
+    this.cam.aspect = aspect;
+    this.cam.updateProjectionMatrix();
+    const fx = Math.sin(heading), fz = Math.cos(heading);
+    const dx = tx - fx * dist, dy = ty + height, dz = tz - fz * dist;
+    if (!this.chasing) {
+      this.chasing = true;
+      this.base.set(dx, dy, dz);
+    } else {
+      this.base.x += (dx - this.base.x) * 0.18;
+      this.base.y += (dy - this.base.y) * 0.18;
+      this.base.z += (dz - this.base.z) * 0.18;
+    }
+    this.look.set(tx + fx * 5, ty + 1.6, tz + fz * 5);
+    this.topDown = false;
     this.followZ = 0;
     this.applyBase();
   }
@@ -61,6 +91,7 @@ export class IsoCamera {
     this.base.set(0, halfSize * 3.0 * portrait, halfSize * 1.02 * portrait);
     this.look.set(0, 0, 0);
     this.topDown = true;
+    this.chasing = false;
     this.followZ = 0;
     this.applyBase();
   }
@@ -80,6 +111,9 @@ export class IsoCamera {
   onResize() {
     this.cam.aspect = innerWidth / innerHeight;
     this.cam.updateProjectionMatrix();
+    // Chase rig re-derives its transform every tick, so a resize only needs the
+    // projection refresh above.
+    if (this.chasing) return;
     if (this.base.lengthSq() > 0) {
       if (this.topDown) this.frameTopDown(this.halfSize);
       else this.frame(this.halfSize, this.zoom);

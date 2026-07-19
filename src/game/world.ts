@@ -128,6 +128,12 @@ export function buildWorld(
     ringMesh.rotation.x = -Math.PI / 2;
     ringMesh.position.y = 0.4;
     scene.add(ringMesh);
+  } else if (game.mechanic === 'boat') {
+    // Boat race: a big forest floor covering the whole winding river course
+    // (the module lays the river + banks on top). No perimeter trim bars — the
+    // course isn't a bounded arena.
+    const fw = halfSize * 3.2;
+    floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(fw * 2, fw * 2), fmat);
   } else {
     const fw = rect ? rect.w : halfSize;
     const fl = rect ? rect.l : halfSize;
@@ -147,7 +153,7 @@ export function buildWorld(
   // rectangular corridors skip them too (the ring layout doesn't fit); Musical
   // Chairs wants a clean ring, and its tight framing put a prop in the
   // foreground.
-  if (game.mechanic !== 'goal' && game.mechanic !== 'musicalchairs' && game.mechanic !== 'chase' && game.mechanic !== 'kart' && game.mechanic !== 'maze' && game.mechanic !== 'lavafloor' && !rect) buildProps(scene, family, halfSize, trimMat);
+  if (game.mechanic !== 'goal' && game.mechanic !== 'musicalchairs' && game.mechanic !== 'chase' && game.mechanic !== 'kart' && game.mechanic !== 'maze' && game.mechanic !== 'lavafloor' && game.mechanic !== 'boat' && !rect) buildProps(scene, family, halfSize, trimMat);
   // Floor Is Lava: a bright, warm fill so the map + backdrop read as one glowing scene.
   if (game.mechanic === 'lavafloor') { scene.add(new THREE.AmbientLight(0xffd8a8, 1.5)); scene.fog = new THREE.Fog(new THREE.Color(0xff7a2e).getHex(), halfSize * 3.5, halfSize * 9); }
   const ambientPts = buildAmbient(scene, family, halfSize);
