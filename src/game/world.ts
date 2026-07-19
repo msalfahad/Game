@@ -138,10 +138,11 @@ export function buildWorld(
     // river course (the module lays the river + banks on top). No perimeter
     // trim bars — the course isn't a bounded arena. The raft lives in the sky
     // family, so force a forest-green ground under it regardless of theme.
-    const fw = halfSize * 3.2;
+    // The boat race lays out a long winding course, so its floor must be big.
+    const fw = halfSize * (game.mechanic === 'boat' ? 9 : 3.2);
     const rmat = game.mechanic === 'raft'
       ? new THREE.MeshStandardMaterial({ color: 0x3f7a34, roughness: 1 })
-      : fmat;
+      : new THREE.MeshStandardMaterial({ color: 0x3f7a34, roughness: 1 });
     floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(fw * 2, fw * 2), rmat);
   } else {
     const fw = rect ? rect.w : halfSize;

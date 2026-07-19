@@ -150,7 +150,7 @@ export const GAMES: GameDef[] = [
   g('dune-4', 'dune', 'Night Heist', '🔦', 4, 'maze', 'square', [], 'Lights out! 3 robbers with fading torches must blind the cop — hold 5s of torchlight on them to win. The cop sees in the dark, runs faster, and tags robbers from behind.'),
 
   // 4. Wildwood Arena
-  g('wild-1', 'wildwood', 'Boat Bash Race', '🚤', 1, 'boat', 'square', [], 'Blast down a winding forest river in a speed boat! Ram rivals, grab weapons, and race to the checkered flag. First across or the furthest in 1 minute wins.'),
+  g('wild-1', 'wildwood', 'River Rush', '🚤', 1, 'boat', 'square', [], 'Boat Kart Arena! Blast down a long forest river — calm launch, foaming rapids with moving rocks, a giant wave, a split-path island and boost pads — grabbing weapons and ramming rivals all the way to the CASTLE finish. First through the castle gate wins.'),
   g('wild-2', 'wildwood', 'Rolling Logs', '🪵', 2, 'dodge', 'square', [], 'Logs sweep the grove. Jump or be flattened.', { hz: 'logs' }),
   g('wild-3', 'wildwood', 'Watermelon Bomb', '🍉', 3, 'hotpotato', 'square', [], 'The watermelon has a firecracker! Tap a rival to pass it. Whoever is holding it when it blows gets splatted. Last one dry wins.'),
   g('wild-4', 'wildwood', 'Jungle Race', '🦜', 4, 'race', 'square', ['falling', 'rollers'], 'Race the ruins as branches crash down.', { laps: 2 }),
