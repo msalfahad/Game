@@ -24,18 +24,11 @@ interface Shot { x: number; z: number; vx: number; vz: number; kind: 'ice' | 'ro
 interface Obstacle { x: number; z: number; r: number; idx: number; amp: number; sp: number; base: number; mesh?: THREE.Object3D; moving: boolean; }
 interface Pad { x: number; z: number; idx: number; }
 
-const CRUISE = 12;
-const BOOST = 20;
+const CRUISE = 10;
+const BOOST = 17;
 const ACCEL = 2.2;
 const TURN = 2.0;
 const BOAT_R = 2.6;
-
-// Long, gently-winding centreline (x, z) from the calm launch (top) down to the
-// castle finish (bottom). Big, smooth bends so 4 boats can drift side by side.
-const CTRL: [number, number][] = [
-  [0, 175], [-70, 150], [64, 116], [-58, 82], [78, 44],
-  [-70, 8], [60, -30], [-78, -66], [54, -104], [-40, -140], [0, -172],
-];
 
 export class BoatGame implements GameModule {
   readonly stickMode = 'float' as const;
@@ -43,7 +36,7 @@ export class BoatGame implements GameModule {
   objective = '🚤 Race to the castle! Grab weapons & ram rivals!';
 
   private ctx!: MatchContext;
-  private timeLeft = 90;
+  private timeLeft = 60;
   private finished = false;
 
   private path: THREE.Vector3[] = [];
@@ -70,6 +63,9 @@ export class BoatGame implements GameModule {
   private pickupT = 1.5;
   private obstacles: Obstacle[] = [];
   private pads: Pad[] = [];
+  // Hard-to-reach FAST TRACK: warp gate that skips ~5s of river.
+  private fastX = 0; private fastZ = 0; private fastEntry = 0; private fastExit = 0;
+  private fastUsed: boolean[] = [];
 
   // Animated water.
   private waterGeo!: THREE.BufferGeometry;
@@ -95,9 +91,9 @@ export class BoatGame implements GameModule {
     this.ctx = ctx;
     this.title = ctx.game.name;
     this.finished = false;
-    this.timeLeft = matchTime(90);
+    this.timeLeft = matchTime(60);
     this.pickups = []; this.oils = []; this.shots = [];
-    this.pickupT = 1.5; this.finishOrder = []; this.obstacles = []; this.pads = [];
+    this.pickupT = 1.5; this.finishOrder = []; this.obstacles = []; this.pads = []; this.fastUsed = [];
     this.frame = 0; this.waveActive = false; this.waveCd = 6; this.sprayT = 0;
 
     // Push the fog back so the long river reads into the distance without a wall
@@ -146,7 +142,7 @@ export class BoatGame implements GameModule {
    *  → wave-wide → split-widest → final). Smoothly interpolated. */
   private widthAt(f: number): number {
     const kf: [number, number][] = [
-      [0, 16], [0.10, 16], [0.22, 13], [0.40, 9.5], [0.55, 15], [0.72, 18], [0.86, 14], [1, 14],
+      [0, 14], [0.10, 14], [0.22, 12], [0.40, 8.5], [0.55, 13], [0.72, 15], [0.86, 12], [1, 12],
     ];
     for (let i = 0; i < kf.length - 1; i++) {
       const [a, wa] = kf[i], [b, wb] = kf[i + 1];
@@ -168,10 +164,39 @@ export class BoatGame implements GameModule {
   }
 
   // --- course -----------------------------------------------------------------
+  /** A fresh, ORGANIC meander each match — flows steadily "down" the map (z
+   *  always decreasing) with a randomly wandering x. The per-step x change is
+   *  capped to the z-step, so segments never lean past ~45° and the river can't
+   *  double back or overlap itself (no S shape, no sand/trees in the water). */
+  private genControlPoints(): THREE.Vector3[] {
+    const pts: THREE.Vector3[] = [];
+    const steps = 12, z0 = 200, z1 = -200;
+    const dz = Math.abs((z1 - z0) / steps);
+    let x = 0;
+    for (let i = 0; i <= steps; i++) {
+      const z = z0 + (z1 - z0) * (i / steps);
+      if (i <= 1) x = 0;                              // straight launch off the dock
+      else if (i >= steps - 1) x = x * 0.4;           // straighten into the castle
+      else x = Math.max(-52, Math.min(52, x + (Math.random() - 0.5) * 2 * (dz * 0.95)));
+      pts.push(new THREE.Vector3(x, 0, z));
+    }
+    return pts;
+  }
+
+  /** True if (x,z) is within the river channel (plus margin) at ANY point along
+   *  the course — used to keep set-dressing out of the water. */
+  private inRiver(x: number, z: number, margin: number): boolean {
+    for (let s = 0; s < this.N; s += 2) {
+      const c = this.path[s];
+      const d = Math.hypot(c.x - x, c.z - z);
+      if (d < this.widths[s] + margin) return true;
+    }
+    return false;
+  }
+
   private buildCourse() {
     const scene = this.ctx.scene;
-    const pts3 = CTRL.map(([x, z]) => new THREE.Vector3(x, 0, z));
-    const curve = new THREE.CatmullRomCurve3(pts3, false, 'catmullrom', 0.5);
+    const curve = new THREE.CatmullRomCurve3(this.genControlPoints(), false, 'centripetal');
     this.path = curve.getPoints(699);
     this.N = this.path.length;
     this.heads = this.path.map((_, i) => {
@@ -207,18 +232,23 @@ export class BoatGame implements GameModule {
     // Flowing (animated) water surface.
     this.buildWater();
 
-    // Bankside forest — dense but ALL on land, past the shore.
+    // Bankside forest — dense but ALL on land. Every tree is validated against
+    // the WHOLE river so none can ever sit in the water, even where the course
+    // bends near itself.
     for (let i = 8; i < this.N - 8; i += 7) {
       for (const side of [-1, 1]) {
         if (Math.random() < 0.25) continue;
         const c = this.path[i], h = this.heads[i], w = this.widths[i];
         const px = Math.cos(h), pz = -Math.sin(h);
         const off = w + 9 + Math.random() * 26;
-        this.addTree(c.x + px * off * side, c.z + pz * off * side);
+        const tx = c.x + px * off * side, tz = c.z + pz * off * side;
+        if (this.inRiver(tx, tz, 3)) continue; // never plant in the channel
+        this.addTree(tx, tz);
       }
     }
 
     this.buildSections();
+    this.buildFastTrack();
     this.buildMountains();
     this.buildStartDock();
     this.buildCastleFinish();
@@ -352,19 +382,19 @@ export class BoatGame implements GameModule {
     // side. A boost pad rewards the tighter right-hand line.
     const si = Math.floor(this.N * 0.71);
     const isle = new THREE.Group();
-    const mound = new THREE.Mesh(new THREE.SphereGeometry(6, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+    const mound = new THREE.Mesh(new THREE.SphereGeometry(4.4, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2),
       new THREE.MeshStandardMaterial({ color: 0x4a7a38, roughness: 1, flatShading: true }));
     mound.scale.y = 0.6; mound.position.y = 0.3; isle.add(mound);
-    const sand = new THREE.Mesh(new THREE.CylinderGeometry(7, 7.4, 0.6, 18),
+    const sand = new THREE.Mesh(new THREE.CylinderGeometry(5, 5.4, 0.6, 18),
       new THREE.MeshStandardMaterial({ color: 0xc9a76b, roughness: 1 }));
     sand.position.y = 0.35; isle.add(sand);
     isle.position.set(this.path[si].x, 0, this.path[si].z);
     scene.add(isle);
-    for (let k = 0; k < 4; k++) {
+    for (let k = 0; k < 3; k++) {
       const a = Math.random() * 6;
-      this.addTree(this.path[si].x + Math.cos(a) * 3, this.path[si].z + Math.sin(a) * 3);
+      this.addTree(this.path[si].x + Math.cos(a) * 2, this.path[si].z + Math.sin(a) * 2);
     }
-    this.obstacles.push({ x: this.path[si].x, z: this.path[si].z, r: 6.5, idx: si, amp: 0, sp: 0, base: 0, moving: false });
+    this.obstacles.push({ x: this.path[si].x, z: this.path[si].z, r: 4.8, idx: si, amp: 0, sp: 0, base: 0, moving: false });
     { // boost pad on the tight side of the island
       const h = this.heads[si], px = Math.cos(h), pz = -Math.sin(h);
       this.addPad(this.path[si].x + px * (this.widths[si] * 0.72), this.path[si].z + pz * (this.widths[si] * 0.72), si);
@@ -377,6 +407,43 @@ export class BoatGame implements GameModule {
       const h = this.heads[i], px = Math.cos(h), pz = -Math.sin(h);
       this.addPad(this.path[i].x + px * off, this.path[i].z + pz * off, i);
     }
+  }
+
+  /** FAST TRACK — a hard-to-reach warp gate tucked against the outer bank of a
+   *  bend. Nick it and you skip ~5 seconds of river (your progress jumps ahead),
+   *  but it sits off the racing line so you risk scraping the bank to grab it. */
+  private buildFastTrack() {
+    const scene = this.ctx.scene;
+    this.fastEntry = Math.floor(this.N * 0.42);
+    this.fastExit = Math.min(this.N - 8, this.fastEntry + 70); // ~5s of river skipped
+    const c = this.path[this.fastEntry], h = this.heads[this.fastEntry], w = this.widths[this.fastEntry];
+    const px = Math.cos(h), pz = -Math.sin(h);
+    // Push it out toward the outer bank (hard to line up while racing).
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const off = (w - BOAT_R) * 0.94 * side;
+    this.fastX = c.x + px * off; this.fastZ = c.z + pz * off;
+
+    // A glowing arch gate + a "FAST TRACK" sign.
+    const gate = new THREE.Group();
+    const postMat = new THREE.MeshStandardMaterial({ color: 0xffc23a, emissive: 0x9a6a00, emissiveIntensity: 0.7, roughness: 0.4, metalness: 0.3 });
+    for (const s of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 7, 8), postMat);
+      post.position.set(s * 3, 3.5, 0); gate.add(post);
+    }
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.6, 0.6), postMat);
+    bar.position.y = 7; gate.add(bar);
+    // Glowing gateway plane you drive through.
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(6, 6.6),
+      new THREE.MeshStandardMaterial({ color: 0xffe23a, emissive: 0xffc000, emissiveIntensity: 0.7, transparent: true, opacity: 0.28, side: THREE.DoubleSide }));
+    glow.position.y = 3.4; gate.add(glow);
+    gate.position.set(this.fastX, 0, this.fastZ);
+    gate.rotation.y = h;
+    scene.add(gate);
+    const sign = this.textSprite('⚡ FAST TRACK ⚡');
+    sign.scale.set(13, 3.3, 1); sign.position.set(this.fastX, 9.5, this.fastZ);
+    scene.add(sign);
+    // Chevron hint pointing into the shortcut.
+    this.addPad(this.fastX, this.fastZ, this.fastEntry);
   }
 
   private addPad(x: number, z: number, idx: number) {
@@ -399,7 +466,7 @@ export class BoatGame implements GameModule {
     const snow = new THREE.MeshStandardMaterial({ color: 0xf2f6ff, roughness: 0.9, flatShading: true });
     for (let i = 0; i < 11; i++) {
       const a = (i / 11) * Math.PI * 2 + 0.3;
-      const r = 240 + Math.random() * 90;
+      const r = 300 + Math.random() * 120;
       const hgt = 60 + Math.random() * 70;
       const rad = 34 + Math.random() * 26;
       const m = new THREE.Mesh(new THREE.ConeGeometry(rad, hgt, 6), rock);
@@ -613,6 +680,7 @@ export class BoatGame implements GameModule {
     this.tickObstacles(elapsed);
     this.tickWave(dt);
     this.tickPads();
+    this.tickFastTrack();
     this.tickSpray();
     this.tickPickups(dt);
     this.tickOils();
@@ -629,7 +697,8 @@ export class BoatGame implements GameModule {
     tickRoster(ctx, dt, elapsed);
 
     const you = ctx.players[0];
-    ctx.camera.chaseBehind(you.x, you.y, you.z, this.head[you.index], 14, 7.5);
+    // Pulled back + higher so the boats read smaller and you see more river.
+    ctx.camera.chaseBehind(you.x, you.y, you.z, this.head[you.index], 21, 12);
 
     if (this.timeLeft <= 0) this.doFinish();
   }
@@ -815,6 +884,24 @@ export class BoatGame implements GameModule {
           if (p.you) { SFX.power(); this.ctx.fx.banner('⚡ BOOST PAD!', '#2fe0e0'); }
           break;
         }
+      }
+    }
+  }
+
+  private tickFastTrack() {
+    for (const p of this.ctx.players) {
+      if (p.dead || this.done[p.index] || this.fastUsed[p.index]) continue;
+      // Only counts if you're actually heading downstream past the gate.
+      if (this.idx[p.index] < this.fastEntry - 6 || this.idx[p.index] > this.fastEntry + 10) continue;
+      if (Math.hypot(p.x - this.fastX, p.z - this.fastZ) < 3.0) {
+        this.fastUsed[p.index] = true;
+        // Warp ~5s down the river: jump progress + drop onto the exit line.
+        this.idx[p.index] = this.fastExit;
+        const c = this.path[this.fastExit];
+        p.x = c.x; p.z = c.z; this.head[p.index] = this.heads[this.fastExit];
+        p.speedT = Math.max(p.speedT, 2.2);
+        this.ctx.fx.burst(p.x, p.z, '#ffe23a', 18);
+        if (p.you) { SFX.power(); this.ctx.fx.shake(1.0); this.ctx.fx.banner('⚡ FAST TRACK! −5s', '#ffe23a'); }
       }
     }
   }
