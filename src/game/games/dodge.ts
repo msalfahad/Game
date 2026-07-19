@@ -82,6 +82,8 @@ export class DodgeGame implements GameModule {
       }
     }
 
+    if (this.hz === 'logs') this.buildGroveFloor();
+
     this.powerups = new Powerups(ctx, ['speed', 'shield'], () => this.leader());
 
     // Touch JUMP button — the ability corner-tap owns the bottom-right 150px,
@@ -166,30 +168,85 @@ export class DodgeGame implements GameModule {
     tickRoster(ctx, dt, elapsed);
   }
 
+  /** A themed FOREST-GROVE floor unique to Rolling Logs: mossy grass with
+   *  fallen tree-ring log cross-sections scattered through it (drawn to a
+   *  canvas), laid over the default arena floor, ringed by a mossy log border. */
+  private buildGroveFloor() {
+    const ctx = this.ctx;
+    const H = ctx.halfSize;
+    const c = document.createElement('canvas'); c.width = c.height = 512;
+    const g = c.getContext('2d')!;
+    // Grass base with a soft radial lift toward the middle.
+    const grad = g.createRadialGradient(256, 256, 40, 256, 256, 300);
+    grad.addColorStop(0, '#4a8a3c'); grad.addColorStop(1, '#2f5f2c');
+    g.fillStyle = grad; g.fillRect(0, 0, 512, 512);
+    // Moss patches.
+    for (let i = 0; i < 16; i++) {
+      const x = Math.random() * 512, y = Math.random() * 512, r = 18 + Math.random() * 34;
+      g.fillStyle = i % 2 ? 'rgba(40,95,45,0.5)' : 'rgba(96,150,60,0.4)';
+      g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    }
+    // Grass speckle.
+    for (let i = 0; i < 2600; i++) {
+      const x = Math.random() * 512, y = Math.random() * 512, r = 1 + Math.random() * 2.4;
+      g.fillStyle = Math.random() < 0.5 ? 'rgba(28,72,28,0.5)' : 'rgba(130,180,80,0.4)';
+      g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    }
+    // Fallen-log cross-sections (concentric tree rings) embedded in the ground.
+    for (let i = 0; i < 8; i++) {
+      const x = 50 + Math.random() * 412, y = 50 + Math.random() * 412, R = 15 + Math.random() * 16;
+      g.fillStyle = '#8a6238'; g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2); g.fill();
+      for (let k = R; k > 2; k -= 2.6) {
+        g.strokeStyle = (Math.round(k) % 2) ? '#6f4a28' : '#a37b46'; g.lineWidth = 1.6;
+        g.beginPath(); g.arc(x, y, k, 0, Math.PI * 2); g.stroke();
+      }
+      g.fillStyle = '#5f3f22'; g.beginPath(); g.arc(x, y, 2.4, 0, Math.PI * 2); g.fill();
+    }
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(2, 2);
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(H * 2 + 6, H * 2 + 6),
+      new THREE.MeshStandardMaterial({ map: tex, roughness: 1 }),
+    );
+    floor.rotation.x = -Math.PI / 2; floor.position.y = 0.03; floor.receiveShadow = true;
+    ctx.scene.add(floor);
+  }
+
+  /** Roll one log across the grove. Speed ramps with progress: a normal roll
+   *  early (≈16), a fast sweep late (≈38). */
+  private spawnLog(prog: number) {
+    const ctx = this.ctx;
+    const axis = Math.random() < 0.5;
+    const off = ctx.halfSize + 5;
+    const t = (Math.random() - 0.5) * ctx.halfSize * 1.5;
+    const sp = 16 + prog * 22;
+    const m = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.6, 1.6, ctx.halfSize * 1.1, 10),
+      new THREE.MeshStandardMaterial({ color: 0x5a3a22, roughness: 1 }),
+    );
+    m.rotation.z = axis ? 0 : Math.PI / 2;
+    m.rotation.x = axis ? Math.PI / 2 : 0;
+    m.castShadow = true;
+    ctx.scene.add(m);
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    this.logs.push(
+      axis
+        ? { m, x: -off * dir, z: t, vx: sp * dir, vz: 0 }
+        : { m, x: t, z: -off * dir, vx: 0, vz: sp * dir },
+    );
+  }
+
   private tickThreat(dt: number, prog: number, _elapsed: number) {
     const ctx = this.ctx;
     if (this.hz === 'logs') {
       this.logT -= dt;
       if (this.logT <= 0) {
-        this.logT = Math.max(0.8, 2.2 - prog * 1.4);
-        const axis = Math.random() < 0.5;
-        const off = ctx.halfSize + 5;
-        const t = (Math.random() - 0.5) * ctx.halfSize * 1.5;
-        const sp = 20 + prog * 10;
-        const m = new THREE.Mesh(
-          new THREE.CylinderGeometry(1.6, 1.6, ctx.halfSize * 1.1, 10),
-          new THREE.MeshStandardMaterial({ color: 0x5a3a22, roughness: 1 }),
-        );
-        m.rotation.z = axis ? 0 : Math.PI / 2;
-        m.rotation.x = axis ? Math.PI / 2 : 0;
-        m.castShadow = true;
-        ctx.scene.add(m);
-        const dir = Math.random() < 0.5 ? 1 : -1;
-        this.logs.push(
-          axis
-            ? { m, x: -off * dir, z: t, vx: sp * dir, vz: 0 }
-            : { m, x: t, z: -off * dir, vx: 0, vz: sp * dir },
-        );
+        // Starts calm & slow, then ramps HARD: logs come much more often and a
+        // second log joins later in the round, so the grove fills up and the
+        // pace turns frantic near the end.
+        this.logT = Math.max(0.42, 2.6 - prog * 2.15);
+        this.spawnLog(prog);
+        if (prog > 0.45 && Math.random() < prog * 0.7) this.spawnLog(prog);
       }
       this.logs = this.logs.filter((l) => {
         l.x += l.vx * dt;
