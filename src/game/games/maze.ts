@@ -484,16 +484,16 @@ export class MazeGame implements GameModule {
     ui.id = 'mzUI';
     ui.style.cssText = 'position:fixed;inset:0;z-index:8;pointer-events:none;font-family:Nunito,system-ui,sans-serif;color:#fff;';
     ui.innerHTML = `
-      <div style="position:fixed;top:120px;left:50%;transform:translateX(-50%);font-family:Bungee,cursive;font-size:22px;
+      <div style="position:fixed;top:120px;left:50%;transform:translateX(-50%);font-family:Bungee,system-ui,sans-serif;font-size:22px;
         letter-spacing:2px;text-shadow:0 3px 0 rgba(0,0,0,.6);color:${this.youPolice ? '#ff3b3b' : '#5cf07a'};white-space:nowrap;">
         ${this.youPolice ? '🚔 FIND THEM' : '🏃 ESCAPE'}</div>
       <div style="position:fixed;top:160px;left:50%;transform:translateX(-50%);text-align:center;">
-        <div style="font-family:Bungee,cursive;font-size:13px;letter-spacing:1px;text-shadow:0 2px 0 rgba(0,0,0,.6);">🔦 COP BLINDED</div>
+        <div style="font-family:Bungee,system-ui,sans-serif;font-size:13px;letter-spacing:1px;text-shadow:0 2px 0 rgba(0,0,0,.6);">🔦 COP BLINDED</div>
         <div style="width:200px;height:14px;background:rgba(0,0,0,.5);border-radius:8px;overflow:hidden;margin-top:3px;border:2px solid rgba(255,255,255,.25);">
           <div id="mzExpose" style="height:100%;width:0%;background:linear-gradient(90deg,#ffe66d,#ff9f1c);transition:width .1s;"></div>
         </div>
       </div>
-      <div id="mzInfo" style="position:fixed;top:212px;left:50%;transform:translateX(-50%);display:none;font-family:Bungee,cursive;font-size:15px;text-shadow:0 2px 0 rgba(0,0,0,.6);"></div>
+      <div id="mzInfo" style="position:fixed;top:212px;left:50%;transform:translateX(-50%);display:none;font-family:Bungee,system-ui,sans-serif;font-size:15px;text-shadow:0 2px 0 rgba(0,0,0,.6);"></div>
       <div id="mzRobber" style="position:fixed;left:0;right:0;bottom:24px;display:none;flex-direction:column;align-items:center;gap:10px;">
         <div style="display:flex;gap:6px;">
           <span class="mzBar"></span><span class="mzBar"></span><span class="mzBar"></span>
@@ -507,7 +507,7 @@ export class MazeGame implements GameModule {
     this.barsEl = Array.from(ui.querySelectorAll('.mzBar')) as HTMLElement[];
     for (const bar of this.barsEl) bar.style.cssText = 'width:34px;height:12px;border-radius:4px;background:#2fe04a;box-shadow:0 0 8px rgba(47,224,74,.6);';
     this.lightBtn = ui.querySelector('#mzLight')!;
-    this.lightBtn.style.cssText += 'font-family:Bungee,cursive;font-size:18px;border:none;border-radius:14px;padding:14px 26px;color:#12142e;background:#FFD23F;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);';
+    this.lightBtn.style.cssText += 'font-family:Bungee,system-ui,sans-serif;font-size:18px;border:none;border-radius:14px;padding:14px 26px;color:#12142e;background:#FFD23F;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);';
     this.lightBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.toggleLight(); });
     if (this.youPolice) {
       (ui.querySelector('#mzInfo') as HTMLElement).style.display = 'block';

@@ -254,12 +254,12 @@ export class HotPotatoGame implements GameModule {
     document.getElementById('hpUI')?.remove();
     const ui = document.createElement('div');
     ui.id = 'hpUI';
-    ui.style.cssText = 'position:fixed;inset:0;z-index:8;pointer-events:none;font-family:Bungee,cursive;';
+    ui.style.cssText = 'position:fixed;inset:0;z-index:8;pointer-events:none;font-family:Bungee,system-ui,sans-serif;';
     ui.innerHTML = `
       <div id="hpCount" style="position:fixed;top:120px;left:50%;transform:translateX(-50%);font-size:74px;
         color:#fff;text-shadow:0 4px 0 rgba(0,0,0,.5);line-height:1;">0</div>
       <div style="position:fixed;left:0;right:0;bottom:26px;display:flex;justify-content:center;">
-        <button id="hpPass" style="pointer-events:auto;font-family:Bungee,cursive;font-size:20px;border:none;
+        <button id="hpPass" style="pointer-events:auto;font-family:Bungee,system-ui,sans-serif;font-size:20px;border:none;
           border-radius:16px;padding:15px 30px;background:#7ED321;color:#12331a;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);">🍉 PASS</button>
       </div>`;
     document.body.appendChild(ui);

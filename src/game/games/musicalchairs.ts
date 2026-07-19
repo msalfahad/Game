@@ -535,7 +535,7 @@ export class MusicalChairsGame implements GameModule {
         gap:9px;height:46px;background:rgba(13,16,38,.55);border-radius:16px;padding:8px 18px;">
         <span class="mcN">🎵</span><span class="mcN">🎶</span><span class="mcN">🎵</span><span class="mcN">🎶</span>
       </div>
-      <div id="mcSit" style="position:fixed;top:108px;left:50%;transform:translateX(-50%);font-family:Bungee,cursive;
+      <div id="mcSit" style="position:fixed;top:108px;left:50%;transform:translateX(-50%);font-family:Bungee,system-ui,sans-serif;
         font-size:48px;color:#FF4D4D;text-shadow:0 4px 0 rgba(0,0,0,.5);opacity:0;transition:opacity .08s;">SIT!</div>
       <div style="position:fixed;left:0;right:0;bottom:24px;display:flex;justify-content:center;gap:14px;">
         <button id="mcRun" style="pointer-events:auto;">🏃 RUN</button>
@@ -543,7 +543,7 @@ export class MusicalChairsGame implements GameModule {
         <button id="mcSitBtn" style="pointer-events:auto;display:none;">🪑 SIT</button>
       </div>`;
     document.body.appendChild(ui);
-    const btnCss = 'font-family:Bungee,cursive;font-size:18px;border:none;border-radius:14px;padding:14px 24px;color:#12142e;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);';
+    const btnCss = 'font-family:Bungee,system-ui,sans-serif;font-size:18px;border:none;border-radius:14px;padding:14px 24px;color:#12142e;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);';
     this.ui = ui;
     this.eqWrap = ui.querySelector('#mcEq')!;
     this.eqNotes = Array.from(ui.querySelectorAll('.mcN')) as HTMLElement[];

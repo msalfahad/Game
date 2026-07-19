@@ -41,17 +41,17 @@ canvas { display: block; }
 .hidden { display: none !important; }
 
 h1 {
-  font-family: 'Bungee', cursive; font-size: clamp(28px, 8vw, 52px); line-height: 1;
+  font-family: 'Bungee', system-ui, sans-serif; font-size: clamp(28px, 8vw, 52px); line-height: 1;
   text-align: center;
   background: linear-gradient(180deg, var(--aqua), #7EF9FF 45%, var(--gold));
   -webkit-background-clip: text; background-clip: text; color: transparent;
   filter: drop-shadow(0 5px 0 rgba(0, 0, 0, .45)); transform: rotate(-2deg);
 }
-h2 { font-family: 'Bungee', cursive; font-size: clamp(18px, 5vw, 26px); color: var(--aqua); text-align: center; }
+h2 { font-family: 'Bungee', system-ui, sans-serif; font-size: clamp(18px, 5vw, 26px); color: var(--aqua); text-align: center; }
 .tag { font-weight: 700; opacity: .85; text-align: center; max-width: 460px; font-size: 13px; line-height: 1.4; }
 
 button {
-  font-family: 'Bungee', cursive; font-size: 16px; color: var(--night); background: var(--gold);
+  font-family: 'Bungee', system-ui, sans-serif; font-size: 16px; color: var(--night); background: var(--gold);
   border: none; border-radius: 16px; padding: 13px 26px; cursor: pointer;
   box-shadow: 0 5px 0 #C99400; transition: transform .08s;
 }
@@ -64,7 +64,7 @@ button.big { width: 100%; max-width: 280px; }
 .cc { background: var(--panel); border-radius: 14px; padding: 7px 4px 6px; text-align: center; cursor: pointer; border: 3px solid transparent; }
 .cc img { width: 100%; height: 84px; object-fit: contain; pointer-events: none; filter: drop-shadow(0 3px 3px rgba(0, 0, 0, .4)); }
 .cc.sel { border-color: var(--gold); transform: scale(1.07); background: var(--panel2); }
-.cc .n { font-family: 'Bungee', cursive; font-size: 9.5px; margin-top: 3px; }
+.cc .n { font-family: 'Bungee', system-ui, sans-serif; font-size: 9.5px; margin-top: 3px; }
 #selInfo { font-size: 12px; font-weight: 900; text-align: center; min-height: 34px; color: var(--gold); max-width: 340px; width: 100%; }
 #selInfo .selName { font-size: 14px; letter-spacing: .5px; margin-bottom: 5px; }
 /* label · bar · label · bar — the two bar columns are 1fr so every bar track
@@ -76,7 +76,7 @@ button.big { width: 100%; max-width: 280px; }
 #selInfo .selUlt { margin-top: 6px; font-size: 11px; color: var(--gold); }
 
 .diffRow { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-.diff { font-family: 'Bungee', cursive; font-size: 12px; padding: 9px 14px; border-radius: 12px; background: var(--panel); color: var(--ink); border: 2px solid transparent; cursor: pointer; }
+.diff { font-family: 'Bungee', system-ui, sans-serif; font-size: 12px; padding: 9px 14px; border-radius: 12px; background: var(--panel); color: var(--ink); border: 2px solid transparent; cursor: pointer; }
 .diff.sel { border-color: var(--gold); color: var(--gold); background: var(--panel2); }
 
 /* Game / map picker */
@@ -84,27 +84,31 @@ button.big { width: 100%; max-width: 280px; }
 .gameBtn { display: flex; align-items: center; gap: 12px; background: var(--panel); border-radius: 18px; padding: 11px 16px; cursor: pointer; border: 3px solid transparent; text-align: left; }
 .gameBtn:active { border-color: var(--aqua); }
 .gameBtn .ico { font-size: 26px; }
-.gameBtn .nm { font-family: 'Bungee', cursive; font-size: 14px; color: var(--gold); }
+.gameBtn .nm { font-family: 'Bungee', system-ui, sans-serif; font-size: 14px; color: var(--gold); }
 .gameBtn .ds { font-size: 11.5px; opacity: .8; font-weight: 700; }
 .gameBtn.locked { opacity: .45; cursor: default; }
 
 /* Settings sliders */
-.settingRow { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 900; }
-.settingRow input[type=range] { width: 160px; }
+/* Title tuning column: every row is the same 280px width as the PLAY buttons and
+   left/right justified, so the labels line up on the left and the controls line
+   up on the right — a clean column, nothing offset. */
+.settingRow { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; max-width: 280px; font-size: 12px; font-weight: 900; }
+.settingRow input[type=range] { width: 150px; }
+.settingRow > button, .settingRow > select { width: 118px; text-align: center; font-size: 13px; padding: 10px 8px; }
 
 /* HUD */
 #hudHeads { position: fixed; top: 6px; left: 0; right: 0; display: flex; justify-content: center; gap: 10px; z-index: 5; pointer-events: none; }
 .head { display: flex; flex-direction: column; align-items: center; background: rgba(13, 16, 38, .72); border-radius: 12px; padding: 3px 8px; border: 2px solid transparent; min-width: 56px; }
 .head img { height: 34px; width: 44px; object-fit: contain; }
-.head .sc { font-family: 'Bungee', cursive; font-size: 17px; color: var(--gold); text-shadow: 0 2px 0 rgba(0, 0, 0, .5); line-height: 1; }
+.head .sc { font-family: 'Bungee', system-ui, sans-serif; font-size: 17px; color: var(--gold); text-shadow: 0 2px 0 rgba(0, 0, 0, .5); line-height: 1; }
 .head.dead { filter: grayscale(1); opacity: .45; }
 .head.you { border-color: var(--gold); }
 
-#clock { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 5; pointer-events: none; font-family: 'Bungee', cursive; font-size: 19px; background: rgba(13, 16, 38, .8); border-radius: 12px; padding: 4px 14px; color: var(--aqua); }
+#clock { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 5; pointer-events: none; font-family: 'Bungee', system-ui, sans-serif; font-size: 19px; background: rgba(13, 16, 38, .8); border-radius: 12px; padding: 4px 14px; color: var(--aqua); }
 #objective { position: fixed; top: 100px; left: 50%; transform: translateX(-50%); z-index: 5; pointer-events: none; font-weight: 900; font-size: 12px; opacity: .85; text-align: center; background: rgba(13, 16, 38, .55); border-radius: 10px; padding: 3px 12px; }
 #mute { position: fixed; top: 64px; right: 10px; z-index: 7; width: 40px; height: 40px; border-radius: 50%; background: rgba(13, 16, 38, .7); border: 1px solid rgba(244, 247, 255, .3); color: var(--ink); display: flex; align-items: center; justify-content: center; font-size: 18px; cursor: pointer; }
 
-#banner { position: fixed; top: 32%; left: 0; right: 0; text-align: center; z-index: 8; pointer-events: none; font-family: 'Bungee', cursive; font-size: clamp(22px, 7vw, 40px); color: var(--gold); text-shadow: 0 4px 0 rgba(0, 0, 0, .5); opacity: 0; transition: opacity .2s; }
+#banner { position: fixed; top: 32%; left: 0; right: 0; text-align: center; z-index: 8; pointer-events: none; font-family: 'Bungee', system-ui, sans-serif; font-size: clamp(22px, 7vw, 40px); color: var(--gold); text-shadow: 0 4px 0 rgba(0, 0, 0, .5); opacity: 0; transition: opacity .2s; }
 
 #abilityHint { position: fixed; right: 26px; bottom: 30px; z-index: 5; font-size: 40px; opacity: .14; filter: grayscale(1); transition: opacity .2s, transform .1s; display: none; }
 #abilityHint.ready { opacity: .4; filter: none; }
@@ -125,25 +129,25 @@ button.big { width: 100%; max-width: 280px; }
 #resList { display: flex; flex-direction: column; gap: 8px; width: min(320px, 90vw); }
 .resRow { display: flex; align-items: center; gap: 10px; background: var(--panel); border-radius: 14px; padding: 6px 12px; }
 .resRow img { height: 44px; width: 44px; object-fit: contain; }
-.resRow .rn { font-family: 'Bungee', cursive; font-size: 13px; flex: 1; text-align: left; }
-.resRow .rs { font-family: 'Bungee', cursive; font-size: 13px; color: var(--gold); }
+.resRow .rn { font-family: 'Bungee', system-ui, sans-serif; font-size: 13px; flex: 1; text-align: left; }
+.resRow .rs { font-family: 'Bungee', system-ui, sans-serif; font-size: 13px; color: var(--gold); }
 .resRow.first { border: 2px solid var(--gold); }
 
 /* VS */
 .vsRow { display: flex; gap: 10px; align-items: flex-end; justify-content: center; flex-wrap: wrap; }
 .vsCard { text-align: center; }
 .vsCard img { height: 84px; object-fit: contain; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, .5)); }
-.vsCard .n { font-family: 'Bungee', cursive; font-size: 11px; }
+.vsCard .n { font-family: 'Bungee', system-ui, sans-serif; font-size: 11px; }
 .vsCard.you img { height: 110px; }
 
-#loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 30; background: var(--night); font-family: 'Bungee', cursive; color: var(--aqua); font-size: 18px; }
+#loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 30; background: var(--night); font-family: 'Bungee', system-ui, sans-serif; color: var(--aqua); font-size: 18px; }
 
 /* Family picker */
 .famGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 150px)); gap: 10px; justify-content: center; width: min(680px, 94vw); }
 .famCard { background: var(--panel); border-radius: 16px; padding: 12px 8px; text-align: center; cursor: pointer; border: 3px solid transparent; }
 .famCard:active, .famCard:hover { border-color: var(--aqua); background: var(--panel2); }
 .famCard .fi { font-size: 34px; }
-.famCard .fn { font-family: 'Bungee', cursive; font-size: 11px; color: var(--gold); margin-top: 4px; }
+.famCard .fn { font-family: 'Bungee', system-ui, sans-serif; font-size: 11px; color: var(--gold); margin-top: 4px; }
 .famCard .fd { font-size: 10.5px; opacity: .75; font-weight: 700; margin-top: 2px; }
 .famCard.lab { opacity: .8; }
 .gameBtn .tier { font-size: 9px; color: var(--aqua); opacity: .9; margin-left: 4px; }
@@ -152,7 +156,7 @@ button.big { width: 100%; max-width: 280px; }
 .teamCols { display: flex; gap: 14px; justify-content: center; }
 .teamCol { background: var(--panel); border-radius: 16px; padding: 10px 14px; min-width: 140px; min-height: 130px;
   display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.teamCol .teamName { font-family: 'Bungee', cursive; font-size: 12px; }
+.teamCol .teamName { font-family: 'Bungee', system-ui, sans-serif; font-size: 12px; }
 #teamCol0 { border: 2px solid #4DC3FF55; }
 #teamCol1 { border: 2px solid #FF4D4D55; }
 
@@ -160,10 +164,10 @@ button.big { width: 100%; max-width: 280px; }
 #tuneDrawer { position: fixed; right: 12px; top: 12px; bottom: 12px; width: min(320px, 86vw); z-index: 40;
   background: rgba(13,16,38,.96); border: 2px solid var(--panel2); border-radius: 18px; padding: 16px;
   display: flex; flex-direction: column; gap: 10px; overflow-y: auto; touch-action: auto; }
-#tuneDrawer h3 { font-family: 'Bungee', cursive; color: var(--aqua); font-size: 15px; text-align: center; }
+#tuneDrawer h3 { font-family: 'Bungee', system-ui, sans-serif; color: var(--aqua); font-size: 15px; text-align: center; }
 .tinyTag { font-size: 11px; opacity: .75; font-weight: 700; text-align: center; }
 .tuneRow { display: grid; grid-template-columns: 1fr; gap: 2px; font-size: 11px; font-weight: 900; }
 .tuneRow input { width: 100%; }
-.tuneRow em { font-style: normal; color: var(--gold); font-family: 'Bungee', cursive; font-size: 11px; text-align: right; }
+.tuneRow em { font-style: normal; color: var(--gold); font-family: 'Bungee', system-ui, sans-serif; font-size: 11px; text-align: right; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

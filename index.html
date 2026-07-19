@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Bash Arena</title>
+  <!-- Preload the display + body fonts so they're ready before first paint and
+       the menu doesn't flash the iOS 'cursive' fallback then swap. -->
+  <link rel="preload" href="/fonts/bungee.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/nunito.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/src/ui/styles.css" />
 </head>
 <body>

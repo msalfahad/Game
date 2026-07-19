@@ -750,7 +750,7 @@ export class KartGame implements GameModule {
         <button id="kSpeed" style="pointer-events:auto;">🏁 SPEED</button>
       </div>`;
     document.body.appendChild(ui);
-    const btnCss = 'font-family:Bungee,cursive;font-size:18px;border:none;border-radius:16px;padding:16px 22px;color:#12142e;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);touch-action:none;user-select:none;';
+    const btnCss = 'font-family:Bungee,system-ui,sans-serif;font-size:18px;border:none;border-radius:16px;padding:16px 22px;color:#12142e;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);touch-action:none;user-select:none;';
     this.itemBtn = ui.querySelector('#kItem')!;
     this.speedBtn = ui.querySelector('#kSpeed')!;
     this.itemBtn.style.cssText += btnCss + 'background:#FFD23F;opacity:0.45;';
