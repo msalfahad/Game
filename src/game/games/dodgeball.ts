@@ -33,6 +33,7 @@ const LINE_BUF = 0.6;              // closest you can get to the centre line
 const GRAB_R = 2.8;
 const HIT_R = HITBOX_RADIUS + 0.9;
 const CATCH_R = HITBOX_RADIUS + 1.9;
+const CATCH_PROMPT_R = 11;         // how close an incoming ball lights up CATCH
 const BALL_N = 34, BALL_P = 52;    // normal / power throw speed
 const INVULN = 1.4, STUN = 0.5;
 const CATCH_WINDOW = 0.42;
@@ -54,9 +55,11 @@ export class DodgeBrawlGame implements GameModule {
   private botAct: number[] = [];  // bot decision timer
   private charging = false; private chargeT = 0;
   private startGrace = 2;
+  private dashT = 0; private dashCd = 0; // local player's dodge dash
 
   private throwBtn!: HTMLButtonElement;
   private catchBtn!: HTMLButtonElement;
+  private dodgeBtn!: HTMLButtonElement;
   private scoreEl!: HTMLElement;
 
   init(ctx: MatchContext) {
@@ -68,6 +71,7 @@ export class DodgeBrawlGame implements GameModule {
     this.balls = [];
     this.charging = false; this.chargeT = 0;
     this.startGrace = 2;
+    this.dashT = 0; this.dashCd = 0;
 
     setupRoster(ctx, '❤❤❤', 0.5);
     this.catchT = ctx.players.map(() => 0);
@@ -176,6 +180,29 @@ export class DodgeBrawlGame implements GameModule {
     if (p.you) SFX.tick();
   }
 
+  private doDodge() {
+    const p = this.ctx.players[0];
+    if (p.dead || this.finished || this.dashCd > 0) return;
+    this.dashT = 0.42; this.dashCd = 0.85;
+    SFX.tick(); this.ctx.fx.burst(p.x, p.z, '#cff0ff', 8);
+  }
+
+  /** Is an enemy ball flying at the LOCAL player and close enough to catch? Used
+   *  to light up the CATCH button (grey → blue) only in the timing window. */
+  private localCatchReady(): boolean {
+    const you = this.ctx.players[0];
+    if (you.dead) return false;
+    for (const b of this.balls) {
+      if (b.state !== 'thrown') continue;
+      if (this.teamOf(this.ctx.players[b.thrower]) === this.teamOf(you)) continue;
+      const dx = you.x - b.x, dz = you.z - b.z, d = Math.hypot(dx, dz);
+      if (d > CATCH_PROMPT_R || d < 0.001) continue;
+      const bl = Math.hypot(b.vx, b.vz) || 1;
+      if ((dx / d) * (b.vx / bl) + (dz / d) * (b.vz / bl) > 0.72) return true; // heading at me
+    }
+    return false;
+  }
+
   private nearestEnemy(p: Player): Player | null {
     let best: Player | null = null, bd = Infinity;
     for (const q of this.alive(this.teamOf(p) === 0 ? 1 : 0)) {
@@ -193,15 +220,18 @@ export class DodgeBrawlGame implements GameModule {
     ctx.setClock(this.timeLeft);
     this.startGrace = Math.max(0, this.startGrace - dt);
 
-    // Charge the throw while held.
+    // Charge the throw while held; tick the dodge dash + its cooldown.
     if (this.charging) this.chargeT = Math.min(0.9, this.chargeT + dt);
+    this.dashT = Math.max(0, this.dashT - dt);
+    this.dashCd = Math.max(0, this.dashCd - dt);
 
     // Movement.
     for (const p of ctx.players) {
       if (p.dead) continue;
       this.catchT[p.index] = Math.max(0, this.catchT[p.index] - dt);
       if (p.freezeT > 0) continue;
-      if (p.index === 0) localMove(ctx, dt, { noClamp: true });
+      // Dodge dash = a burst of speed (great for jinking sideways out of a throw).
+      if (p.index === 0) localMove(ctx, dt, { noClamp: true, speedMul: this.dashT > 0 ? 2.3 : 1 });
       else this.botTick(p, dt);
       this.clampHalf(p);
     }
@@ -248,6 +278,13 @@ export class DodgeBrawlGame implements GameModule {
   private tickBalls(dt: number, elapsed: number) {
     for (const b of this.balls) {
       if (b.state === 'loose') {
+        // A just-bounced ball rolls a moment, then friction settles it in-bounds.
+        if (Math.abs(b.vx) > 0.15 || Math.abs(b.vz) > 0.15) {
+          b.x += b.vx * dt; b.z += b.vz * dt;
+          const k = Math.max(0, 1 - 4 * dt); b.vx *= k; b.vz *= k;
+          b.x = Math.max(-this.H + 1, Math.min(this.H - 1, b.x));
+          b.z = Math.max(-this.H + 1, Math.min(this.H - 1, b.z));
+        } else { b.vx = 0; b.vz = 0; }
         b.g.position.set(b.x, 0.8 + Math.sin(elapsed * 3 + b.x) * 0.08, b.z);
         // Auto-grab: nearest eligible player on this ball's side (or a line ball).
         const onLine = Math.abs(b.x) < 1.5;
@@ -279,9 +316,13 @@ export class DodgeBrawlGame implements GameModule {
           }
         }
         if (resolved) continue;
-        // Out of bounds / expired → drop loose (or replace on the line).
-        if (b.life <= 0 || Math.abs(b.x) > this.H + 1 || Math.abs(b.z) > this.H + 1) {
-          if (Math.abs(b.x) > this.H + 1 || Math.abs(b.z) > this.H + 1) { b.x = 0; b.z = (Math.random() - 0.5) * this.H * 1.2; }
+        // A missed throw (or one that reaches a wall) SETTLES where it lands and
+        // stays in-bounds — so it rests in whichever half it flew into and that
+        // team can grab it and fire back. No teleporting to the centre line.
+        const wall = Math.abs(b.x) > this.H - 1 || Math.abs(b.z) > this.H - 1;
+        if (b.life <= 0 || wall) {
+          b.x = Math.max(-this.H + 1, Math.min(this.H - 1, b.x));
+          b.z = Math.max(-this.H + 1, Math.min(this.H - 1, b.z));
           b.state = 'loose'; b.vx = 0; b.vz = 0; b.holder = -1; b.thrower = -1; b.power = false;
         }
       }
@@ -314,13 +355,17 @@ export class DodgeBrawlGame implements GameModule {
   }
 
   private onHit(p: Player, b: Ball) {
-    if (p.invulnT > 0 || this.startGrace > 0) { // whiff during grace/invuln → drop loose
-      b.state = 'loose'; b.vx = 0; b.vz = 0; b.holder = -1; b.thrower = -1; return;
-    }
-    const kx = b.vx, kz = b.vz, L = Math.hypot(kx, kz) || 1;
+    const ix = b.vx, iz = b.vz, L = Math.hypot(ix, iz) || 1; // incoming direction
+    // The ball always BOUNCES off and stays on the hit player's half (loose, so
+    // that team can grab it and throw back) — whether it's a whiffed grace-hit or
+    // a real one.
+    const home = this.sign(this.teamOf(p));
+    b.state = 'loose'; b.holder = -1; b.thrower = -1; b.power = false;
+    b.x = p.x + home * 1.4; b.z = p.z + (Math.random() - 0.5) * 2;
+    b.vx = home * (7 + Math.random() * 4); b.vz = (Math.random() - 0.5) * 7; // bounce into our half
+    if (p.invulnT > 0 || this.startGrace > 0) return; // no life lost during grace / i-frames
     this.hits[b.thrower] = (this.hits[b.thrower] ?? 0) + 1;
-    b.state = 'loose'; b.vx = 0; b.vz = 0; b.x = p.x + (kx / L) * 1.2; b.holder = -1; b.thrower = -1;
-    p.vx += (kx / L) * 8; p.vz += (kz / L) * 8;
+    p.vx += (ix / L) * 6; p.vz += (iz / L) * 6; // knocked back along the throw
     this.loseLife(p, false);
   }
 
@@ -424,22 +469,37 @@ export class DodgeBrawlGame implements GameModule {
     const ui = document.createElement('div');
     ui.id = 'dbUI';
     ui.style.cssText = 'position:fixed;inset:0;z-index:8;pointer-events:none;font-family:Bungee,system-ui,sans-serif;';
+    // Move on the LEFT (floating stick); all three actions stack on the RIGHT so
+    // nothing overlaps the stick: THROW (top), CATCH (middle), DODGE (bottom).
     ui.innerHTML = `
       <div id="dbScore" style="position:fixed;top:112px;left:50%;transform:translateX(-50%);display:flex;gap:14px;align-items:center;
         font-size:15px;color:#fff;text-shadow:0 2px 4px #000;background:rgba(10,20,34,.5);padding:6px 14px;border-radius:12px;"></div>
-      <button id="dbCatch" data-nostick style="pointer-events:auto;position:fixed;left:20px;bottom:26px;">🧤 CATCH</button>
-      <button id="dbThrow" data-nostick style="pointer-events:auto;position:fixed;right:20px;bottom:26px;">🏐 THROW</button>`;
+      <div data-nostick style="position:fixed;right:18px;bottom:24px;display:flex;flex-direction:column;gap:12px;align-items:stretch;">
+        <button id="dbThrow" style="pointer-events:auto;">🏐 THROW</button>
+        <button id="dbCatch" style="pointer-events:auto;">🧤 CATCH</button>
+        <button id="dbDodge" style="pointer-events:auto;">💨 DODGE</button>
+      </div>`;
     document.body.appendChild(ui);
-    const btnCss = 'font-family:Bungee,system-ui,sans-serif;font-size:19px;border:none;border-radius:18px;padding:18px 24px;color:#12142e;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);touch-action:none;user-select:none;';
+    const btnCss = 'font-family:Bungee,system-ui,sans-serif;font-size:17px;border:none;border-radius:16px;padding:15px 22px;color:#12142e;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);touch-action:none;user-select:none;';
     this.catchBtn = ui.querySelector('#dbCatch')!;
     this.throwBtn = ui.querySelector('#dbThrow')!;
-    this.catchBtn.style.cssText += btnCss + 'background:#7CF07C;';
+    this.dodgeBtn = ui.querySelector('#dbDodge')!;
     this.throwBtn.style.cssText += btnCss + 'background:#FFD23F;';
+    this.catchBtn.style.cssText += btnCss + 'background:#5a6472;color:#aeb6c4;'; // starts greyed until a ball nears
+    this.dodgeBtn.style.cssText += btnCss + 'background:#cff0ff;';
     this.scoreEl = ui.querySelector('#dbScore')!;
+    // CATCH — only fires when a ball is actually in range (button is lit).
     this.catchBtn.addEventListener('pointerdown', (e) => {
-      e.preventDefault(); e.stopPropagation(); this.doCatch(this.ctx.players[0]);
+      e.preventDefault(); e.stopPropagation();
+      if (!this.localCatchReady()) return;
+      this.doCatch(this.ctx.players[0]);
       this.catchBtn.style.filter = 'brightness(1.3)'; setTimeout(() => this.catchBtn && (this.catchBtn.style.filter = ''), 140);
     });
+    // DODGE — a dash any time.
+    this.dodgeBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation(); this.doDodge();
+    });
+    // THROW — hold to charge a power throw.
     const down = (e: Event) => { e.preventDefault(); e.stopPropagation(); this.charging = true; this.chargeT = 0; this.throwBtn.style.filter = 'brightness(1.3)'; };
     const up = (e: Event) => {
       e.preventDefault();
@@ -459,6 +519,17 @@ export class DodgeBrawlGame implements GameModule {
     this.scoreEl.innerHTML = `<span style="color:#8fc0ff">LEFT ${hearts(0)}</span><span style="opacity:.6">VS</span><span style="color:#ff9a8f">${hearts(1)} RIGHT</span>`;
     // Charging throw glows the button red as it powers up.
     if (this.throwBtn) this.throwBtn.style.background = this.charging && this.chargeT > 0.45 ? '#ff4d4d' : '#FFD23F';
+    // CATCH lights up BLUE + becomes clickable only while a ball is closing in on
+    // you; otherwise it's greyed out.
+    if (this.catchBtn) {
+      const ready = this.localCatchReady();
+      this.catchBtn.style.background = ready ? '#4DC3FF' : '#5a6472';
+      this.catchBtn.style.color = ready ? '#12142e' : '#aeb6c4';
+      this.catchBtn.style.opacity = ready ? '1' : '0.7';
+      this.catchBtn.style.transform = ready ? 'scale(1.06)' : 'scale(1)';
+    }
+    // DODGE dims while on cooldown.
+    if (this.dodgeBtn) this.dodgeBtn.style.opacity = this.dashCd > 0 ? '0.45' : '1';
   }
 
   private doFinish(winTeam: number, sub: string) {
