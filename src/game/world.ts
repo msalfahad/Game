@@ -59,7 +59,7 @@ export function buildWorld(
   // The croc raft lives in the sky family but wants a clean forest-river look —
   // keep a flat sky-blue behind it instead of the bright cloud keyart (which
   // blows out the scene).
-  const flatSky = game.mechanic === 'raft';
+  const flatSky = game.mechanic === 'raft' || game.mechanic === 'coaster';
   if (flatSky) scene.background = new THREE.Color(0x6fb0e6);
   // Prefer a portrait, phone-composed background (maps/<id>-bg.png) so the
   // scene fills a tall screen without cropping out the sky; fall back to the
