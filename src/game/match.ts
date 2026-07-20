@@ -102,7 +102,8 @@ export class Match {
     // Ice push plays on a small round rink; the climb is a long narrow slope.
     const isClimb = game.mechanic === 'climb';
     const isIce = game.mechanic === 'icepush';
-    const halfSize = isGoal ? ASBASE * 0.48 : isIce ? ASBASE * 0.7 : isClimb ? CLIMB_L : ASBASE;
+    const isSprint = game.mechanic === 'sprint';
+    const halfSize = isGoal ? ASBASE * 0.48 : isIce ? ASBASE * 0.7 : isClimb ? CLIMB_L : isSprint ? ASBASE * 2 : ASBASE;
 
     this.engine.clearScene();
     this.parts = [];

@@ -36,6 +36,7 @@ export type Mechanic =
   | 'dodgeball' // 2v2 dodgeball across a centre line — hit rivals out, catch to fight back
   | 'coaster' // 2v2 roller-coaster pump race — both riders pump the lever to the finish
   | 'foosball' // 2v2 table-football — rail-locked players slide up/down, first to 3 goals
+  | 'sprint' // 4-player FFA 100m Olympic dash — mash RUN, punch neighbours, dash the finish
   | 'lab'; // movement greybox
 
 export type AmbientKind = 'snow' | 'embers' | 'sand' | 'leaves' | 'stars' | 'bubbles' | 'none';
@@ -174,7 +175,7 @@ export const GAMES: GameDef[] = [
   g('pirate-1', 'pirate', 'Cannon Blast', '💥', 1, 'throwfight', 'square', [], 'Grab cannonballs, sink your rivals.', { proj: 'cannon' }),
   g('pirate-2', 'pirate', 'Sinking Ship', '🚢', 2, 'breaktiles', 'square', ['falling'], 'The deck breaks from the bow. Find safe planks.', { decay: 'side' }),
   g('pirate-3', 'pirate', 'Treasure Scramble', '🪙', 3, 'collect', 'square', ['falling'], 'Doubloons rain down. Grab the most.', { coin: true }),
-  g('pirate-4', 'pirate', 'Pirate Race', '⛵', 4, 'race', 'square', ['falling', 'rollers'], 'Race the cove through cannon fire and barrels.', { laps: 2 }),
+  g('pirate-4', 'pirate', 'Olympic Sprint', '🏃', 4, 'sprint', 'square', [], 'Blast down the 100 m in a roaring Olympic stadium! Mash RUN to build your top speed, PUNCH the runner in the lane beside you to floor them for a second, and save your DASH for the final straight. Four runners, one lane each — first across the line takes gold.'),
 
   // Classic Arena (the original prototype modes, kept as a bonus family)
   g('classic-1', 'classic', 'Ring Rumble', '💥', 1, 'pushout', 'circle', [], 'Bump rivals off a shrinking neon ring.'),
