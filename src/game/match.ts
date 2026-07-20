@@ -103,7 +103,8 @@ export class Match {
     const isClimb = game.mechanic === 'climb';
     const isIce = game.mechanic === 'icepush';
     const isSprint = game.mechanic === 'sprint';
-    const halfSize = isGoal ? ASBASE * 0.48 : isIce ? ASBASE * 0.7 : isClimb ? CLIMB_L : isSprint ? ASBASE * 2 : ASBASE;
+    const isFoosball = game.mechanic === 'foosball';
+    const halfSize = isGoal ? ASBASE * 0.48 : isIce ? ASBASE * 0.7 : isClimb ? CLIMB_L : isSprint ? ASBASE * 2 : isFoosball ? ASBASE * 1.3 : ASBASE;
 
     this.engine.clearScene();
     this.parts = [];
