@@ -34,6 +34,7 @@ export type Mechanic =
   | 'boat' // third-person speed-boat race down a winding forest river, grab weapons
   | 'raft' // co-op: one raft, 4 paddlers, flee the river crocodiles to the finish
   | 'dodgeball' // 2v2 dodgeball across a centre line — hit rivals out, catch to fight back
+  | 'coaster' // 2v2 roller-coaster pump race — both riders pump the lever to the finish
   | 'lab'; // movement greybox
 
 export type AmbientKind = 'snow' | 'embers' | 'sand' | 'leaves' | 'stars' | 'bubbles' | 'none';
@@ -160,7 +161,7 @@ export const GAMES: GameDef[] = [
   g('sky-1', 'sky', 'Croc River Raft', '🚣', 1, 'raft', 'square', [], 'One raft, four paddlers — two on each side! Steer down the winding forest river, whack the hungry crocodiles, and paddle hard to the finish before they sink you.'),
   g('sky-2', 'sky', 'Dodge Brawl', '🏐', 2, 'dodgeball', 'square', [], '2v2 dodgeball above the clouds! Grab a ball, peg the enemy team across the centre line, and CATCH incoming throws to fight back. 3 lives each — wipe out the other team to win.'),
   g('sky-3', 'sky', 'Wind Gauntlet', '💨', 3, 'dodge', 'square', ['falling'], 'Gale-force wind drags you toward the edge.', { hz: 'wind' }),
-  g('sky-4', 'sky', 'Sky Race', '🕊️', 4, 'race', 'square', ['wind', 'falling'], 'Gate to gate across the floating island.', { laps: 2 }),
+  g('sky-4', 'sky', 'Roller Rush Duo', '🎢', 4, 'coaster', 'square', [], '2v2 coaster pump-race! You + a teammate share one cart — mash SPEED UP to pump the lever and hurtle to the finish. Grab power-ups, ride boost gates and drops, dodge hazards, and hit the switches. First cart to 100m wins.'),
 
   // 6. Mech Factory
   g('mech-1', 'mech', 'Gear Bash', '🔩', 1, 'pushout', 'circle', [], 'Rotating gear arms sweep the platform.', { edge: 'gears' }),

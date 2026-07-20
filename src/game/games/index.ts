@@ -20,6 +20,7 @@ import { LavaFloorGame } from './lavafloor';
 import { BoatGame } from './boat';
 import { RaftGame } from './raft';
 import { DodgeBrawlGame } from './dodgeball';
+import { CoasterGame } from './coaster';
 import { SurfaceLabGame } from './surfacelab';
 
 // Mechanic factory: every entry in the catalog resolves to one of these
@@ -46,6 +47,7 @@ export function makeGame(def: GameDef): GameModule {
     case 'boat': return new BoatGame();
     case 'raft': return new RaftGame();
     case 'dodgeball': return new DodgeBrawlGame();
+    case 'coaster': return new CoasterGame();
     case 'lab': return new SurfaceLabGame();
   }
 }
