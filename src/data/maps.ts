@@ -35,6 +35,7 @@ export type Mechanic =
   | 'raft' // co-op: one raft, 4 paddlers, flee the river crocodiles to the finish
   | 'dodgeball' // 2v2 dodgeball across a centre line — hit rivals out, catch to fight back
   | 'coaster' // 2v2 roller-coaster pump race — both riders pump the lever to the finish
+  | 'foosball' // 2v2 table-football — rail-locked players slide up/down, first to 3 goals
   | 'lab'; // movement greybox
 
 export type AmbientKind = 'snow' | 'embers' | 'sand' | 'leaves' | 'stars' | 'bubbles' | 'none';
@@ -155,7 +156,7 @@ export const GAMES: GameDef[] = [
   g('wild-1', 'wildwood', 'River Rush', '🚤', 1, 'boat', 'square', [], 'Boat Kart Arena! Blast down a long forest river — calm launch, foaming rapids with moving rocks, a giant wave, a split-path island and boost pads — grabbing weapons and ramming rivals all the way to the CASTLE finish. First through the castle gate wins.'),
   g('wild-2', 'wildwood', 'Rolling Logs', '🪵', 2, 'dodge', 'square', [], 'Logs sweep the grove. Jump or be flattened.', { hz: 'logs' }),
   g('wild-3', 'wildwood', 'Watermelon Bomb', '🍉', 3, 'hotpotato', 'square', [], 'The watermelon has a firecracker! Tap a rival to pass it. Whoever is holding it when it blows gets splatted. Last one dry wins.'),
-  g('wild-4', 'wildwood', 'Jungle Race', '🦜', 4, 'race', 'square', ['falling', 'rollers'], 'Race the ruins as branches crash down.', { laps: 2 }),
+  g('wild-4', 'wildwood', 'Foot Brawl', '⚽', 4, 'foosball', 'square', [], '2v2 table-football! Blue vs Red — an attacker and a defender per team slide up and down their rails, whack the fast ball, and blast it into the rival goal. First team to 3 goals wins.'),
 
   // 5. Sky Island Arena
   g('sky-1', 'sky', 'Croc River Raft', '🚣', 1, 'raft', 'square', [], 'One raft, four paddlers — two on each side! Steer down the winding forest river, whack the hungry crocodiles, and paddle hard to the finish before they sink you.'),
