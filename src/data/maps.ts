@@ -33,6 +33,7 @@ export type Mechanic =
   | 'lavafloor' // stand on tiles over real lava; they fall 1s after you step on
   | 'boat' // third-person speed-boat race down a winding forest river, grab weapons
   | 'raft' // co-op: one raft, 4 paddlers, flee the river crocodiles to the finish
+  | 'dodgeball' // 2v2 dodgeball across a centre line — hit rivals out, catch to fight back
   | 'lab'; // movement greybox
 
 export type AmbientKind = 'snow' | 'embers' | 'sand' | 'leaves' | 'stars' | 'bubbles' | 'none';
@@ -157,7 +158,7 @@ export const GAMES: GameDef[] = [
 
   // 5. Sky Island Arena
   g('sky-1', 'sky', 'Croc River Raft', '🚣', 1, 'raft', 'square', [], 'One raft, four paddlers — two on each side! Steer down the winding forest river, whack the hungry crocodiles, and paddle hard to the finish before they sink you.'),
-  g('sky-2', 'sky', 'Falling Platform', '🪂', 2, 'breaktiles', 'square', ['wind'], 'Sky tiles drop into the void one by one.', { decay: 'ring' }),
+  g('sky-2', 'sky', 'Dodge Brawl', '🏐', 2, 'dodgeball', 'square', [], '2v2 dodgeball above the clouds! Grab a ball, peg the enemy team across the centre line, and CATCH incoming throws to fight back. 3 lives each — wipe out the other team to win.'),
   g('sky-3', 'sky', 'Wind Gauntlet', '💨', 3, 'dodge', 'square', ['falling'], 'Gale-force wind drags you toward the edge.', { hz: 'wind' }),
   g('sky-4', 'sky', 'Sky Race', '🕊️', 4, 'race', 'square', ['wind', 'falling'], 'Gate to gate across the floating island.', { laps: 2 }),
 

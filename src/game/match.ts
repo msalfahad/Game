@@ -146,7 +146,7 @@ export class Match {
     // phones where the rink corners were getting cut off. The chase game uses a
     // steep near-overhead view so the whole yard reads at a glance.
     const portrait = innerWidth < innerHeight;
-    if (game.mechanic === 'chase' || game.mechanic === 'maze') this.engine.camera.frameTopDown(halfSize);
+    if (game.mechanic === 'chase' || game.mechanic === 'maze' || game.mechanic === 'dodgeball') this.engine.camera.frameTopDown(halfSize);
     else this.engine.camera.frame(isClimb ? 17 : halfSize, isGoal ? (portrait ? 1.62 : 1.28) : isIce ? 1.18 : game.mechanic === 'hotpotato' ? 1.05 : game.mechanic === 'kart' ? (portrait ? 1.24 : 1.05) : 1.0);
 
     this.engine.post.setGrade(FAMILY_GRADE[family.id] ?? {});
