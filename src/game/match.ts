@@ -103,6 +103,8 @@ export class Match {
     const isClimb = game.mechanic === 'climb';
     const isIce = game.mechanic === 'icepush';
     const isSprint = game.mechanic === 'sprint';
+    // Foot Brawl builds its own pitch and drives its own camera (frameArena),
+    // so it just uses the base arena size.
     const halfSize = isGoal ? ASBASE * 0.48 : isIce ? ASBASE * 0.7 : isClimb ? CLIMB_L : isSprint ? ASBASE * 2 : ASBASE;
 
     this.engine.clearScene();
