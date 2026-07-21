@@ -152,10 +152,10 @@ export function buildWorld(
     floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(320, 320),
       new THREE.MeshStandardMaterial({ color: 0x2f6a34, roughness: 1 }));
   } else if (game.mechanic === 'foosball') {
-    // Foot Brawl lays its own pitch + stone stadium frame on top; this is the
-    // dark concourse floor around it (no forest props / trim bars).
-    floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(240, 240),
-      new THREE.MeshStandardMaterial({ color: 0x2b2e38, roughness: 1 }));
+    // Foot Brawl lays its own pitch on top; this is the open grass field the
+    // pitch + fans sit on (no forest props / trim bars).
+    floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(420, 420),
+      new THREE.MeshStandardMaterial({ color: 0x2a5e30, roughness: 1 }));
   } else {
     const fw = rect ? rect.w : halfSize;
     const fl = rect ? rect.l : halfSize;
