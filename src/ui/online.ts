@@ -1,9 +1,14 @@
 import { HEROES, heroImg, type Hero } from '../data/characters';
 import { portraitImg, attachPortraitFallback } from './portrait';
-import { GAMES, FAMILIES } from '../data/maps';
+import { GAMES, FAMILIES, gameById } from '../data/maps';
 import { net, resolveServerUrl, rememberServerUrl, savedName } from '../net/client';
-import type { MatchEndMsg, MatchStartMsg } from '../net/protocol';
+import type {
+  MatchStartMsg, ReactionShowMsg, RematchUpdateMsg, SeriesEndMsg, SeriesNextMsg,
+} from '../net/protocol';
 import { show, hideScreens } from './screens';
+
+// Clickable between-game reactions.
+const REACTIONS = ['GG', 'EZ', '😂', '😢', '👍'];
 
 // Which catalog games each online mode offers (mirrors server/src/catalog.ts).
 const TEAM_MECHANICS = new Set(['pushout', 'throwfight', 'breaktiles', 'dodge']);
@@ -16,12 +21,16 @@ function onlinePool(mode: 'ffa' | '2v2') {
 
 interface OnlineHooks {
   onMatchStart: (m: MatchStartMsg) => void;
+  stopMatch?: () => void; // halt the 3D controller (series intermission / leave)
 }
 
 let hooks: OnlineHooks;
 let hero: Hero = HEROES[0];
+let seriesPlayers: SeriesNextMsg['players'] = [];
+let mySlot = 0;
+let countdownTimer: ReturnType<typeof setInterval> | null = null;
 
-const ids = ['scrOnlineHome', 'scrQueue', 'scrParty', 'scrOnlineOver'];
+const ids = ['scrOnlineHome', 'scrQueue', 'scrParty', 'scrSeries', 'scrOnlineOver'];
 function showOnline(id: string) {
   hideScreens();
   for (const s of ids) document.getElementById(s)?.classList.add('hidden');
@@ -77,14 +86,34 @@ export function buildOnlineScreens(h: OnlineHooks) {
     <button class="alt" id="partyLeave">LEAVE</button>
   </div>
 
+  <div id="scrSeries" class="screen hidden">
+    <div id="serScore" class="serScore"></div>
+    <h2 id="serTitle">GAME 1 / 5</h2>
+    <div id="serGame" class="serGame"></div>
+    <p class="tag" id="serLast"></p>
+    <div id="serCount" class="serCount">5</div>
+    <p class="tinyTag">Get ready…</p>
+    ${reactBarHtml('serReact')}
+  </div>
+
   <div id="scrOnlineOver" class="screen hidden">
-    <h2 id="onlineOverTitle">RESULTS</h2>
-    <p class="tag">Online match complete.</p>
+    <h2 id="onlineOverTitle">SERIES OVER</h2>
+    <p class="tag" id="onlineOverSub">Best of 5 complete.</p>
     <div id="onlineResList"></div>
-    <button class="big" id="onlineAgain">PLAY AGAIN</button>
-    <button class="alt" id="onlineHome">ONLINE MENU</button>
+    ${reactBarHtml('endReact')}
+    <button class="big" id="onlineRematch">🔁 REMATCH</button>
+    <p class="tinyTag" id="rematchStatus"></p>
+    <button class="alt" id="onlineFindNew">🔎 FIND NEW GAME</button>
   </div>`;
   root.appendChild(wrap);
+
+  // Floating reaction pop-ups layer (over everything).
+  if (!document.getElementById('reactPops')) {
+    const pops = document.createElement('div');
+    pops.id = 'reactPops';
+    pops.style.cssText = 'position:fixed;inset:0;z-index:45;pointer-events:none;overflow:hidden;';
+    document.body.appendChild(pops);
+  }
 
   // Hero picker for online play.
   const grid = document.getElementById('onlineCharGrid')!;
@@ -145,8 +174,30 @@ export function buildOnlineScreens(h: OnlineHooks) {
     net.leaveRoom();
     showOnline('scrOnlineHome');
   });
-  document.getElementById('onlineAgain')!.addEventListener('click', () => showOnline('scrOnlineHome'));
-  document.getElementById('onlineHome')!.addEventListener('click', () => showOnline('scrOnlineHome'));
+  // Series end: REMATCH needs everyone to click; FIND NEW GAME leaves.
+  document.getElementById('onlineRematch')!.addEventListener('click', () => {
+    net.voteRematch();
+    (document.getElementById('onlineRematch') as HTMLButtonElement).disabled = true;
+    document.getElementById('rematchStatus')!.textContent = 'Waiting for the others to accept…';
+  });
+  document.getElementById('onlineFindNew')!.addEventListener('click', () => {
+    net.leaveSeries();
+    hooks.stopMatch?.();
+    stopCountdown();
+    showOnline('scrOnlineHome');
+    refreshWho();
+  });
+  // Clickable reactions (delegated) — sent to everyone, shown between games.
+  document.getElementById('screens')!.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('.reactBtn') as HTMLElement | null;
+    if (btn?.dataset.emoji) net.sendReaction(btn.dataset.emoji);
+  });
+
+  // Series flow.
+  net.cb.onSeriesNext = (m) => renderIntermission(m);
+  net.cb.onSeriesEnd = (m) => renderSeriesEnd(m);
+  net.cb.onReaction = (m) => popReaction(m);
+  net.cb.onRematch = (m) => updateRematch(m);
 
   // Lobby events.
   net.cb.onQueue = (m) => {
@@ -217,6 +268,8 @@ export function buildOnlineScreens(h: OnlineHooks) {
     start.style.display = meHost ? '' : 'none';
   };
   net.cb.onMatchStart = (m) => {
+    mySlot = m.youSlot;
+    stopCountdown();
     hideOnlineScreens();
     hideScreens();
     hooks.onMatchStart(m);
@@ -276,31 +329,116 @@ function refreshWho() {
 const TEAM_NAMES = ['TEAM BLUE', 'TEAM RED'];
 const TEAM_COLS = ['#4DC3FF', '#FF4D4D'];
 
-/** Results screen for online matches. */
-export function showOnlineResults(m: MatchEndMsg, youSlot: number) {
-  const youEntry = m.ranking.find((r) => r.slot === youSlot);
-  const youWon = m.mode === '2v2' ? youEntry?.team === m.winnerTeam : m.ranking[0]?.slot === youSlot;
-  const title = m.mode === '2v2'
-    ? (youWon ? '🏆 ' : '') + TEAM_NAMES[m.winnerTeam] + ' WINS!'
-    : youWon ? '🏆 YOU WIN!' : 'RESULTS';
+// --- Best-of-5 series screens -------------------------------------------------
+
+function reactBarHtml(id: string): string {
+  const btns = REACTIONS.map((e) =>
+    `<button class="reactBtn" data-emoji="${e}" style="pointer-events:auto;background:rgba(20,28,54,.85);border:1px solid rgba(255,255,255,.28);color:#fff;font-family:Bungee,system-ui,sans-serif;font-size:16px;border-radius:12px;padding:8px 13px;cursor:pointer;">${e}</button>`,
+  ).join('');
+  return `<div id="${id}" class="reactBar" style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px;">${btns}</div>`;
+}
+
+function seriesScoreHtml(mode: string, score: number[], players: SeriesNextMsg['players']): string {
+  if (mode === '2v2') {
+    return `<div style="display:flex;gap:14px;justify-content:center;align-items:center;font-family:Bungee,system-ui,sans-serif;font-size:22px;">
+      <span style="color:${TEAM_COLS[0]}">BLUE ${score[0] ?? 0}</span><span style="opacity:.55">–</span>
+      <span style="color:${TEAM_COLS[1]}">${score[1] ?? 0} RED</span></div>`;
+  }
+  return `<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">` +
+    players.map((p, i) => {
+      const hh = HEROES.find((x) => x.key === p.heroKey) ?? HEROES[0];
+      return `<span style="background:rgba(20,28,54,.7);border-radius:10px;padding:4px 9px;color:${hh.col};font-size:12px;">${p.name.split(' ')[0]} ${score[i] ?? 0}🏆</span>`;
+    }).join('') + `</div>`;
+}
+
+function renderIntermission(m: SeriesNextMsg) {
+  hooks.stopMatch?.(); // halt the just-finished game's 3D during the countdown
+  seriesPlayers = m.players;
+  const def = gameById(m.nextGameId);
+  document.getElementById('serTitle')!.textContent = `GAME ${m.gameNum} / ${m.ofN}`;
+  document.getElementById('serGame')!.innerHTML =
+    `<div style="font-size:46px;line-height:1">${def.icon}</div>` +
+    `<div style="color:#FFD23F;font-family:Bungee,system-ui,sans-serif;font-size:20px;margin-top:4px">${def.name.toUpperCase()}</div>` +
+    `<div class="tag" style="max-width:340px;margin:6px auto 0">${def.blurb}</div>`;
+  document.getElementById('serScore')!.innerHTML = seriesScoreHtml(m.mode, m.score, m.players);
+  const last = document.getElementById('serLast') as HTMLElement;
+  if (m.lastRanking && m.lastRanking.length) {
+    last.textContent = m.mode === '2v2'
+      ? `${TEAM_NAMES[m.lastWinnerTeam ?? 0]} took the last game.`
+      : `${m.lastRanking[0].name} won the last game.`;
+    last.style.display = '';
+  } else {
+    last.style.display = 'none';
+  }
+  startCountdown(m.inSec);
+  showOnline('scrSeries');
+}
+
+function renderSeriesEnd(m: SeriesEndMsg) {
+  hooks.stopMatch?.();
+  stopCountdown();
+  seriesPlayers = m.players;
+  const myTeam = m.players[mySlot]?.team ?? 0;
+  const topSlot = [...m.standings].sort((a, b) => b.wins - a.wins)[0]?.slot;
+  const youWon = m.mode === '2v2' ? myTeam === m.winnerTeam : topSlot === mySlot;
   const titleEl = document.getElementById('onlineOverTitle')!;
-  titleEl.textContent = title;
+  titleEl.textContent = m.mode === '2v2'
+    ? (youWon ? '🏆 ' : '') + TEAM_NAMES[m.winnerTeam] + ' WIN THE SERIES!'
+    : youWon ? '🏆 YOU WIN THE SERIES!' : 'SERIES OVER';
   (titleEl as HTMLElement).style.color = m.mode === '2v2' ? TEAM_COLS[m.winnerTeam] : '';
+  document.getElementById('onlineOverSub')!.textContent = m.mode === '2v2'
+    ? `Final: BLUE ${m.score[0]} – ${m.score[1]} RED`
+    : 'Best of 5 complete.';
   const list = document.getElementById('onlineResList')!;
   list.className = '';
   list.innerHTML = '';
-  m.ranking.forEach((r, i) => {
+  [...m.standings].sort((a, b) => b.wins - a.wins).forEach((r, i) => {
     const hh = HEROES.find((x) => x.key === r.heroKey) ?? HEROES[0];
     const d = document.createElement('div');
     d.className = 'resRow' + (i === 0 ? ' first' : '');
-    const teamChip = m.mode === '2v2'
-      ? `<span style="color:${TEAM_COLS[r.team]};font-size:10px"> ${TEAM_NAMES[r.team]}</span>`
-      : '';
-    d.innerHTML = `<img src="${heroImg(hh)}"><div class="rn" style="color:${hh.col}">${i + 1}. ${r.name}${r.slot === youSlot ? ' (YOU)' : ''}${teamChip}</div><div class="rs">${r.dead ? 'OUT' : r.lives + ' ' + (m.scoreLabel ?? 'lives')}</div>`;
+    const teamChip = m.mode === '2v2' ? `<span style="color:${TEAM_COLS[r.team]};font-size:10px"> ${TEAM_NAMES[r.team]}</span>` : '';
+    d.innerHTML = `<img src="${heroImg(hh)}"><div class="rn" style="color:${hh.col}">${i + 1}. ${r.name}${r.slot === mySlot ? ' (YOU)' : ''}${teamChip}</div><div class="rs">${r.wins} 🏆</div>`;
     list.appendChild(d);
   });
-  (list as HTMLElement).style.display = 'flex';
-  (list as HTMLElement).style.flexDirection = 'column';
-  (list as HTMLElement).style.gap = '8px';
+  (list as HTMLElement).style.cssText = 'display:flex;flex-direction:column;gap:8px';
+  const rb = document.getElementById('onlineRematch') as HTMLButtonElement;
+  rb.disabled = false; rb.textContent = '🔁 REMATCH';
+  document.getElementById('rematchStatus')!.textContent = 'Everyone must accept to run another 5-game series.';
   showOnline('scrOnlineOver');
+}
+
+function updateRematch(m: RematchUpdateMsg) {
+  const voted = m.votedSlots.length, need = Math.max(1, m.humanSlots.length);
+  const rb = document.getElementById('onlineRematch') as HTMLButtonElement | null;
+  if (rb) rb.textContent = `🔁 REMATCH (${voted}/${need})`;
+  const status = document.getElementById('rematchStatus');
+  if (status) status.textContent = `Rematch: ${voted}/${need} accepted.`;
+}
+
+function popReaction(m: ReactionShowMsg) {
+  const pops = document.getElementById('reactPops');
+  if (!pops) return;
+  const who = seriesPlayers[m.slot]?.name?.split(' ')[0] ?? '';
+  const el = document.createElement('div');
+  el.textContent = `${m.emoji} ${who}`.trim();
+  el.style.cssText = `position:absolute;left:${10 + Math.random() * 62}%;bottom:24%;opacity:1;font-family:Bungee,system-ui,sans-serif;font-size:22px;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.7);transition:transform 1.8s ease-out,opacity 1.8s ease-out;`;
+  pops.appendChild(el);
+  requestAnimationFrame(() => { el.style.transform = 'translateY(-130px)'; el.style.opacity = '0'; });
+  setTimeout(() => el.remove(), 1900);
+}
+
+function startCountdown(sec: number) {
+  stopCountdown();
+  let n = Math.max(1, Math.round(sec));
+  const set = (t: string) => { const e = document.getElementById('serCount'); if (e) e.textContent = t; };
+  set(String(n));
+  countdownTimer = setInterval(() => {
+    n -= 1;
+    set(n > 0 ? String(n) : 'GO!');
+    if (n <= 0) stopCountdown();
+  }, 1000);
+}
+
+function stopCountdown() {
+  if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
 }

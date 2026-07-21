@@ -114,3 +114,34 @@ export interface MatchEndMsg {
   scoreLabel: string; // 'lives' | 'pts'
   ranking: { slot: number; name: string; heroKey: string; lives: number; dead: boolean; team: number }[];
 }
+
+// --- Best-of-5 series ---------------------------------------------------------
+// Online play runs a 5-game series (first to 3 wins). Between games the client
+// shows the next game + a countdown; reactions + a rematch vote happen at the
+// end. `score` is wins per SLOT in FFA (length 4) or per TEAM in 2v2 (length 2).
+
+export const SERIES_GAMES = 5;
+export const SERIES_WIN = 3;
+
+export interface SeriesNextMsg {
+  gameNum: number; // 1-based index of the upcoming game
+  ofN: number;
+  nextGameId: string;
+  mode: MatchMode;
+  score: number[];
+  players: MatchPlayerInfo[];
+  inSec: number; // countdown before the game starts
+  lastRanking?: MatchEndMsg['ranking']; // omitted before game 1
+  lastWinnerTeam?: number;
+}
+
+export interface SeriesEndMsg {
+  mode: MatchMode;
+  score: number[];
+  winnerTeam: number; // FFA: -1, 2v2: 0 | 1
+  standings: { slot: number; name: string; heroKey: string; team: number; wins: number }[];
+  players: MatchPlayerInfo[];
+}
+
+export interface ReactionShowMsg { slot: number; emoji: string; }
+export interface RematchUpdateMsg { votedSlots: number[]; humanSlots: number[]; }

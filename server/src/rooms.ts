@@ -5,13 +5,32 @@ import { FreeSim } from './freesim.js';
 import { onlineGame, poolFor } from './catalog.js';
 import { recordResult, type Account } from './accounts.js';
 import { HEROES } from './heroes.js';
-import { MAX_PLAYERS, type MatchMode, type MatchStartMsg, type QueueUpdateMsg, type RoomUpdateMsg } from './protocol.js';
+import {
+  MAX_PLAYERS, SERIES_GAMES, SERIES_WIN,
+  type MatchEndMsg, type MatchMode, type MatchPlayerInfo, type MatchStartMsg,
+  type QueueUpdateMsg, type RematchUpdateMsg, type RoomUpdateMsg,
+  type SeriesEndMsg, type SeriesNextMsg,
+} from './protocol.js';
 
-// Party rooms (4-letter codes) + the quick-play queue. Both feed the same
-// match starter; empty seats are filled with bots (SPEC section 2). A match
-// keeps running if a human drops — their seat turns into a bot.
+// Party rooms (4-letter codes) + the quick-play queue. Both feed a best-of-5
+// SERIES: 5 random games, first to 3 wins, with a countdown intro before each
+// game. Empty seats are bots; if a human drops mid-series their seat becomes a
+// bot and play continues.
 
 const QUEUE_BOT_FILL_SEC = 12;
+const INTRO_SEC = 5; // countdown shown before each game (and result gap between)
+
+interface SeriesState {
+  seats: MatchSeat[];
+  mode: MatchMode;
+  gameIds: string[];
+  index: number;                // which game (0-based)
+  score: number[];             // wins per slot (FFA) or per team (2v2)
+  sim: GameSim | null;
+  phase: 'countdown' | 'playing' | 'ended';
+  timer: ReturnType<typeof setTimeout> | null;
+  rematch: Set<number>;        // slots that voted to rematch
+}
 
 interface Session {
   socket: Socket;
@@ -21,6 +40,7 @@ interface Session {
   roomCode: string | null;
   inQueue: boolean;
   match: GameSim | null;
+  series: SeriesState | null;
 }
 
 interface Room {
@@ -50,6 +70,7 @@ export class Lobby {
       roomCode: null,
       inQueue: false,
       match: null,
+      series: null,
     });
   }
 
@@ -66,6 +87,7 @@ export class Lobby {
     this.leaveQueue(socketId);
     this.leaveRoom(socketId);
     if (s.match) s.match.dropPlayer(socketId);
+    if (s.series) this.detachFromSeries(socketId, s.series);
     this.sessions.delete(socketId);
   }
 
@@ -78,13 +100,13 @@ export class Lobby {
     this.queue.push(socketId);
     if (this.queue.length >= MAX_PLAYERS) {
       const four = this.queue.splice(0, MAX_PLAYERS);
-      this.startMatch(four);
+      this.startSeries(four);
       this.updateQueueTimer();
     } else if (!this.queueTimer) {
       this.queueDeadline = Date.now() + QUEUE_BOT_FILL_SEC * 1000;
       this.queueTimer = setTimeout(() => {
         this.queueTimer = null;
-        if (this.queue.length > 0) this.startMatch(this.queue.splice(0, MAX_PLAYERS));
+        if (this.queue.length > 0) this.startSeries(this.queue.splice(0, MAX_PLAYERS));
       }, QUEUE_BOT_FILL_SEC * 1000);
     }
     this.broadcastQueue();
@@ -211,7 +233,7 @@ export class Lobby {
       if (m) m.roomCode = null;
     }
     this.rooms.delete(room.code);
-    this.startMatch(members, mode, gameChoice);
+    this.startSeries(members, mode, gameChoice);
   }
 
   private broadcastRoom(code: string) {
@@ -238,107 +260,208 @@ export class Lobby {
     }
   }
 
-  // --- match lifecycle --------------------------------------------------------
-  private startMatch(socketIds: string[], mode: MatchMode = 'ffa', gameChoice = 'random') {
+  // --- series lifecycle -------------------------------------------------------
+  private startSeries(socketIds: string[], mode: MatchMode = 'ffa', gameChoice = 'random') {
     const humans = socketIds
       .map((id) => this.sessions.get(id))
       .filter((s): s is Session => !!s);
     if (humans.length === 0) return;
+    for (const s of humans) { s.inQueue = false; s.roomCode = null; }
 
-    for (const s of humans) {
-      s.inQueue = false;
-      s.roomCode = null;
+    const seats = this.buildSeats(humans, mode);
+    const state: SeriesState = {
+      seats, mode, gameIds: this.pickSeriesGames(mode, gameChoice), index: 0,
+      score: mode === '2v2' ? [0, 0] : [0, 0, 0, 0],
+      sim: null, phase: 'countdown', timer: null, rematch: new Set(),
+    };
+    for (const seat of seats) {
+      if (!seat.socketId) continue;
+      const sess = this.sessions.get(seat.socketId);
+      if (sess) { sess.series = state; sess.match = null; }
     }
+    this.beginIntermission(state, INTRO_SEC, null);
+  }
 
-    // Seats: humans first (keeping their chosen teams), bots fill the rest.
+  /** Humans first (keeping teams), bots fill the rest; 2v2 balanced to 2 each. */
+  private buildSeats(humans: Session[], mode: MatchMode): MatchSeat[] {
     const seats: MatchSeat[] = humans.map((s) => ({
-      socketId: s.socket.id,
-      name: s.account.name,
-      heroKey: s.heroKey,
+      socketId: s.socket.id, name: s.account.name, heroKey: s.heroKey,
       team: mode === '2v2' ? s.team : 0,
     }));
     const usedHeroes = new Set(seats.map((s) => s.heroKey));
     const botPool = HEROES.filter((h) => !usedHeroes.has(h.key));
-    for (let i = botPool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [botPool[i], botPool[j]] = [botPool[j], botPool[i]];
-    }
+    for (let i = botPool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [botPool[i], botPool[j]] = [botPool[j], botPool[i]]; }
     while (seats.length < MAX_PLAYERS) {
       const h = botPool.pop() ?? HEROES[Math.floor(Math.random() * HEROES.length)];
-      // 2v2: each bot joins whichever team is currently smaller.
       const team0 = seats.filter((s) => s.team === 0).length;
-      seats.push({
-        socketId: null,
-        name: h.name + ' (bot)',
-        heroKey: h.key,
-        team: mode === '2v2' ? (team0 <= seats.length - team0 ? 0 : 1) : 0,
-      });
+      seats.push({ socketId: null, name: h.name + ' (bot)', heroKey: h.key, team: mode === '2v2' ? (team0 <= seats.length - team0 ? 0 : 1) : 0 });
     }
     if (mode === '2v2') {
-      // Safety: exactly two per team, even if humans stacked one side.
       let t0 = seats.filter((s) => s.team === 0).length;
-      for (const seat of [...seats].reverse()) {
-        if (t0 <= 2) break;
-        if (seat.team === 0 && seat.socketId === null) { seat.team = 1; t0--; }
-      }
+      for (const seat of [...seats].reverse()) { if (t0 <= 2) break; if (seat.team === 0 && seat.socketId === null) { seat.team = 1; t0--; } }
       let t1 = seats.filter((s) => s.team === 1).length;
-      for (const seat of [...seats].reverse()) {
-        if (t1 <= 2) break;
-        if (seat.team === 1 && seat.socketId === null) { seat.team = 0; t1--; }
-      }
+      for (const seat of [...seats].reverse()) { if (t1 <= 2) break; if (seat.team === 1 && seat.socketId === null) { seat.team = 0; t1--; } }
     }
+    return seats;
+  }
 
-    const pool = poolFor(mode);
-    // FORCE_GAME pins the map for testing (e.g. FORCE_GAME=frost-1 npm start).
-    const gameId =
-      process.env.FORCE_GAME ??
-      (gameChoice !== 'random' && pool.some((g) => g.id === gameChoice)
-        ? gameChoice
-        : pool[Math.floor(Math.random() * pool.length)].id);
+  /** 5 games for the series — random from the mode pool (host's pick leads). */
+  private pickSeriesGames(mode: MatchMode, first = 'random'): string[] {
+    const poolIds = poolFor(mode).map((g) => g.id);
+    const bag: string[] = [];
+    const draw = () => { if (bag.length === 0) bag.push(...poolIds); const j = Math.floor(Math.random() * bag.length); return bag.splice(j, 1)[0]; };
+    const picks: string[] = [];
+    if (first !== 'random' && poolIds.includes(first)) picks.push(first);
+    while (picks.length < SERIES_GAMES) picks.push(draw());
+    return picks.slice(0, SERIES_GAMES);
+  }
+
+  private playersInfo(state: SeriesState): MatchPlayerInfo[] {
+    return state.seats.map((s, i) => ({ slot: i, name: s.name, heroKey: s.heroKey, bot: s.socketId === null, team: state.mode === '2v2' ? s.team : i }));
+  }
+  private seriesEmit(state: SeriesState, event: string, msg: unknown) {
+    for (const seat of state.seats) if (seat.socketId) this.sessions.get(seat.socketId)?.socket.emit(event, msg);
+  }
+  private humanSlots(state: SeriesState): number[] {
+    return state.seats.map((s, i) => (s.socketId ? i : -1)).filter((i) => i >= 0);
+  }
+  private slotOf(state: SeriesState, socketId: string): number {
+    return state.seats.findIndex((s) => s.socketId === socketId);
+  }
+
+  /** Show the next game + a countdown; kick it off when the timer fires. */
+  private beginIntermission(state: SeriesState, inSec: number, last: MatchEndMsg | null) {
+    state.phase = 'countdown';
+    state.sim = null;
+    for (const seat of state.seats) if (seat.socketId) { const sess = this.sessions.get(seat.socketId); if (sess) sess.match = null; }
+    const msg: SeriesNextMsg = {
+      gameNum: state.index + 1, ofN: SERIES_GAMES, nextGameId: state.gameIds[state.index],
+      mode: state.mode, score: [...state.score], players: this.playersInfo(state), inSec,
+      lastRanking: last?.ranking, lastWinnerTeam: last?.winnerTeam,
+    };
+    this.seriesEmit(state, 'series:next', msg);
+    if (state.timer) clearTimeout(state.timer);
+    state.timer = setTimeout(() => { state.timer = null; this.runGame(state); }, inSec * 1000);
+  }
+
+  private runGame(state: SeriesState) {
+    if (state.phase === 'ended') return;
+    const pool = poolFor(state.mode);
+    const gameId = process.env.FORCE_GAME ?? state.gameIds[state.index];
     const def = onlineGame(gameId) ?? pool[0];
-
-    const makeSim = (): GameSim => {
-      if (def.mechanic === 'goal') return new HockeySim(seats, mode, sendState, endMatch);
-      if (def.mechanic === 'pushout') return new MatchSim(seats, mode, sendState, endMatch);
-      return new FreeSim(seats, def, mode, sendState, endMatch);
-    };
-    const sendState = (socketId: string, msg: any) => this.sessions.get(socketId)?.socket.emit('state', msg);
-    const endMatch = (endMsg: any) => {
-      const winnerSlot = endMsg.ranking[0]?.slot;
-      for (const seat of seats) {
-        if (!seat.socketId) continue;
-        const sess = this.sessions.get(seat.socketId);
-        if (!sess) continue;
-        sess.match = null;
-        sess.socket.emit('match:end', endMsg);
-        const mySlot = seats.indexOf(seat);
-        const won = mode === '2v2' ? seat.team === endMsg.winnerTeam : mySlot === winnerSlot;
-        recordResult(sess.account.token, won);
-      }
-    };
-    const sim: GameSim = makeSim();
-
-    for (const s of humans) s.match = sim;
-
+    const seats = state.seats, mode = state.mode;
+    const sendState = (socketId: string, m: any) => this.sessions.get(socketId)?.socket.emit('state', m);
+    const endMatch = (endMsg: MatchEndMsg) => this.onGameEnd(state, endMsg);
+    const sim: GameSim = def.mechanic === 'goal' ? new HockeySim(seats, mode, sendState, endMatch)
+      : def.mechanic === 'pushout' ? new MatchSim(seats, mode, sendState, endMatch)
+      : new FreeSim(seats, def, mode, sendState, endMatch);
+    state.sim = sim; state.phase = 'playing';
+    for (const seat of seats) if (seat.socketId) { const sess = this.sessions.get(seat.socketId); if (sess) sess.match = sim; }
     seats.forEach((seat, slot) => {
       if (!seat.socketId) return;
-      const msg: MatchStartMsg = {
-        gameId,
-        mode,
-        youSlot: slot,
-        duration: def.duration,
-        players: seats.map((s2, i) => ({
-          slot: i,
-          name: s2.name,
-          heroKey: s2.heroKey,
-          bot: s2.socketId === null,
-          team: mode === '2v2' ? s2.team : i,
-        })),
-      };
+      const msg: MatchStartMsg = { gameId, mode, youSlot: slot, duration: def.duration, players: this.playersInfo(state) };
       this.sessions.get(seat.socketId)?.socket.emit('match:start', msg);
     });
-
     sim.start();
+  }
+
+  private onGameEnd(state: SeriesState, endMsg: MatchEndMsg) {
+    if (state.phase !== 'playing') return;
+    state.phase = 'countdown';
+    const winnerSlot = endMsg.ranking[0]?.slot ?? 0;
+    if (state.mode === '2v2') { if (endMsg.winnerTeam === 0 || endMsg.winnerTeam === 1) state.score[endMsg.winnerTeam]++; }
+    else state.score[winnerSlot] = (state.score[winnerSlot] ?? 0) + 1;
+    for (const seat of state.seats) {
+      if (!seat.socketId) continue;
+      const sess = this.sessions.get(seat.socketId);
+      if (!sess) continue;
+      sess.match = null;
+      sess.socket.emit('match:end', endMsg);
+      const won = state.mode === '2v2' ? seat.team === endMsg.winnerTeam : state.seats.indexOf(seat) === winnerSlot;
+      recordResult(sess.account.token, won);
+    }
+    state.sim = null;
+    const over = Math.max(...state.score) >= SERIES_WIN || state.index + 1 >= SERIES_GAMES;
+    if (over) {
+      if (state.timer) clearTimeout(state.timer);
+      state.timer = setTimeout(() => { state.timer = null; this.endSeries(state); }, INTRO_SEC * 1000);
+    } else {
+      state.index++;
+      this.beginIntermission(state, INTRO_SEC, endMsg);
+    }
+  }
+
+  private endSeries(state: SeriesState) {
+    state.phase = 'ended';
+    state.rematch.clear();
+    const winnerTeam = state.mode === '2v2' ? (state.score[0] >= state.score[1] ? 0 : 1) : -1;
+    const standings = state.seats.map((s, i) => ({
+      slot: i, name: s.name, heroKey: s.heroKey, team: state.mode === '2v2' ? s.team : i,
+      wins: state.mode === '2v2' ? state.score[s.team] : (state.score[i] ?? 0),
+    }));
+    const msg: SeriesEndMsg = { mode: state.mode, score: [...state.score], winnerTeam, standings, players: this.playersInfo(state) };
+    this.seriesEmit(state, 'series:end', msg);
+  }
+
+  // --- reactions + rematch ----------------------------------------------------
+  sendReaction(socketId: string, emojiRaw: unknown) {
+    const s = this.sessions.get(socketId);
+    if (!s?.series) return;
+    const emoji = String(emojiRaw ?? '').slice(0, 12);
+    const slot = this.slotOf(s.series, socketId);
+    if (!emoji || slot < 0) return;
+    this.seriesEmit(s.series, 'reaction:show', { slot, emoji });
+  }
+
+  voteRematch(socketId: string) {
+    const s = this.sessions.get(socketId);
+    const state = s?.series;
+    if (!state || state.phase !== 'ended') return;
+    const slot = this.slotOf(state, socketId);
+    if (slot < 0) return;
+    state.rematch.add(slot);
+    const humans = this.humanSlots(state);
+    this.seriesEmit(state, 'rematch:update', { votedSlots: [...state.rematch], humanSlots: humans } as RematchUpdateMsg);
+    // Everyone still here voted → run a fresh 5-game series with the same crew.
+    if (humans.length > 0 && humans.every((sl) => state.rematch.has(sl))) {
+      const humanIds = state.seats.filter((seat) => seat.socketId).map((seat) => seat.socketId!);
+      const mode = state.mode;
+      this.disposeSeries(state);
+      this.startSeries(humanIds, mode);
+    }
+  }
+
+  /** "Find New Game": leave the series (seat becomes a bot); back to the lobby. */
+  leaveSeries(socketId: string) {
+    const s = this.sessions.get(socketId);
+    if (s?.series) this.detachFromSeries(socketId, s.series);
+  }
+
+  private detachFromSeries(socketId: string, state: SeriesState) {
+    const seat = state.seats.find((x) => x.socketId === socketId);
+    const slot = this.slotOf(state, socketId);
+    if (seat) seat.socketId = null; // seat keeps playing as a bot
+    const sess = this.sessions.get(socketId);
+    if (sess) { sess.series = null; sess.match = null; }
+    if (slot >= 0) state.rematch.delete(slot);
+    if (!state.seats.some((x) => x.socketId)) { this.disposeSeries(state); return; }
+    if (state.phase === 'ended') {
+      const humans = this.humanSlots(state);
+      this.seriesEmit(state, 'rematch:update', { votedSlots: [...state.rematch], humanSlots: humans } as RematchUpdateMsg);
+      if (humans.length > 0 && humans.every((sl) => state.rematch.has(sl))) {
+        const humanIds = state.seats.filter((x) => x.socketId).map((x) => x.socketId!);
+        const mode = state.mode;
+        this.disposeSeries(state);
+        this.startSeries(humanIds, mode);
+      }
+    }
+  }
+
+  private disposeSeries(state: SeriesState) {
+    if (state.timer) { clearTimeout(state.timer); state.timer = null; }
+    if (state.sim) { state.sim.stop(); state.sim = null; }
+    state.phase = 'ended';
+    for (const seat of state.seats) if (seat.socketId) { const sess = this.sessions.get(seat.socketId); if (sess && sess.series === state) { sess.series = null; sess.match = null; } }
   }
 
   handleInput(socketId: string, msg: unknown) {
