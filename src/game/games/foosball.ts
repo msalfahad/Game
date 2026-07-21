@@ -16,16 +16,16 @@ import { setScore, setObjective } from '../../ui/hud';
 //     team-mate can slam one in. First team to 3 goals in a 1-minute match.
 
 const BALL_R = 1.1;
-const BALL_SPEED = 32;        // fast ball
-const BALL_MAX = 50;
-const SMASH_V = 62;
-const MOVE_SPEED = 34;        // quick side-to-side
+const BALL_SPEED = 20;        // calmer, controllable ball
+const BALL_MAX = 34;
+const SMASH_V = 42;
+const MOVE_SPEED = 22;        // steady side-to-side
 const WIN_GOALS = 3;
 const SMASH_CD = 3;           // reliable — one smash every 3s
 const STUN_TIME = 1.2;
 const WIDEN_CD = 6;           // open the enemy goal every 6s
 const WIDEN_TIME = 3.5;       // how long it stays open
-const WIDEN_MUL = 1.9;        // how much wider
+const WIDEN_MUL = 1.8;        // how much wider
 const MATCH_SECS = 60;        // 1-minute match
 
 export class FoosballGame implements GameModule {
@@ -60,13 +60,14 @@ export class FoosballGame implements GameModule {
     this.title = ctx.game.name;
     this.finished = false;
     this.timeLeft = matchTime(MATCH_SECS);
-    // Top-down stadium seen from above — the family fog would wash it out, so
-    // turn it off and add a bright fill.
     ctx.scene.fog = null;
     ctx.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    // A compact WIDE pitch (goals left/right). Small in world units so the
-    // heroes look big and chunky when the camera fits it to the screen.
-    this.X = ctx.halfSize * 0.66; this.Z = ctx.halfSize * 0.42; this.goalHalf = this.Z * 0.42;
+    ctx.scene.add(new THREE.HemisphereLight(0xffe8c8, 0x3a5a3a, 0.5));
+    // Designed sunset-stadium sky instead of a black backdrop.
+    ctx.scene.background = this.skyTexture();
+    // A small pitch (in world units) with BIG goals — the heroes look chunky
+    // and scoring is easy. Goals sit on the left/right ends.
+    this.X = ctx.halfSize * 0.52; this.Z = ctx.halfSize * 0.42; this.goalHalf = this.Z * 0.44;
     this.score = [0, 0]; this.resetT = 1.6;
     this.smashCd = [0, 0, 0, 0]; this.widenCd = [0, 0, 0, 0]; this.stunT = [0, 0, 0, 0]; this.widenT = [0, 0];
 
@@ -82,7 +83,9 @@ export class FoosballGame implements GameModule {
       const blue = p.index < 2;
       p.x = this.railX[p.index]; p.z = (p.index % 2 === 0 ? -1 : 1) * this.Z * 0.28;
       p.vx = 0; p.vz = 0; p.dead = false;
-      p.standFacing = blue ? Math.PI / 2 : -Math.PI / 2; // face the enemy goal
+      // Angle toward the camera so we see the heroes' fronts (turned a touch
+      // toward the goal they attack).
+      p.standFacing = blue ? 0.5 : -0.5;
       // The character body IS the hitbox — hide the big marker rings.
       if (p.ring) p.ring.visible = false;
       if (p.glow) p.glow.visible = false;
@@ -96,8 +99,8 @@ export class FoosballGame implements GameModule {
     this.ball.castShadow = true; ctx.scene.add(this.ball);
     this.bx = 0; this.bz = 0; this.bvx = 0; this.bvz = 0;
 
-    // Zoom in tight: fit the pitch (+ goal depth) snugly so it fills the screen.
-    ctx.camera.frameArena(this.X + 5, this.Z + 4);
+    // Angled 3/4 "stadium" view so the heroes read as standing figures.
+    ctx.camera.frameAngled(this.X + 4, this.Z + 5);
 
     this.buildUI();
     setObjective(this.objective);
@@ -180,53 +183,43 @@ export class FoosballGame implements GameModule {
     this.goalGroups[sx < 0 ? 0 : 1] = g;
   }
 
-  // Stone stadium frame + fans on the LONG sides only (top & bottom); the goal
-  // ends stay clear so the full pitch is playable.
+  // OPEN stadium: no enclosing walls — just two rows of cheering fans on a low
+  // riser above and below the pitch (goal ends stay clear), plus corner flags.
   private buildStadiumFrame() {
     const scene = this.ctx.scene, X = this.X, Z = this.Z;
-    const stone = new THREE.MeshStandardMaterial({ color: 0x7b818e, roughness: 0.95 });
-    const stoneDark = new THREE.MeshStandardMaterial({ color: 0x4b505b, roughness: 1 });
-    const wallH = 3.4, wt = 2.6, ox = X + 3.0, oz = Z + 3.0;
-    const wall = (w: number, d: number, x: number, z: number) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, d), stone);
-      m.position.set(x, wallH / 2, z); m.castShadow = true; m.receiveShadow = true; scene.add(m);
-      const cap = new THREE.Mesh(new THREE.BoxGeometry(w + 0.5, 0.6, d + 0.5), stoneDark);
-      cap.position.set(x, wallH + 0.25, z); scene.add(cap);
-    };
-    const fullW = ox * 2 + wt * 2;
-    wall(fullW, wt, 0, oz + wt / 2); wall(fullW, wt, 0, -(oz + wt / 2));
-    wall(wt, oz * 2, ox + wt / 2, 0); wall(wt, oz * 2, -(ox + wt / 2), 0);
-    // Raked stands packed with fans, top & bottom (pulled in close to the pitch).
+    const spanX = X * 2 + 8, oz = Z + 1.4;
     for (const sz of [-1, 1]) {
-      const stand = new THREE.Mesh(new THREE.BoxGeometry(fullW + 24, 9, 30),
-        new THREE.MeshStandardMaterial({ color: 0x2f3547, roughness: 1 }));
-      stand.position.set(0, 3.6, sz * (oz + wt + 14)); stand.rotation.x = sz * 0.36; scene.add(stand);
-      const trim = new THREE.Mesh(new THREE.BoxGeometry(fullW + 24, 0.6, 1.2),
-        new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xffd23f, emissiveIntensity: 0.6 }));
-      trim.position.set(0, 6.6, sz * (oz + wt + 2)); scene.add(trim);
-      this.buildFans(sz, fullW + 20, oz + wt);
+      // Low riser the fans stand on.
+      const riser = new THREE.Mesh(new THREE.BoxGeometry(spanX, 1.4, 4.5),
+        new THREE.MeshStandardMaterial({ color: 0x394055, roughness: 1 }));
+      riser.position.set(0, 0.7, sz * (oz + 2.6)); scene.add(riser);
+      this.buildFans(sz, spanX, oz);
     }
-    // Corner pillars + team pennants (blue left, red right).
+    // Painted backdrop behind the far side: sunset sky + distant stands +
+    // floodlights, so the background is a designed theme (not a flat void).
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(340, 130),
+      new THREE.MeshBasicMaterial({ map: this.backdropTexture(), depthWrite: false }));
+    back.position.set(0, 30, -(Z + 30)); scene.add(back);
+    // Corner flags (blue left, red right) — a touch of stadium flavour.
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const px = sx * (ox + wt / 2), pz = sz * (oz + wt / 2);
-      const pillar = new THREE.Mesh(new THREE.BoxGeometry(wt + 1.4, wallH + 2.4, wt + 1.4), stoneDark);
-      pillar.position.set(px, (wallH + 2.4) / 2, pz); pillar.castShadow = true; scene.add(pillar);
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 7, 6), new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.5 }));
-      pole.position.set(px, wallH + 5, pz); scene.add(pole);
+      const px = sx * (X + 2.5), pz = sz * (oz + 1);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 5, 6), new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.5 }));
+      pole.position.set(px, 2.5, pz); scene.add(pole);
       const teamCol = sx < 0 ? 0x2f6bd8 : 0xd8452f;
-      const flag = new THREE.Mesh(new THREE.PlaneGeometry(3, 1.9),
-        new THREE.MeshStandardMaterial({ color: teamCol, emissive: teamCol, emissiveIntensity: 0.35, roughness: 0.7, side: THREE.DoubleSide }));
-      flag.position.set(px + 1.6, wallH + 6.6, pz); scene.add(flag);
+      const flag = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.5),
+        new THREE.MeshStandardMaterial({ color: teamCol, emissive: teamCol, emissiveIntensity: 0.4, roughness: 0.7, side: THREE.DoubleSide }));
+      flag.position.set(px + 1.3, 4.2, pz); scene.add(flag);
     }
   }
 
-  // Rows of instanced spectators on one long-side stand (coloured body + head).
+  // Two rows of instanced spectators on one long side (coloured body + head),
+  // facing the pitch to cheer.
   private buildFans(sz: number, spanX: number, innerZ: number) {
     const scene = this.ctx.scene;
-    const rows = 7, cols = Math.max(10, Math.round(spanX / 2.6));
+    const rows = 2, cols = Math.max(12, Math.round(spanX / 2.2));
     const n = rows * cols;
-    const bodyGeo = new THREE.CapsuleGeometry(0.5, 1.0, 3, 6);
-    const headGeo = new THREE.SphereGeometry(0.42, 6, 6);
+    const bodyGeo = new THREE.CapsuleGeometry(0.55, 1.1, 3, 6);
+    const headGeo = new THREE.SphereGeometry(0.46, 6, 6);
     const bodies = new THREE.InstancedMesh(bodyGeo, new THREE.MeshStandardMaterial({ roughness: 0.9 }), n);
     const heads = new THREE.InstancedMesh(headGeo, new THREE.MeshStandardMaterial({ roughness: 0.9 }), n);
     bodies.castShadow = false; heads.castShadow = false;
@@ -236,19 +229,62 @@ export class FoosballGame implements GameModule {
     let k = 0;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const x = -spanX / 2 + (c + 0.5) * (spanX / cols) + (Math.random() - 0.5);
-        const z = sz * (innerZ + 1.5 + r * 3.1);
-        const y = 1.2 + r * 1.7;
-        const s = 0.85 + Math.random() * 0.4;
+        const x = -spanX / 2 + (c + 0.5) * (spanX / cols) + (Math.random() - 0.5) * 0.6;
+        const z = sz * (innerZ + 1.6 + r * 2.4);
+        const y = 1.4 + r * 1.2;
+        const s = 0.9 + Math.random() * 0.35;
         m.makeScale(s, s, s); m.setPosition(x, y, z);
         bodies.setMatrixAt(k, m); bodies.setColorAt(k, col.set(cloth[(Math.random() * cloth.length) | 0]));
-        m.setPosition(x, y + 1.05 * s, z);
+        m.setPosition(x, y + 1.15 * s, z);
         heads.setMatrixAt(k, m); heads.setColorAt(k, col.set(skin[(Math.random() * skin.length) | 0]));
         k++;
       }
     }
     bodies.instanceMatrix.needsUpdate = true; heads.instanceMatrix.needsUpdate = true;
     scene.add(bodies); scene.add(heads);
+  }
+
+  // Designed sunset-stadium sky (vertical gradient) — no more black backdrop.
+  private skyTexture(): THREE.CanvasTexture {
+    const c = document.createElement('canvas'); c.width = 16; c.height = 256;
+    const x = c.getContext('2d')!;
+    const g = x.createLinearGradient(0, 0, 0, 256);
+    g.addColorStop(0.0, '#243a7a');   // deep sky
+    g.addColorStop(0.45, '#5a6bb0');
+    g.addColorStop(0.72, '#d98a6a');  // warm haze
+    g.addColorStop(1.0, '#f0b070');   // horizon glow
+    x.fillStyle = g; x.fillRect(0, 0, 16, 256);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+
+  // A painted stadium backdrop: sunset sky, a distant crowd stand, and a few
+  // floodlight pylons.
+  private backdropTexture(): THREE.CanvasTexture {
+    const c = document.createElement('canvas'); c.width = 1024; c.height = 384;
+    const x = c.getContext('2d')!;
+    const g = x.createLinearGradient(0, 0, 0, 384);
+    g.addColorStop(0.0, '#213a80'); g.addColorStop(0.4, '#5a6bb4'); g.addColorStop(0.68, '#e0906a'); g.addColorStop(0.82, '#ffb56a');
+    x.fillStyle = g; x.fillRect(0, 0, 1024, 384);
+    // Distant tiered stand across the bottom (kept low so the sky shows above).
+    const standTop = 286;
+    x.fillStyle = '#2a3350'; x.fillRect(0, standTop, 1024, 384 - standTop);
+    for (let row = 0; row < 3; row++) {
+      const y = standTop + 14 + row * 24;
+      x.fillStyle = row % 2 ? '#333c5c' : '#2c3452'; x.fillRect(0, y - 8, 1024, 18);
+      for (let i = 0; i < 150; i++) {
+        x.fillStyle = ['#ff5a5a', '#4dc3ff', '#ffd23f', '#7cf07c', '#ffffff', '#ff7a3a', '#b06bff'][(Math.random() * 7) | 0];
+        x.beginPath(); x.arc(Math.random() * 1024, y + (Math.random() - 0.5) * 8, 2.4, 0, Math.PI * 2); x.fill();
+      }
+    }
+    // Floodlight pylons with glowing banks.
+    for (const px of [120, 380, 640, 900]) {
+      x.strokeStyle = '#20263a'; x.lineWidth = 6; x.beginPath(); x.moveTo(px, standTop); x.lineTo(px, 70); x.stroke();
+      x.fillStyle = '#fff6d8'; x.fillRect(px - 34, 48, 68, 26);
+      x.fillStyle = 'rgba(255,246,200,0.35)'; x.beginPath(); x.arc(px, 61, 40, 0, Math.PI * 2); x.fill();
+    }
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
   }
 
   private buildDots() {
@@ -350,7 +386,7 @@ export class FoosballGame implements GameModule {
     }
 
     for (const p of ctx.players) {
-      p.x = this.railX[p.index]; if (this.stunT[p.index] <= 0) p.standFacing = this.teamOf(p) === 0 ? Math.PI / 2 : -Math.PI / 2;
+      p.x = this.railX[p.index]; if (this.stunT[p.index] <= 0) p.standFacing = this.teamOf(p) === 0 ? 0.5 : -0.5;
       const dot = this.dots[p.index]; if (dot) dot.position.set(this.railX[p.index], 0.14, p.z);
     }
     this.ball.position.set(this.bx, BALL_R + 0.1, this.bz);
@@ -380,7 +416,8 @@ export class FoosballGame implements GameModule {
     const err = (1 - this.ctx.diff.cap) * this.Z * 0.5 * (Math.random() - 0.5);
     const target = lead + err;
     const onMySide = this.teamOf(p) === 0 ? this.bx < 4 : this.bx > -4;
-    const spd = MOVE_SPEED * (onMySide ? 1 : 0.65) * (0.7 + this.ctx.diff.cap * 0.4);
+    // Bots move a bit slower than you, so you can out-slide them and score.
+    const spd = MOVE_SPEED * (onMySide ? 0.9 : 0.6) * (0.55 + this.ctx.diff.cap * 0.35);
     const dz = target - p.z;
     p.z += Math.max(-spd * dt, Math.min(spd * dt, dz));
     p.vz = Math.sign(dz) * Math.min(Math.abs(dz) / dt, spd); p.vx = 0;

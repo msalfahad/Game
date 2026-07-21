@@ -17,6 +17,7 @@ export class IsoCamera {
   private topDown = false;
   private chasing = false;
   private arena = false;
+  private angled = false;
   private arenaHalfW = 20;
   private arenaHalfL = 24;
 
@@ -48,6 +49,7 @@ export class IsoCamera {
     this.topDown = false;
     this.chasing = false;
     this.arena = false;
+    this.angled = false;
     this.followZ = 0;
     this.applyBase();
   }
@@ -77,6 +79,7 @@ export class IsoCamera {
     this.look.set(tx + fx * 5, ty + 1.6, tz + fz * 5);
     this.topDown = false;
     this.arena = false;
+    this.angled = false;
     this.followZ = 0;
     this.applyBase();
   }
@@ -98,6 +101,7 @@ export class IsoCamera {
     this.topDown = true;
     this.chasing = false;
     this.arena = false;
+    this.angled = false;
     this.followZ = 0;
     this.applyBase();
   }
@@ -128,6 +132,35 @@ export class IsoCamera {
     this.topDown = false;
     this.chasing = false;
     this.arena = true;
+    this.angled = false;
+    this.followZ = 0;
+    this.applyBase();
+  }
+
+  /**
+   * A tilted 3/4 "stadium" view (Foot Brawl): looks at the pitch from above AND
+   * in front so the heroes read as standing figures, not tops of heads. Fits a
+   * rectangle (half-width x, half-length z) to the screen. Resize-safe.
+   */
+  frameAngled(halfW: number, halfL: number) {
+    this.arenaHalfW = halfW;
+    this.arenaHalfL = halfL;
+    const aspect = innerWidth / innerHeight;
+    this.cam.fov = 40;
+    this.cam.aspect = aspect;
+    this.cam.updateProjectionMatrix();
+    const tan = Math.tan((40 * Math.PI) / 180 / 2);
+    const tilt = (44 * Math.PI) / 180; // from straight-down (0 = top-down, 90 = side-on)
+    const margin = 1.05;
+    const dW = (halfW * margin) / (tan * aspect);
+    const dL = (halfL * margin) / tan;
+    const D = Math.max(dW, dL);
+    this.base.set(0, D * Math.cos(tilt), D * Math.sin(tilt));
+    this.look.set(0, 2.2, -halfL * 0.08);
+    this.topDown = false;
+    this.chasing = false;
+    this.arena = false;
+    this.angled = true;
     this.followZ = 0;
     this.applyBase();
   }
@@ -150,6 +183,7 @@ export class IsoCamera {
     // Chase rig re-derives its transform every tick, so a resize only needs the
     // projection refresh above.
     if (this.chasing) return;
+    if (this.angled) { this.frameAngled(this.arenaHalfW, this.arenaHalfL); return; }
     if (this.arena) { this.frameArena(this.arenaHalfW, this.arenaHalfL); return; }
     if (this.base.lengthSq() > 0) {
       if (this.topDown) this.frameTopDown(this.halfSize);
