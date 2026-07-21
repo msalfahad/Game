@@ -6,47 +6,49 @@ import { SFX } from '../../core/audio';
 import { setObjective } from '../../ui/hud';
 
 // OLYMPIC SPRINT (Pirate Cove tier 4 slot — builds its own stadium). A 4-player
-// FREE-FOR-ALL 100 m dash in a roaring modern Olympic stadium. Each hero runs in
-// their own lane; you build speed by MASHING RUN with a good rhythm (steady taps
-// beat frantic ones). PUNCH floors the runner in the lane beside you for a
-// second; DASH is a short cooldown burst for the final straight. First across the
-// line wins gold. Camera is a behind-and-above isometric chase that keeps all
-// four runners framed and zooms in for the finish.
+// FREE-FOR-ALL 200 m dash in a roaring modern Olympic stadium. Build speed by
+// MASHING RUN with a good rhythm (steady taps beat frantic ones), and STEER
+// left/right with the stick to run right up alongside a rival so you can PUNCH
+// them flat. DASH is a short cooldown burst for the final straight. First across
+// the line wins gold. Camera is a behind-and-above isometric chase that keeps
+// all four runners framed and zooms in for the finish.
 
-const LANE_X = [-8.25, -2.75, 2.75, 8.25];   // fixed x per lane / player
-const START_Z = 45;
-const FINISH_Z = -55;
-const RACE_LEN = START_Z - FINISH_Z;         // 100 world units == 100 m
-const TRACK_HALF = 12;                        // half track width (lane edges)
+const LANE_X = [-8.25, -2.75, 2.75, 8.25];   // starting lane x per player
+const START_Z = 100;
+const FINISH_Z = -100;
+const RACE_LEN = START_Z - FINISH_Z;         // 200 world units == 200 m
+const TRACK_HALF = 12;                        // half track width (runners roam within)
 
 // Run feel.
-const MAX_SPEED = 17;      // top running speed (units/s)
+const MAX_SPEED = 22;      // top running speed (units/s)
 const OPT_RATE = 7;        // taps/sec that reaches top speed
 const MAX_RATE = 11;
 const MIN_TAP = 0.045;     // ignore taps closer than this (spam / corner+button dedupe)
 const RATE_DECAY = 2.3;    // tap-rate falls when you stop tapping
 const ACCEL = 5;           // how fast speed eases to the cadence target
 const COMBO_MAX = 8;
+const LATERAL_SPEED = 13;  // side-to-side steering speed
 
 // Abilities.
 const DASH_CD = 3.6;
 const DASH_TIME = 0.55;
-const DASH_ADD = 9;        // extra speed during a dash burst
+const DASH_ADD = 10;       // extra speed during a dash burst
 const PUNCH_CD = 1.4;
-const PUNCH_REACH = 5.6;   // z-distance to a neighbouring-lane rival
+const PUNCH_REACH = 5.5;   // z-distance to a rival you can punch
+const PUNCH_X = 6.5;       // how far to the side a punch reaches
 const KNOCK_TIME = 1.0;    // floored for 1 second
 const RECOVER_INVULN = 0.6;
 
 const COUNT_START = 3.2;
-const TIME_CAP = 45;
+const TIME_CAP = 70;
 const END_HOLD = 1.4;      // linger after you cross (fireworks) before results
 
 interface FirePart { m: THREE.Mesh; vx: number; vy: number; vz: number; life: number; }
 
 export class SprintGame implements GameModule {
-  readonly stickMode = 'none' as const;
+  readonly stickMode = 'float' as const;   // stick = steer left/right between lanes
   title = 'Olympic Sprint';
-  objective = '🏃 MASH RUN! · PUNCH the lane beside you · DASH the final straight';
+  objective = '🏃 MASH RUN · STEER & PUNCH · DASH';
 
   private ctx!: MatchContext;
   private finished = false;
@@ -65,6 +67,8 @@ export class SprintGame implements GameModule {
   private botAcc = [0, 0, 0, 0];
   private botInt = [0.15, 0.15, 0.15, 0.15];
   private botSkill = [0, 0, 0, 0];
+  private xPos = [0, 0, 0, 0];        // free lateral position per runner
+  private botTargetX = [0, 0, 0, 0];  // where each bot wants to be, side-to-side
 
   private raceT = 0;
   private countdown = COUNT_START;
@@ -100,8 +104,10 @@ export class SprintGame implements GameModule {
     this.finishCount = 0; this.endT = 0; this.finalCalled = false;
 
     // Warm stadium haze, far draw so the crowd fills the backdrop.
-    ctx.scene.fog = new THREE.Fog(new THREE.Color(0x9fc4e8).getHex(), 120, 360);
-    ctx.scene.add(new THREE.AmbientLight(0xfff2e0, 0.5));
+    ctx.scene.fog = new THREE.Fog(new THREE.Color(0x9fc4e8).getHex(), 150, 420);
+    ctx.scene.add(new THREE.AmbientLight(0xfff2e0, 0.7));
+    // Sky/ground fill so the packed stands stay bright and colourful all round.
+    ctx.scene.add(new THREE.HemisphereLight(0xbfe0ff, 0x3a5a3a, 0.6));
 
     this.buildStadium();
     setupRoster(ctx, '', 0.5);
@@ -111,6 +117,7 @@ export class SprintGame implements GameModule {
       p.dead = false; p.fallen = false; p.sitting = false; p.riding = false;
       p.standFacing = Math.PI;           // face down the track (away from camera)
       p.dashCd = 0; p.invulnT = 0;
+      this.xPos[i] = LANE_X[i]; this.botTargetX[i] = LANE_X[i];
       if (i > 0) {
         this.botSkill[i] = Math.min(1.06, 0.72 + ctx.diff.cap * 0.3 + (Math.random() * 0.14 - 0.05));
         this.botInt[i] = 1 / (OPT_RATE * this.botSkill[i]);
@@ -166,13 +173,17 @@ export class SprintGame implements GameModule {
     if (this.finished || this.countdown > 0 || this.place[i] > 0 || this.knockT[i] > 0 || this.punchCd[i] > 0) return;
     this.punchCd[i] = PUNCH_CD;
     const me = this.ctx.players[i];
-    let target: Player | null = null; let best = PUNCH_REACH;
+    // Punch whoever is physically ALONGSIDE you (within arm's reach to the side
+    // and roughly level), closest first — no lane restriction, since runners now
+    // roam freely across the track.
+    let target: Player | null = null; let best = Infinity;
     for (const o of this.ctx.players) {
       if (o.index === i) continue;
-      if (Math.abs(o.index - i) !== 1) continue;         // only a NEIGHBOURING lane
       if (this.place[o.index] > 0 || this.knockT[o.index] > 0 || o.invulnT > 0) continue;
-      const dz = Math.abs(me.z - o.z);
-      if (dz < best) { best = dz; target = o; }
+      const dz = Math.abs(me.z - o.z), dx = Math.abs(me.x - o.x);
+      if (dz > PUNCH_REACH || dx > PUNCH_X) continue;
+      const d = dz + dx;
+      if (d < best) { best = d; target = o; }
     }
     if (target) {
       this.knockDown(target, i);
@@ -262,10 +273,15 @@ export class SprintGame implements GameModule {
 
   private advance(i: number, dt: number) {
     const p = this.ctx.players[i];
-    if (this.place[i] > 0) { p.vz = 0; p.x = LANE_X[i]; return; }
+    if (this.place[i] > 0) { p.vz = 0; p.x = this.xPos[i]; return; }
+    // Lateral steering: you drive it with the stick, bots ease toward a target.
+    if (i === 0) this.xPos[0] += this.ctx.input.ax * LATERAL_SPEED * dt;
+    else this.xPos[i] += (this.botTargetX[i] - this.xPos[i]) * Math.min(1, 4 * dt);
+    this.xPos[i] = Math.max(-TRACK_HALF + 1, Math.min(TRACK_HALF - 1, this.xPos[i]));
+
     if (this.knockT[i] > 0) {
       this.speed[i] += (0 - this.speed[i]) * 5 * dt;   // slump to a stop while down
-      p.vz = -this.speed[i]; p.x = LANE_X[i];
+      p.vz = -this.speed[i]; p.x = this.xPos[i];
       p.z -= this.speed[i] * dt;
       return;
     }
@@ -278,9 +294,9 @@ export class SprintGame implements GameModule {
     target = Math.min(target, cap);
     this.speed[i] += (target - this.speed[i]) * ACCEL * dt;
     this.speed[i] = Math.min(this.speed[i], cap);
-    // Move down the lane (toward −z).
+    // Run forward (toward −z).
     p.z -= this.speed[i] * dt;
-    p.vz = -this.speed[i]; p.vx = 0; p.x = LANE_X[i];
+    p.vz = -this.speed[i]; p.vx = 0; p.x = this.xPos[i];
     if (p.z <= FINISH_Z) this.crossLine(i);
   }
 
@@ -309,18 +325,27 @@ export class SprintGame implements GameModule {
       this.botInt[i] = (1 / (OPT_RATE * this.botSkill[i])) * (0.82 + Math.random() * 0.36);
       this.runTap(i);
     }
-    // Punch a neighbour who's alongside (slightly ahead preferred).
+    // Steer: hunt the nearest rival that's roughly level (to line up a punch),
+    // otherwise drift back toward this runner's own lane.
+    let prey: Player | null = null; let bestDz = 14;
+    for (const o of this.ctx.players) {
+      if (o.index === i || this.place[o.index] > 0) continue;
+      const dz = Math.abs(o.z - p.z);
+      if (dz < bestDz) { bestDz = dz; prey = o; }
+    }
+    this.botTargetX[i] = prey ? prey.x : LANE_X[i];
+
+    // Punch a rival who's alongside.
     if (this.punchCd[i] <= 0) {
       for (const o of this.ctx.players) {
-        if (Math.abs(o.index - i) !== 1) continue;
-        if (this.place[o.index] > 0 || this.knockT[o.index] > 0 || o.invulnT > 0) continue;
-        if (Math.abs(o.z - p.z) < PUNCH_REACH * 0.8 && Math.random() < (0.7 + this.ctx.diff.cap) * dt) {
+        if (o.index === i || this.place[o.index] > 0 || this.knockT[o.index] > 0 || o.invulnT > 0) continue;
+        if (Math.abs(o.z - p.z) < PUNCH_REACH && Math.abs(o.x - p.x) < PUNCH_X && Math.random() < (0.7 + this.ctx.diff.cap) * dt) {
           this.punch(i); break;
         }
       }
     }
     // Dash to chase when trailing the leader.
-    if (p.dashCd <= 0 && (this.leaderZ() < p.z - 9) && Math.random() < 0.4 * dt) this.dash(i);
+    if (p.dashCd <= 0 && (this.leaderZ() < p.z - 12) && Math.random() < 0.4 * dt) this.dash(i);
   }
 
   private leaderZ() { return Math.min(...this.ctx.players.map((p) => p.z)); }
@@ -330,7 +355,7 @@ export class SprintGame implements GameModule {
   private syncRunners(_dt: number, _elapsed: number) {
     for (let i = 0; i < 4; i++) {
       const p = this.ctx.players[i];
-      p.x = LANE_X[i];
+      p.x = this.xPos[i];
       if (this.place[i] === 0 && this.knockT[i] <= 0) p.standFacing = Math.PI;
     }
   }
@@ -340,10 +365,10 @@ export class SprintGame implements GameModule {
     // in a touch as the leader nears the tape.
     const zs = this.ctx.players.map((p) => p.z);
     const avg = zs.reduce((a, b) => a + b, 0) / 4;
-    const packZ = avg * 0.55 + Math.min(...zs) * 0.45;   // bias slightly toward the leader
-    const closing = Math.max(0, Math.min(1, (this.leaderDist() - (RACE_LEN - 22)) / 22));
-    const dist = 33 - closing * 6;
-    const height = 27 - closing * 4;
+    const packZ = avg * 0.6 + Math.min(...zs) * 0.4;   // bias slightly toward the leader
+    const closing = Math.max(0, Math.min(1, (this.leaderDist() - (RACE_LEN - 24)) / 24));
+    const dist = 37 - closing * 7;
+    const height = 29 - closing * 4;
     this.ctx.camera.chaseBehind(0, 1.4, packZ, Math.PI, dist, height);
   }
 
@@ -416,9 +441,9 @@ export class SprintGame implements GameModule {
       const num = this.textSprite(String(i + 1), '#ffffff', 74);
       num.scale.set(2.6, 2.6, 1); num.position.set(LANE_X[i], 2.2, START_Z + 5.5); scene.add(num);
     }
-    // "100 M" painted flat on the track (a decal, not a billboard).
-    const bigM = new THREE.Mesh(new THREE.PlaneGeometry(16, 5), this.decalMat('100 M'));
-    bigM.rotation.x = -Math.PI / 2; bigM.rotation.z = Math.PI; bigM.position.set(0, 0.11, START_Z - 10); scene.add(bigM);
+    // "200 M" painted flat on the track (a decal, not a billboard).
+    const bigM = new THREE.Mesh(new THREE.PlaneGeometry(16, 5), this.decalMat('200 M'));
+    bigM.rotation.x = -Math.PI / 2; bigM.rotation.z = Math.PI; bigM.position.set(0, 0.11, START_Z - 12); scene.add(bigM);
 
     // Finish line (checkered) + finish gate.
     this.buildFinishGate();
@@ -494,12 +519,13 @@ export class SprintGame implements GameModule {
   private buildStand(xInner: number, xOuter: number, z0: number, z1: number, tag: string) {
     const scene = this.ctx.scene;
     const yb = 2.6, yt = 34;
-    // Raked seating quad (inner-bottom → outer-top) textured with crowd.
+    // Raked seating (inner-bottom → outer-top): a dark tiered base with REAL
+    // instanced spectators standing on it.
     const a = new THREE.Vector3(xInner, yb, z0), b = new THREE.Vector3(xInner, yb, z1);
     const c = new THREE.Vector3(xOuter, yt, z0), d = new THREE.Vector3(xOuter, yt, z1);
     const zlen = Math.abs(z1 - z0);
-    const seats = this.quad(a, b, d, c, this.crowdMat(Math.round(zlen / 4), 9));
-    scene.add(seats);
+    scene.add(this.quad(a, b, d, c, this.seatMat()));
+    this.crowdOnRect(a, b, c, d, 8, Math.max(8, Math.round(zlen / 3.2)));
     // Front wall below the seating.
     const wall = new THREE.Mesh(new THREE.BoxGeometry(0.8, yb, zlen),
       new THREE.MeshStandardMaterial({ color: 0x223a6a, roughness: 0.7, emissive: 0x0a1830, emissiveIntensity: 0.3 }));
@@ -516,7 +542,8 @@ export class SprintGame implements GameModule {
     const yb = 3, yt = 38, xhalf = 52;
     const a = new THREE.Vector3(-xhalf, yb, z0), b = new THREE.Vector3(xhalf, yb, z0);
     const c = new THREE.Vector3(-xhalf, yt, z1), d = new THREE.Vector3(xhalf, yt, z1);
-    scene.add(this.quad(a, b, d, c, this.crowdMat(26, 9)));
+    scene.add(this.quad(a, b, d, c, this.seatMat()));
+    this.crowdOnRect(a, b, c, d, 8, 34);
     // A giant LED screen high on the end stand.
     const screen = new THREE.Mesh(new THREE.PlaneGeometry(30, 12),
       new THREE.MeshStandardMaterial({ map: this.ledTexture(), emissive: 0xffffff, emissiveIntensity: 0.8, emissiveMap: this.ledTexture(), color: 0x111111 }));
@@ -577,28 +604,47 @@ export class SprintGame implements GameModule {
     const m = new THREE.Mesh(geo, mat); m.receiveShadow = true; return m;
   }
 
-  private crowdCanvas(): HTMLCanvasElement {
-    const c = document.createElement('canvas'); c.width = 128; c.height = 128;
-    const x = c.getContext('2d')!;
-    x.fillStyle = '#333a54'; x.fillRect(0, 0, 128, 128);
-    const pal = ['#ff5a5a', '#4dc3ff', '#ffd23f', '#7cf07c', '#b06bff', '#ff7a3a', '#ffffff', '#f0c8a0', '#c98a5a', '#7a8ad0'];
-    for (let row = 0; row < 16; row++) {
-      for (let i = 0; i < 34; i++) {
-        x.fillStyle = pal[(Math.random() * pal.length) | 0];
-        const px = Math.random() * 128, py = row * 8 + 4 + (Math.random() - 0.5) * 3;
-        x.beginPath(); x.arc(px, py, 2.1, 0, Math.PI * 2); x.fill();
-      }
-    }
-    return c;
+  private seatMat(): THREE.MeshStandardMaterial {
+    // Dark tiered seating base the spectators stand on.
+    return new THREE.MeshStandardMaterial({ color: 0x232b44, roughness: 1, side: THREE.DoubleSide });
   }
 
-  private crowdMat(nx: number, ny: number): THREE.MeshStandardMaterial {
-    const tex = new THREE.CanvasTexture(this.crowdCanvas());
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(Math.max(1, nx), Math.max(1, ny));
-    // Self-lit a touch so the far (shadowed) stands stay colourful, not murky.
-    return new THREE.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: 0xffffff, emissiveIntensity: 0.4, roughness: 1, side: THREE.DoubleSide });
+  // Fill a raked rectangle (corners a=inner/bottom-left, b=inner/bottom-right,
+  // c=outer/top-left, d=outer/top-right) with rows×cols instanced spectators:
+  // a coloured capsule body + a skin-tone head each, in one draw call per part.
+  // Cheap enough for thousands of fans; no shadows (perf).
+  private crowdOnRect(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, d: THREE.Vector3, rows: number, cols: number) {
+    const scene = this.ctx.scene;
+    const n = rows * cols;
+    const bodyGeo = new THREE.CapsuleGeometry(0.5, 1.0, 3, 6);
+    const headGeo = new THREE.SphereGeometry(0.42, 6, 6);
+    const bodies = new THREE.InstancedMesh(bodyGeo, new THREE.MeshStandardMaterial({ roughness: 0.9 }), n);
+    const heads = new THREE.InstancedMesh(headGeo, new THREE.MeshStandardMaterial({ roughness: 0.9 }), n);
+    bodies.castShadow = false; heads.castShadow = false;
+    const cloth = ['#ff5a5a', '#4dc3ff', '#ffd23f', '#7cf07c', '#b06bff', '#ff7a3a', '#ffffff', '#2f6bd8', '#e8e8e8', '#d84550', '#38c9a0'];
+    const skin = ['#f2cda2', '#d9a06a', '#a06a40', '#ffe0b8', '#8a5a34'];
+    const m = new THREE.Matrix4(); const col = new THREE.Color();
+    const bottom = new THREE.Vector3(), top = new THREE.Vector3(), pos = new THREE.Vector3();
+    let k = 0;
+    for (let r = 0; r < rows; r++) {
+      const u = (r + 0.5) / rows;
+      for (let cix = 0; cix < cols; cix++) {
+        const v = (cix + 0.5) / cols;
+        bottom.copy(a).lerp(b, v);
+        top.copy(c).lerp(d, v);
+        pos.copy(bottom).lerp(top, u);
+        pos.x += (Math.random() - 0.5) * 1.1;
+        pos.z += (Math.random() - 0.5) * 1.4;
+        const s = 0.85 + Math.random() * 0.4;
+        m.makeScale(s, s, s); m.setPosition(pos.x, pos.y + 1.0 * s, pos.z);
+        bodies.setMatrixAt(k, m); bodies.setColorAt(k, col.set(cloth[(Math.random() * cloth.length) | 0]));
+        m.setPosition(pos.x, pos.y + 2.05 * s, pos.z);
+        heads.setMatrixAt(k, m); heads.setColorAt(k, col.set(skin[(Math.random() * skin.length) | 0]));
+        k++;
+      }
+    }
+    bodies.instanceMatrix.needsUpdate = true; heads.instanceMatrix.needsUpdate = true;
+    scene.add(bodies); scene.add(heads);
   }
 
   private decalMat(txt: string): THREE.MeshBasicMaterial {
@@ -664,8 +710,8 @@ export class SprintGame implements GameModule {
         <span class="rk" style="width:34px;color:#fff;font-size:12px;">–</span></div>`;
     }
     ui.innerHTML = `
-      <div style="position:fixed;top:60px;left:14px;background:rgba(10,18,40,.42);padding:8px 10px;border-radius:12px;">
-        <div style="color:#FFD23F;font-size:11px;margin-bottom:3px;">🏁 100 M SPRINT</div>${rowsHtml}</div>
+      <div style="position:fixed;top:128px;left:14px;background:rgba(10,18,40,.42);padding:8px 10px;border-radius:12px;">
+        <div style="color:#FFD23F;font-size:11px;margin-bottom:3px;">🏁 200 M SPRINT</div>${rowsHtml}</div>
       <div id="spTimer" style="position:fixed;top:58px;left:50%;transform:translateX(-50%);color:#fff;font-size:30px;
         text-shadow:0 3px 0 rgba(0,0,0,.5);letter-spacing:1px;">00:00.00</div>
       <button id="spDash" data-nostick style="pointer-events:auto;position:fixed;left:22px;bottom:30px;">💨<br>DASH</button>

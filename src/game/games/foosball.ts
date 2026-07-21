@@ -51,10 +51,10 @@ export class FoosballGame implements GameModule {
     this.finished = false;
     this.timeLeft = matchTime(120);
     // Goals sit on the LEFT/RIGHT ends, so goal-to-goal is the SCREEN-WIDTH
-    // dimension — keep it narrow enough that both goals stay on a portrait
-    // phone. The pitch is tall (lots of up/down room) so the four heroes aren't
-    // cramped together.
-    this.X = ctx.halfSize * 0.6; this.Z = ctx.halfSize * 0.66; this.goalHalf = this.Z * 0.4;
+    // dimension. The pitch is TALLER than it is wide (players slide up/down)
+    // which fits a portrait phone, and the camera fits it exactly (frameArena)
+    // so the pitch fills the screen with both goals on view.
+    this.X = ctx.halfSize * 0.6; this.Z = ctx.halfSize * 1.05; this.goalHalf = this.Z * 0.3;
     this.score = [0, 0]; this.resetT = 1.6; this.smashCd = [0, 0, 0, 0]; this.stunT = [0, 0, 0, 0];
 
     // Teams: 0,1 = BLUE (attacks +x, defends −x); 2,3 = RED. You are 0 (blue
@@ -79,6 +79,10 @@ export class FoosballGame implements GameModule {
     spot.position.set(0.4, 0.4, 0.3); this.ball.add(spot);
     this.ball.castShadow = true; ctx.scene.add(this.ball);
     this.bx = 0; this.bz = 0; this.bvx = 0; this.bvz = 0;
+
+    // Fit the camera to the pitch (+ goal depth + a little margin) so the whole
+    // pitch fills the screen and nothing but the pitch really shows.
+    ctx.camera.frameArena(this.X + 5, this.Z + 2);
 
     this.buildUI();
     setObjective(this.objective);
@@ -174,6 +178,9 @@ export class FoosballGame implements GameModule {
     this.smashCd[i] = SMASH_CD;
     const dir = this.teamOf(p) === 0 ? 1 : -1; // blue shoots +x, red −x
     const dz = this.bz - p.z, L = Math.hypot(dir * 7, dz) || 1;
+    // Clear the ball off the shooter first so the shot flies clean (no instant
+    // re-collision that would sap the smash and make it feel stuck).
+    this.bx = p.x + dir * (HITBOX_RADIUS + BALL_R + 0.6);
     this.bvx = (dir * 7 / L) * SMASH_V; this.bvz = (dz / L) * SMASH_V;
     this.hitFx = 0.3;
     SFX.hit(); this.ctx.fx.burst(this.bx, this.bz, '#FFD23F', 18); this.ctx.fx.shake(1.6);
@@ -295,12 +302,15 @@ export class FoosballGame implements GameModule {
       const dx = this.bx - p.x, dz = this.bz - p.z, d = Math.hypot(dx, dz), min = HITBOX_RADIUS + BALL_R;
       if (d < min && d > 0.001) {
         const nz = dz / d;
-        this.bx = p.x; this.bz = p.z + nz * min;
         const sp = Math.hypot(this.bvx, this.bvz);
         // Always drive the ball toward the ENEMY goal on a touch — a blue player
         // sends it +x, a red player −x. This stops the ball stalling in a
         // ping-pong between team-mates and keeps play flowing end to end.
         const dir = this.teamOf(p) === 0 ? 1 : -1;
+        // Place the ball CLEAR of the player on the enemy-goal side so it can't
+        // immediately re-collide and jitter/stick to the player.
+        this.bx = p.x + dir * (min + 0.4);
+        this.bz = p.z + nz * min;
         this.bvx = dir * Math.max(sp * 0.72, BALL_SPEED * 0.85);
         this.bvz = nz * sp * 0.6 + p.vz * 0.5;                 // vertical deflection + carry the slide
         this.hitFx = 0.16; SFX.bump(); this.ctx.fx.burst(this.bx, this.bz, p.hero.col, 6);

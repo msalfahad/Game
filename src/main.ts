@@ -9,23 +9,47 @@ import { OnlineMatch } from './net/onlinematch';
 import { OnlineHockey } from './net/onlinehockey';
 import { OnlineFreeRoam } from './net/onlinefreeroam';
 import { gameById, familyById } from './data/maps';
+import { startFpsMeter } from './ui/fps';
 
 // Boot: engine + input + match controller, screen flow, tuning, title.
 
 loadTuning();
+startFpsMeter();
 
 const engine = new Engine();
 const input = new Input();
 const match = new Match(engine, input);
 
+// In-match tracking so the ✕ button and the phone back button can bail out to
+// the menu (a match has no screen of its own to navigate away from).
+let inMatch = false;
+let matchKind: 'offline' | 'online' = 'offline';
+function enterMatch(kind: 'offline' | 'online') {
+  inMatch = true;
+  matchKind = kind;
+  // Push a history entry so the browser/phone BACK button pops back to the menu
+  // instead of leaving the site.
+  history.pushState({ inMatch: true }, '');
+}
+function quitToMenu() {
+  if (!inMatch) return;
+  inMatch = false;
+  match.stop();
+  online?.stop();
+  SFX.playMusic('menu');
+  if (matchKind === 'online') enterOnline();
+  else show('scrTitle');
+}
+
 buildScreens({
   onStart: (sel) => {
     hideScreens();
+    enterMatch('offline');
     match.start({
       hero: sel.hero,
       diff: sel.diff,
       gameId: sel.gameId,
-      onFinish: (ranked, subtitle, youWon) => showResults(ranked, subtitle, youWon),
+      onFinish: (ranked, subtitle, youWon) => { inMatch = false; showResults(ranked, subtitle, youWon); },
     });
   },
   onShakeChange: (v) => match.setShakeScale(v),
@@ -39,7 +63,9 @@ buildOnlineScreens({
   onMatchStart: (m) => {
     match.stop();
     online?.stop();
+    enterMatch('online');
     const done = (end: Parameters<typeof showOnlineResults>[0], youSlot: number) => {
+      inMatch = false;
       SFX.playMusic('menu');
       showOnlineResults(end, youSlot);
     };
@@ -53,6 +79,14 @@ buildOnlineScreens({
   },
 });
 document.getElementById('onlineBtn')!.addEventListener('click', () => enterOnline());
+
+// ✕ quit button (shown during matches) + the browser/phone BACK button both
+// bail the current match back to the menu.
+document.getElementById('quit')!.addEventListener('pointerdown', (e) => {
+  e.stopPropagation();
+  if (inMatch) history.back(); // pops the pushed state → popstate → quitToMenu
+});
+addEventListener('popstate', () => { if (inMatch) quitToMenu(); });
 
 // Mute toggle.
 // In-game speaker button = master (all sound) mute. Persists + syncs the title

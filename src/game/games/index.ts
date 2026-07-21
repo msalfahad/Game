@@ -23,7 +23,6 @@ import { DodgeBrawlGame } from './dodgeball';
 import { CoasterGame } from './coaster';
 import { FoosballGame } from './foosball';
 import { SprintGame } from './sprint';
-import { SurfaceLabGame } from './surfacelab';
 
 // Mechanic factory: every entry in the catalog resolves to one of these
 // modules, flavored by the game's family theme + mods.
@@ -52,6 +51,5 @@ export function makeGame(def: GameDef): GameModule {
     case 'coaster': return new CoasterGame();
     case 'foosball': return new FoosballGame();
     case 'sprint': return new SprintGame();
-    case 'lab': return new SurfaceLabGame();
   }
 }

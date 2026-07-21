@@ -59,8 +59,10 @@ export function buildWorld(
   // The croc raft lives in the sky family but wants a clean forest-river look —
   // keep a flat sky-blue behind it instead of the bright cloud keyart (which
   // blows out the scene).
-  const flatSky = game.mechanic === 'raft' || game.mechanic === 'coaster' || game.mechanic === 'sprint';
-  if (flatSky) scene.background = new THREE.Color(game.mechanic === 'sprint' ? 0x8fc4ec : 0x6fb0e6);
+  const flatSky = game.mechanic === 'raft' || game.mechanic === 'coaster' || game.mechanic === 'sprint' || game.mechanic === 'foosball';
+  if (flatSky) scene.background = new THREE.Color(
+    game.mechanic === 'sprint' ? 0x8fc4ec : game.mechanic === 'foosball' ? 0x0f2415 : 0x6fb0e6,
+  );
   // Prefer a portrait, phone-composed background (maps/<id>-bg.png) so the
   // scene fills a tall screen without cropping out the sky; fall back to the
   // landscape card art, then to the flat theme colour. Night keeps the flat
@@ -149,6 +151,11 @@ export function buildWorld(
     // floor is just a big grass base under everything, no perimeter trim bars.
     floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(320, 320),
       new THREE.MeshStandardMaterial({ color: 0x2f6a34, roughness: 1 }));
+  } else if (game.mechanic === 'foosball') {
+    // Foot Brawl lays its own pitch on top; keep a plain dark surround so only
+    // the pitch reads (no forest props / trim bars).
+    floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(200, 200),
+      new THREE.MeshStandardMaterial({ color: 0x123018, roughness: 1 }));
   } else {
     const fw = rect ? rect.w : halfSize;
     const fl = rect ? rect.l : halfSize;
@@ -168,23 +175,14 @@ export function buildWorld(
   // rectangular corridors skip them too (the ring layout doesn't fit); Musical
   // Chairs wants a clean ring, and its tight framing put a prop in the
   // foreground.
-  if (game.mechanic !== 'goal' && game.mechanic !== 'musicalchairs' && game.mechanic !== 'chase' && game.mechanic !== 'kart' && game.mechanic !== 'maze' && game.mechanic !== 'lavafloor' && game.mechanic !== 'boat' && game.mechanic !== 'raft' && game.mechanic !== 'sprint' && !rect) buildProps(scene, family, halfSize, trimMat);
+  if (game.mechanic !== 'goal' && game.mechanic !== 'musicalchairs' && game.mechanic !== 'chase' && game.mechanic !== 'kart' && game.mechanic !== 'maze' && game.mechanic !== 'lavafloor' && game.mechanic !== 'boat' && game.mechanic !== 'raft' && game.mechanic !== 'sprint' && game.mechanic !== 'foosball' && !rect) buildProps(scene, family, halfSize, trimMat);
   // Floor Is Lava: a bright, warm fill so the map + backdrop read as one glowing scene.
   if (game.mechanic === 'lavafloor') { scene.add(new THREE.AmbientLight(0xffd8a8, 1.5)); scene.fog = new THREE.Fog(new THREE.Color(0xff7a2e).getHex(), halfSize * 3.5, halfSize * 9); }
   // The Sprint stadium has its own sky/crowd; skip the family ambient particles
   // (bubbles floating over an athletics track look out of place).
-  const ambientPts = game.mechanic === 'sprint' ? null : buildAmbient(scene, family, halfSize);
+  const ambientPts = (game.mechanic === 'sprint' || game.mechanic === 'foosball') ? null : buildAmbient(scene, family, halfSize);
 
-  const surfaceAt = (x: number, z: number): SurfaceKind => {
-    if (game.mechanic === 'lab') {
-      if (Math.abs(z) < halfSize * 0.12) return 'conveyor';
-      if (x < 0 && z < 0) return 'metal';
-      if (x >= 0 && z < 0) return 'ice';
-      if (x < 0 && z >= 0) return 'mud';
-      return 'sand';
-    }
-    return family.surface;
-  };
+  const surfaceAt = (_x: number, _z: number): SurfaceKind => family.surface;
 
   return {
     floorMesh,
