@@ -61,7 +61,7 @@ export function buildWorld(
   // blows out the scene).
   const flatSky = game.mechanic === 'raft' || game.mechanic === 'coaster' || game.mechanic === 'sprint' || game.mechanic === 'foosball';
   if (flatSky) scene.background = new THREE.Color(
-    game.mechanic === 'sprint' ? 0x8fc4ec : game.mechanic === 'foosball' ? 0x0f2415 : 0x6fb0e6,
+    game.mechanic === 'sprint' ? 0x8fc4ec : game.mechanic === 'foosball' ? 0x1a1c24 : 0x6fb0e6,
   );
   // Prefer a portrait, phone-composed background (maps/<id>-bg.png) so the
   // scene fills a tall screen without cropping out the sky; fall back to the
@@ -152,10 +152,10 @@ export function buildWorld(
     floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(320, 320),
       new THREE.MeshStandardMaterial({ color: 0x2f6a34, roughness: 1 }));
   } else if (game.mechanic === 'foosball') {
-    // Foot Brawl lays its own pitch on top; keep a plain dark surround so only
-    // the pitch reads (no forest props / trim bars).
-    floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(200, 200),
-      new THREE.MeshStandardMaterial({ color: 0x123018, roughness: 1 }));
+    // Foot Brawl lays its own pitch + stone stadium frame on top; this is the
+    // dark concourse floor around it (no forest props / trim bars).
+    floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(240, 240),
+      new THREE.MeshStandardMaterial({ color: 0x2b2e38, roughness: 1 }));
   } else {
     const fw = rect ? rect.w : halfSize;
     const fl = rect ? rect.l : halfSize;
