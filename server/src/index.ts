@@ -72,6 +72,10 @@ io.on('connection', (socket) => {
   socket.on('room:team', guard(() => lobby.toggleTeam(socket.id)));
   socket.on('room:start', guard(() => lobby.startRoom(socket.id)));
   socket.on('input', (msg: unknown) => lobby.handleInput(socket.id, msg));
+  // Series: between-game reactions, the all-vote rematch, and leaving to find a new game.
+  socket.on('reaction', guard1<string>((emoji) => lobby.sendReaction(socket.id, emoji)));
+  socket.on('rematch:vote', guard(() => lobby.voteRematch(socket.id)));
+  socket.on('series:leave', guard(() => lobby.leaveSeries(socket.id)));
 
   socket.on('disconnect', () => lobby.disconnect(socket.id));
 });

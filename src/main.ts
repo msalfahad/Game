@@ -4,10 +4,11 @@ import { SFX } from './core/audio';
 import { loadTuning } from './core/tuning';
 import { Match } from './game/match';
 import { buildScreens, show, hideScreens, showResults } from './ui/screens';
-import { buildOnlineScreens, enterOnline, showOnlineResults } from './ui/online';
+import { buildOnlineScreens, enterOnline } from './ui/online';
 import { OnlineMatch } from './net/onlinematch';
 import { OnlineHockey } from './net/onlinehockey';
 import { OnlineFreeRoam } from './net/onlinefreeroam';
+import { net } from './net/client';
 import { gameById, familyById } from './data/maps';
 import { startFpsMeter } from './ui/fps';
 
@@ -37,7 +38,7 @@ function quitToMenu() {
   match.stop();
   online?.stop();
   SFX.playMusic('menu');
-  if (matchKind === 'online') enterOnline();
+  if (matchKind === 'online') { net.leaveSeries(); enterOnline(); }
   else show('scrTitle');
 }
 
@@ -64,11 +65,9 @@ buildOnlineScreens({
     match.stop();
     online?.stop();
     enterMatch('online');
-    const done = (end: Parameters<typeof showOnlineResults>[0], youSlot: number) => {
-      inMatch = false;
-      SFX.playMusic('menu');
-      showOnlineResults(end, youSlot);
-    };
+    // In a series the per-game result is driven by the server (series screens),
+    // so the controller's finish callback just marks the game over.
+    const done = () => { inMatch = false; };
     SFX.playMusic(familyById(gameById(m.gameId).familyId).id);
     const mech = gameById(m.gameId).mechanic;
     online =
@@ -77,6 +76,8 @@ buildOnlineScreens({
       : new OnlineFreeRoam(engine, input, done);
     online.start(m);
   },
+  // Halt the 3D controller between games / when leaving a series.
+  stopMatch: () => { online?.stop(); online = null; inMatch = false; },
 });
 document.getElementById('onlineBtn')!.addEventListener('click', () => enterOnline());
 

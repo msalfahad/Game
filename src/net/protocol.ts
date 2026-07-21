@@ -101,3 +101,30 @@ export interface MatchEndMsg {
   scoreLabel: string; // 'lives' | 'pts'
   ranking: { slot: number; name: string; heroKey: string; lives: number; dead: boolean; team: number }[];
 }
+
+// --- Best-of-5 series (KEEP IN SYNC with server/src/protocol.ts) --------------
+export const SERIES_GAMES = 5;
+export const SERIES_WIN = 3;
+
+export interface SeriesNextMsg {
+  gameNum: number;
+  ofN: number;
+  nextGameId: string;
+  mode: MatchMode;
+  score: number[];
+  players: MatchPlayerInfo[];
+  inSec: number;
+  lastRanking?: MatchEndMsg['ranking'];
+  lastWinnerTeam?: number;
+}
+
+export interface SeriesEndMsg {
+  mode: MatchMode;
+  score: number[];
+  winnerTeam: number;
+  standings: { slot: number; name: string; heroKey: string; team: number; wins: number }[];
+  players: MatchPlayerInfo[];
+}
+
+export interface ReactionShowMsg { slot: number; emoji: string; }
+export interface RematchUpdateMsg { votedSlots: number[]; humanSlots: number[]; }

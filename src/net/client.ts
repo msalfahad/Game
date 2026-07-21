@@ -1,6 +1,7 @@
 import { io, type Socket } from 'socket.io-client';
 import type {
-  InputMsg, MatchEndMsg, MatchStartMsg, QueueUpdateMsg, RoomUpdateMsg, StateMsg, WelcomeMsg,
+  InputMsg, MatchEndMsg, MatchStartMsg, QueueUpdateMsg, ReactionShowMsg, RematchUpdateMsg,
+  RoomUpdateMsg, SeriesEndMsg, SeriesNextMsg, StateMsg, WelcomeMsg,
 } from './protocol';
 
 // Connection manager: resolves the server URL, signs in with the stored
@@ -43,6 +44,11 @@ export interface NetCallbacks {
   onState?: (m: StateMsg) => void;
   onMatchEnd?: (m: MatchEndMsg) => void;
   onDisconnect?: () => void;
+  // Best-of-5 series (owned by the online UI, not the per-game controller).
+  onSeriesNext?: (m: SeriesNextMsg) => void;
+  onSeriesEnd?: (m: SeriesEndMsg) => void;
+  onReaction?: (m: ReactionShowMsg) => void;
+  onRematch?: (m: RematchUpdateMsg) => void;
 }
 
 export class Net {
@@ -88,6 +94,10 @@ export class Net {
       socket.on('match:start', (m: MatchStartMsg) => this.cb.onMatchStart?.(m));
       socket.on('state', (m: StateMsg) => this.cb.onState?.(m));
       socket.on('match:end', (m: MatchEndMsg) => this.cb.onMatchEnd?.(m));
+      socket.on('series:next', (m: SeriesNextMsg) => this.cb.onSeriesNext?.(m));
+      socket.on('series:end', (m: SeriesEndMsg) => this.cb.onSeriesEnd?.(m));
+      socket.on('reaction:show', (m: ReactionShowMsg) => this.cb.onReaction?.(m));
+      socket.on('rematch:update', (m: RematchUpdateMsg) => this.cb.onRematch?.(m));
       socket.on('disconnect', () => this.cb.onDisconnect?.());
     });
   }
@@ -124,6 +134,15 @@ export class Net {
   }
   sendInput(msg: InputMsg) {
     this.socket?.emit('input', msg);
+  }
+  sendReaction(emoji: string) {
+    this.socket?.emit('reaction', emoji);
+  }
+  voteRematch() {
+    this.socket?.emit('rematch:vote');
+  }
+  leaveSeries() {
+    this.socket?.emit('series:leave');
   }
 }
 
