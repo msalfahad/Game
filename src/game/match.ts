@@ -254,6 +254,12 @@ export class Match {
     this.engine.stop();
     this.input.setEnabled(false);
     HUD.showHud(false);
+    // Sweep any per-game button overlay so a match quit mid-play (or a new
+    // match) never leaves a previous game's buttons on screen (e.g. the kart's
+    // SPEED / ITEM buttons bleeding into another game).
+    for (const id of ['boatUI', 'coUI', 'dodgeUI', 'dbUI', 'fbUI', 'hpUI', 'kartUI', 'mzUI', 'mcUI', 'raftUI', 'spUI']) {
+      document.getElementById(id)?.remove();
+    }
     if (this.ctx) {
       for (const d of this.ctx.decoys) this.engine.scene.remove(d.sprite);
       this.ctx.decoys = [];
