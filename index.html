@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Bash Arena</title>
+  <!-- Preload the display + body fonts so they're ready before first paint and
+       the menu doesn't flash the iOS 'cursive' fallback then swap. -->
+  <link rel="preload" href="./fonts/bungee.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="./fonts/nunito.woff2" as="font" type="font/woff2" crossorigin />
+  <script type="module" crossorigin src="./assets/index-BVMeTAOu.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-BRJW4FaJ.css">
+</head>
+<body>
+  <div id="loading">LOADING ARENA…</div>
+
+  <!-- In-match HUD -->
+  <div id="hudHeads" class="hidden"></div>
+  <div id="clock" class="hidden">2:00</div>
+  <div id="objective" class="hidden"></div>
+  <div id="mute" class="hidden">🔊</div>
+  <div id="quit" class="hidden">✕</div>
+  <div id="banner"></div>
+  <div id="abilityHint">⚡</div>
+
+  <!-- Invisible / floating analog stick -->
+  <div id="stickBase"></div>
+  <div id="stickKnob"></div>
+
+  <!-- Screens are injected by src/ui/screens.ts -->
+  <div id="screens"></div>
+
+</body>
+</html>
