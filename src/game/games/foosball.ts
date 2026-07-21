@@ -41,6 +41,7 @@ export class FoosballGame implements GameModule {
   private smashCd = [0, 0, 0, 0];   // per-player smash cooldown
   private stunT = [0, 0, 0, 0];     // per-player dizzy timer
   private hitFx = 0;
+  private pads: THREE.Mesh[] = [];  // team-coloured pad under each hero
 
   private smashBtn!: HTMLButtonElement;
   private blueEl!: HTMLElement; private redEl!: HTMLElement;
@@ -50,11 +51,15 @@ export class FoosballGame implements GameModule {
     this.title = ctx.game.name;
     this.finished = false;
     this.timeLeft = matchTime(120);
-    // Goals sit on the LEFT/RIGHT ends, so goal-to-goal is the SCREEN-WIDTH
-    // dimension. The pitch is TALLER than it is wide (players slide up/down)
-    // which fits a portrait phone, and the camera fits it exactly (frameArena)
-    // so the pitch fills the screen with both goals on view.
-    this.X = ctx.halfSize * 0.6; this.Z = ctx.halfSize * 1.05; this.goalHalf = this.Z * 0.3;
+    // Top-down stadium is viewed from high up (the wide pitch fits the width),
+    // so the family fog would just wash the whole scene out — turn it off and
+    // add a bright fill so the pitch + stone frame read cleanly.
+    ctx.scene.fog = null;
+    ctx.scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    // A proper WIDE football pitch (goals left/right, ~1.8:1 like the reference
+    // art). On a portrait phone the camera fits the width, so the pitch sits in
+    // the middle with the stone stadium frame filling above/below.
+    this.X = ctx.halfSize * 1.08; this.Z = ctx.halfSize * 0.6; this.goalHalf = this.Z * 0.42;
     this.score = [0, 0]; this.resetT = 1.6; this.smashCd = [0, 0, 0, 0]; this.stunT = [0, 0, 0, 0];
 
     // Teams: 0,1 = BLUE (attacks +x, defends −x); 2,3 = RED. You are 0 (blue
@@ -63,7 +68,9 @@ export class FoosballGame implements GameModule {
     this.railX = [-this.X * 0.34, -this.X * 0.80, this.X * 0.34, this.X * 0.80];
 
     this.buildPitch();
+    this.buildStadiumFrame();
     setupRoster(ctx, '', 0.5);
+    this.buildPads();
 
     ctx.players.forEach((p) => {
       const blue = p.index < 2;
@@ -81,8 +88,8 @@ export class FoosballGame implements GameModule {
     this.bx = 0; this.bz = 0; this.bvx = 0; this.bvz = 0;
 
     // Fit the camera to the pitch (+ goal depth + a little margin) so the whole
-    // pitch fills the screen and nothing but the pitch really shows.
-    ctx.camera.frameArena(this.X + 5, this.Z + 2);
+    // pitch fills the screen width, with the stadium frame framing it.
+    ctx.camera.frameArena(this.X + 5, this.Z + 5);
 
     this.buildUI();
     setObjective(this.objective);
@@ -131,11 +138,19 @@ export class FoosballGame implements GameModule {
       this.buildGoal(sx, col);
     }
 
-    // Coloured rail strips under each player lane.
+    // Coloured rail strips under each player lane, with up/down arrowheads at
+    // each end (like the reference art) to show the slide direction.
     [-1, -1, 1, 1].forEach((s, i) => {
+      const col = s < 0 ? 0x2f6bd8 : 0xd8452f;
       const rail = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.06, Z * 2 - 2),
-        new THREE.MeshStandardMaterial({ color: s < 0 ? 0x2f6bd8 : 0xd8452f, emissive: s < 0 ? 0x123a7a : 0x7a1a12, emissiveIntensity: 0.5, roughness: 0.5 }));
+        new THREE.MeshStandardMaterial({ color: col, emissive: s < 0 ? 0x123a7a : 0x7a1a12, emissiveIntensity: 0.5, roughness: 0.5 }));
       rail.position.set(this.railX[i], 0.12, 0); scene.add(rail);
+      const arrowMat = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.5, roughness: 0.5 });
+      for (const sz of [-1, 1]) {
+        const arrow = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.8, 4), arrowMat);
+        arrow.rotation.x = sz < 0 ? Math.PI / 2 : -Math.PI / 2; // point outward (up / down)
+        arrow.position.set(this.railX[i], 0.2, sz * (Z - 2.4)); scene.add(arrow);
+      }
     });
 
     // Bright glowing goal-mouth on the floor at each end so it's obvious where
@@ -149,14 +164,72 @@ export class FoosballGame implements GameModule {
 
   private buildGoal(sx: number, col: number) {
     const scene = this.ctx.scene, X = this.X, gh = this.goalHalf;
-    const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.5, emissive: (col & 0xfefefe) >> 2, emissiveIntensity: 0.4 });
-    const depth = 4;
-    // Frame posts + crossbar-ish + net (a translucent box behind the line).
-    for (const sz of [-gh, gh]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 3.4, 8), mat); post.position.set(sx * (X + 0.2), 1.7, sz); scene.add(post); }
-    const back = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, gh * 2, 8), mat); back.rotation.x = Math.PI / 2; back.position.set(sx * (X + depth), 1.7, 0); scene.add(back);
-    const net = new THREE.Mesh(new THREE.BoxGeometry(depth, 3.2, gh * 2),
-      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, transparent: true, opacity: 0.18, wireframe: true }));
-    net.position.set(sx * (X + depth / 2), 1.6, 0); scene.add(net);
+    const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.4, metalness: 0.2, emissive: (col & 0xfefefe) >> 2, emissiveIntensity: 0.5 });
+    const depth = 4.5, postR = 0.45, H = 3.6;
+    // Coloured frame: two posts + a crossbar + back post.
+    for (const sz of [-gh, gh]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(postR, postR, H, 10), mat); post.position.set(sx * (X + 0.2), H / 2, sz); scene.add(post); }
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(postR, postR, gh * 2, 10), mat); bar.rotation.x = Math.PI / 2; bar.position.set(sx * (X + 0.2), H, 0); scene.add(bar);
+    for (const sz of [-gh, gh]) { const bp = new THREE.Mesh(new THREE.CylinderGeometry(postR, postR, H, 10), mat); bp.position.set(sx * (X + depth), H / 2, sz); scene.add(bp); }
+    // White net: a bright wireframe cage (back + top + sides) — reads as a real net.
+    const netMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.5 });
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(gh * 2, H, 6, 4), netMat); back.rotation.y = Math.PI / 2; back.position.set(sx * (X + depth), H / 2, 0); scene.add(back);
+    const top = new THREE.Mesh(new THREE.PlaneGeometry(depth, gh * 2, 4, 6), netMat); top.rotation.x = -Math.PI / 2; top.position.set(sx * (X + depth / 2 + 0.1), H, 0); scene.add(top);
+    for (const sz of [-gh, gh]) { const side = new THREE.Mesh(new THREE.PlaneGeometry(depth, H, 4, 4), netMat); side.position.set(sx * (X + depth / 2 + 0.1), H / 2, sz); scene.add(side); }
+  }
+
+  // Stone stadium frame (the "organized" background from the reference art): a
+  // dark concourse floor, stone perimeter walls on the long sides, corner
+  // pillars and team pennants.
+  private buildStadiumFrame() {
+    const scene = this.ctx.scene, X = this.X, Z = this.Z;
+    const stone = new THREE.MeshStandardMaterial({ color: 0x7b818e, roughness: 0.95 });
+    const stoneDark = new THREE.MeshStandardMaterial({ color: 0x4b505b, roughness: 1 });
+    // (The dark concourse floor is the world floor beneath the pitch.)
+    // Perimeter stone walls just outside the pitch, with a darker cap course.
+    const wallH = 3.4, wt = 2.6, ox = X + 3.2, oz = Z + 3.2;
+    const wall = (w: number, d: number, x: number, z: number) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, d), stone);
+      m.position.set(x, wallH / 2, z); m.castShadow = true; m.receiveShadow = true; scene.add(m);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(w + 0.5, 0.6, d + 0.5), stoneDark);
+      cap.position.set(x, wallH + 0.25, z); scene.add(cap);
+    };
+    const fullW = ox * 2 + wt * 2;
+    wall(fullW, wt, 0, oz + wt / 2); wall(fullW, wt, 0, -(oz + wt / 2));          // top / bottom (long sides)
+    wall(wt, oz * 2, ox + wt / 2, 0); wall(wt, oz * 2, -(ox + wt / 2), 0);        // left / right (behind goals)
+    // Raked stadium stands filling the space above/below the pitch, with a lit
+    // trim rail — makes the surround read as a stadium, not empty black.
+    for (const sz of [-1, 1]) {
+      const stand = new THREE.Mesh(new THREE.BoxGeometry(fullW + 26, 7, 16),
+        new THREE.MeshStandardMaterial({ color: 0x2f3547, roughness: 1 }));
+      stand.position.set(0, 3, sz * (oz + wt + 11)); stand.rotation.x = sz * 0.32; scene.add(stand);
+      const trim = new THREE.Mesh(new THREE.BoxGeometry(fullW + 26, 0.6, 1.2),
+        new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xffd23f, emissiveIntensity: 0.6 }));
+      trim.position.set(0, 6.4, sz * (oz + wt + 4.5)); scene.add(trim);
+    }
+    // Corner pillars + team pennants (blue on the left, red on the right).
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const px = sx * (ox + wt / 2), pz = sz * (oz + wt / 2);
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(wt + 1.4, wallH + 2.2, wt + 1.4), stoneDark);
+      pillar.position.set(px, (wallH + 2.2) / 2, pz); pillar.castShadow = true; scene.add(pillar);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 7, 6), new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.5 }));
+      pole.position.set(px, wallH + 5, pz); scene.add(pole);
+      const teamCol = sx < 0 ? 0x2f6bd8 : 0xd8452f;
+      const flag = new THREE.Mesh(new THREE.PlaneGeometry(3, 1.9),
+        new THREE.MeshStandardMaterial({ color: teamCol, emissive: teamCol, emissiveIntensity: 0.35, roughness: 0.7, side: THREE.DoubleSide }));
+      flag.position.set(px + 1.6, wallH + 6.6, pz); scene.add(flag);
+    }
+  }
+
+  // Team-coloured pads under each hero (they slide with the player).
+  private buildPads() {
+    this.pads = this.ctx.players.map((p) => {
+      const col = this.teamOf(p) === 0 ? 0x2f6bd8 : 0xd8452f;
+      const pad = new THREE.Mesh(new THREE.CylinderGeometry(HITBOX_RADIUS * 1.15, HITBOX_RADIUS * 1.3, 0.4, 6),
+        new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.4, roughness: 0.6, metalness: 0.2 }));
+      pad.position.set(this.railX[p.index], 0.16, p.z); pad.receiveShadow = true;
+      this.ctx.scene.add(pad);
+      return pad;
+    });
   }
 
   // --- input ------------------------------------------------------------------
@@ -238,8 +311,11 @@ export class FoosballGame implements GameModule {
       this.tickBall(dt);
     }
 
-    // Sync meshes / facing (a stunned hero keeps its dizzy spin).
-    for (const p of ctx.players) { p.x = this.railX[p.index]; if (this.stunT[p.index] <= 0) p.standFacing = this.teamOf(p) === 0 ? Math.PI / 2 : -Math.PI / 2; }
+    // Sync meshes / facing (a stunned hero keeps its dizzy spin) + slide the pads.
+    for (const p of ctx.players) {
+      p.x = this.railX[p.index]; if (this.stunT[p.index] <= 0) p.standFacing = this.teamOf(p) === 0 ? Math.PI / 2 : -Math.PI / 2;
+      const pad = this.pads[p.index]; if (pad) pad.position.set(this.railX[p.index], 0.16, p.z);
+    }
     this.ball.position.set(this.bx, BALL_R + 0.1, this.bz);
     this.ball.rotation.z -= this.bvx * dt * 0.4; this.ball.rotation.x += this.bvz * dt * 0.4;
     this.ball.scale.setScalar(1 + this.hitFx * 0.6);
