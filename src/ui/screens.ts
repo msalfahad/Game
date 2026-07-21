@@ -47,7 +47,7 @@ export function buildScreens(hooks: Hooks) {
   root.innerHTML = `
   <div id="scrTitle" class="screen hidden">
     <h1>BASH<br>ARENA</h1>
-    <p class="tag">Original 2-4 player arcade brawler · ${countGames()} mini-games across ${FAMILIES.length - 1} themed worlds. Touch left side to move, tap right for ⚡. Keyboard: WASD/arrows · Space = ⚡ · Shift = jump. Gamepad supported.</p>
+    <p class="tag">Original 2-4 player arcade brawler · ${countGames()} mini-games across ${FAMILIES.length} themed worlds. Touch left side to move, tap right for ⚡. Keyboard: WASD/arrows · Space = ⚡ · Shift = jump. Gamepad supported.</p>
     <button class="big" id="onlineBtn">🌐 PLAY ONLINE</button>
     <button class="big" data-go="scrChar" style="background:var(--aqua);box-shadow:0 5px 0 #0E9CB2">PLAY OFFLINE</button>
     <button class="alt big" id="tuneBtn">⚙️ TUNING</button>
@@ -193,7 +193,6 @@ export function buildScreens(hooks: Hooks) {
   // Family cards.
   const fam = document.getElementById('famGrid')!;
   for (const f of FAMILIES) {
-    if (f.id === 'lab') continue;
     const d = document.createElement('div');
     d.className = 'famCard';
     d.innerHTML = `<div class="fi">${f.icon}</div><div class="fn">${f.name.toUpperCase()}</div><div class="fd">${familyGames(f.id).length} games</div>`;
@@ -205,15 +204,6 @@ export function buildScreens(hooks: Hooks) {
     d.onclick = () => openFamily(f.id);
     fam.appendChild(d);
   }
-  // Lab as a slim extra card.
-  const lab = document.createElement('div');
-  lab.className = 'famCard lab';
-  lab.innerHTML = `<div class="fi">🧪</div><div class="fn">SURFACE LAB</div><div class="fd">movement test</div>`;
-  lab.onclick = () => {
-    chosenGameId = 'lab-1';
-    toVersus();
-  };
-  fam.appendChild(lab);
 
   // Nav buttons.
   root.querySelectorAll('[data-go]').forEach((b) =>
@@ -231,7 +221,7 @@ export function buildScreens(hooks: Hooks) {
 }
 
 function countGames(): number {
-  return FAMILIES.filter((f) => f.id !== 'lab').reduce((n, f) => n + familyGames(f.id).length, 0);
+  return FAMILIES.reduce((n, f) => n + familyGames(f.id).length, 0);
 }
 
 function buildTuning() {

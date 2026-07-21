@@ -14,6 +14,7 @@ let bannerTimer = 0;
 export function showHud(on: boolean) {
   for (const el of [headsEl, clockEl, objectiveEl]) el.classList.toggle('hidden', !on);
   document.getElementById('mute')!.classList.toggle('hidden', !on);
+  document.getElementById('quit')!.classList.toggle('hidden', !on);
   abilityHintEl.style.display = on ? 'block' : 'none';
   if (!on) hideClimbMap();
 }

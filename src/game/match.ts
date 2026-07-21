@@ -103,8 +103,7 @@ export class Match {
     const isClimb = game.mechanic === 'climb';
     const isIce = game.mechanic === 'icepush';
     const isSprint = game.mechanic === 'sprint';
-    const isFoosball = game.mechanic === 'foosball';
-    const halfSize = isGoal ? ASBASE * 0.48 : isIce ? ASBASE * 0.7 : isClimb ? CLIMB_L : isSprint ? ASBASE * 2 : isFoosball ? ASBASE * 1.3 : ASBASE;
+    const halfSize = isGoal ? ASBASE * 0.48 : isIce ? ASBASE * 0.7 : isClimb ? CLIMB_L : isSprint ? ASBASE * 2 : ASBASE;
 
     this.engine.clearScene();
     this.parts = [];
@@ -148,7 +147,7 @@ export class Match {
     // phones where the rink corners were getting cut off. The chase game uses a
     // steep near-overhead view so the whole yard reads at a glance.
     const portrait = innerWidth < innerHeight;
-    if (game.mechanic === 'chase' || game.mechanic === 'maze' || game.mechanic === 'dodgeball' || game.mechanic === 'foosball') this.engine.camera.frameTopDown(halfSize);
+    if (game.mechanic === 'chase' || game.mechanic === 'maze' || game.mechanic === 'dodgeball') this.engine.camera.frameTopDown(halfSize);
     else this.engine.camera.frame(isClimb ? 17 : halfSize, isGoal ? (portrait ? 1.62 : 1.28) : isIce ? 1.18 : game.mechanic === 'hotpotato' ? 1.05 : game.mechanic === 'kart' ? (portrait ? 1.24 : 1.05) : 1.0);
 
     this.engine.post.setGrade(FAMILY_GRADE[family.id] ?? {});

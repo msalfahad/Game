@@ -1,10 +1,9 @@
 import type { SurfaceKind } from './surfaces';
 
 // The full game catalog: 7 spec families x 4 games (SPEC section 5) + the
-// Classic Arena bonus family (the prototype's original modes) + the Surface
-// Lab greybox = 34 playable games. Each family shares a theme (floor style,
-// sky, trim light, ambient particles, surface) and a hazard ramp across its
-// four tiers (Learn -> Adapt -> Master -> Survive).
+// Classic Arena bonus family (the prototype's original modes). Each family
+// shares a theme (floor style, sky, trim light, ambient particles, surface)
+// and a hazard ramp across its four tiers (Learn -> Adapt -> Master -> Survive).
 
 export type FloorStyle =
   | 'ice' | 'lava' | 'desert' | 'forest' | 'sky' | 'mech' | 'pirate' | 'neon' | 'greybox';
@@ -36,8 +35,7 @@ export type Mechanic =
   | 'dodgeball' // 2v2 dodgeball across a centre line — hit rivals out, catch to fight back
   | 'coaster' // 2v2 roller-coaster pump race — both riders pump the lever to the finish
   | 'foosball' // 2v2 table-football — rail-locked players slide up/down, first to 3 goals
-  | 'sprint' // 4-player FFA 100m Olympic dash — mash RUN, punch neighbours, dash the finish
-  | 'lab'; // movement greybox
+  | 'sprint'; // 4-player FFA 100m Olympic dash — mash RUN, punch neighbours, dash the finish
 
 export type AmbientKind = 'snow' | 'embers' | 'sand' | 'leaves' | 'stars' | 'bubbles' | 'none';
 
@@ -119,11 +117,6 @@ export const FAMILIES: FamilyDef[] = [
     theme: { skyTop: '#2A2E58', skyBot: '#0D1026', fog: '#1A1F3D', ground: '#151A38', trim: 0x2ef2ff, light: 0xbfc8ff, ambient: 'stars' },
     blurb: 'The original neon-night party modes.',
   },
-  {
-    id: 'lab', name: 'The Lab', icon: '🧪', style: 'greybox', surface: 'metal',
-    theme: { skyTop: '#2A2E58', skyBot: '#0D1026', fog: '#1A1F3D', ground: '#151A38', trim: 0x2ef2ff, light: 0xbfc8ff, ambient: 'none' },
-    blurb: 'Greybox testing ground for movement & surfaces.',
-  },
 ];
 
 function g(
@@ -175,7 +168,7 @@ export const GAMES: GameDef[] = [
   g('pirate-1', 'pirate', 'Cannon Blast', '💥', 1, 'throwfight', 'square', [], 'Grab cannonballs, sink your rivals.', { proj: 'cannon' }),
   g('pirate-2', 'pirate', 'Sinking Ship', '🚢', 2, 'breaktiles', 'square', ['falling'], 'The deck breaks from the bow. Find safe planks.', { decay: 'side' }),
   g('pirate-3', 'pirate', 'Treasure Scramble', '🪙', 3, 'collect', 'square', ['falling'], 'Doubloons rain down. Grab the most.', { coin: true }),
-  g('pirate-4', 'pirate', 'Olympic Sprint', '🏃', 4, 'sprint', 'square', [], 'Blast down the 100 m in a roaring Olympic stadium! Mash RUN to build your top speed, PUNCH the runner in the lane beside you to floor them for a second, and save your DASH for the final straight. Four runners, one lane each — first across the line takes gold.'),
+  g('pirate-4', 'pirate', 'Olympic Sprint', '🏃', 4, 'sprint', 'square', [], 'Blast down the 200 m in a roaring Olympic stadium! Mash RUN to build your top speed, STEER across the track to run right up alongside a rival and PUNCH them flat, and save your DASH for the final straight. Four runners, free-for-all — first across the line takes gold.'),
 
   // Classic Arena (the original prototype modes, kept as a bonus family)
   g('classic-1', 'classic', 'Ring Rumble', '💥', 1, 'pushout', 'circle', [], 'Bump rivals off a shrinking neon ring.'),
@@ -183,9 +176,6 @@ export const GAMES: GameDef[] = [
   g('classic-3', 'classic', 'Paint Panic', '🎨', 1, 'paint', 'square', [], 'Claim floor tiles in your color.'),
   g('classic-4', 'classic', 'Crate Brawl', '📦', 2, 'throwfight', 'square', [], 'Grab & hurl crates. Last basher standing.', { proj: 'crate' }),
   g('classic-5', 'classic', 'Mallet Mash', '🔨', 1, 'mash', 'square', [], 'Smash pop-up targets. Golden ones score big.'),
-
-  // Lab
-  g('lab-1', 'lab', 'Surface Lab', '🧪', 1, 'lab', 'square', [], 'Metal · ice · mud · sand quadrants + a conveyor strip.'),
 ];
 
 export function gameById(id: string): GameDef {
