@@ -15,48 +15,41 @@ export interface OnlineGameDef {
 const g = (id: string, mechanic: Mechanic, duration: number, mods: OnlineGameDef['mods'] = {}): OnlineGameDef =>
   ({ id, mechanic, duration, mods });
 
+// Only games whose CURRENT client mechanic (src/data/maps.ts) is one the server
+// can simulate appear online — and each entry's mechanic + mods MUST match the
+// client id exactly, or the client renders one game while the server simulates
+// another. Games with bespoke offline-only mechanics (kart, maze, boat, raft,
+// foosball, sprint, lavafloor, hotpotato, musicalchairs, chase, dodgeball,
+// coaster) are NOT online until they get a server simulation.
 export const ONLINE_CATALOG: OnlineGameDef[] = [
   // Frostbite
-  g('frost-1', 'goal', 120),
-  g('frost-2', 'icepush', 120),
-  g('frost-3', 'throwfight', 100, { proj: 'snowball' }),
-  g('frost-4', 'climb', 60),
+  g('frost-1', 'goal', 120),                              // Ice Hockey Brawl
+  g('frost-2', 'icepush', 120),                           // Slip & Slide
+  g('frost-3', 'throwfight', 100, { proj: 'snowball' }),  // Snowball Smash
+  g('frost-4', 'climb', 60),                              // Avalanche Run
   // Inferno
-  g('inferno-1', 'goal', 120),
-  g('inferno-2', 'breaktiles', 90, { decay: 'ring' }),
-  g('inferno-3', 'throwfight', 90, { proj: 'bomb' }),
-  g('inferno-4', 'climb', 60, { volcano: 1 }),
-  // Dune
-  g('dune-1', 'goal', 120),
-  g('dune-2', 'breaktiles', 90, { decay: 'respawn' }),
-  g('dune-3', 'pushout', 90, { edge: 'cacti' }),
-  g('dune-4', 'race', 90, { laps: 2 }),
+  g('inferno-1', 'goal', 120),                            // Lava Hockey
+  g('inferno-3', 'throwfight', 90, { proj: 'bomb' }),     // Blast Zone
+  g('inferno-4', 'climb', 60, { volcano: 1 }),            // Volcano Rush
   // Wildwood
-  g('wild-1', 'pushout', 90),
-  g('wild-2', 'dodge', 75, { hz: 'logs' }),
-  g('wild-3', 'breaktiles', 90, { decay: 'ring', pond: true }),
-  g('wild-4', 'race', 90, { laps: 2 }),
+  g('wild-2', 'dodge', 75, { hz: 'logs' }),               // Rolling Logs
   // Sky
-  g('sky-1', 'goal', 120),
-  g('sky-2', 'breaktiles', 90, { decay: 'ring' }),
-  g('sky-3', 'dodge', 75, { hz: 'wind' }),
-  g('sky-4', 'race', 90, { laps: 2 }),
+  g('sky-3', 'dodge', 75, { hz: 'wind' }),                // Wind Gauntlet
   // Mech
-  g('mech-1', 'pushout', 90, { edge: 'gears' }),
-  g('mech-2', 'dodge', 75, { hz: 'lasers' }),
-  g('mech-3', 'mash', 60, { robots: true }),
-  g('mech-4', 'dodge', 75, { hz: 'conveyor' }),
+  g('mech-1', 'pushout', 90, { edge: 'gears' }),          // Gear Bash
+  g('mech-2', 'dodge', 75, { hz: 'lasers' }),             // Laser Dodge
+  g('mech-3', 'mash', 60, { robots: true }),              // Robot Rumble
+  g('mech-4', 'dodge', 75, { hz: 'conveyor' }),           // Conveyor Chaos
   // Pirate
-  g('pirate-1', 'throwfight', 90, { proj: 'cannon' }),
-  g('pirate-2', 'breaktiles', 90, { decay: 'side' }),
-  g('pirate-3', 'collect', 60, { coin: true }),
-  g('pirate-4', 'race', 90, { laps: 2 }),
+  g('pirate-1', 'throwfight', 90, { proj: 'cannon' }),    // Cannon Blast
+  g('pirate-2', 'breaktiles', 90, { decay: 'side' }),     // Sinking Ship
+  g('pirate-3', 'collect', 60, { coin: true }),           // Treasure Scramble
   // Classic
-  g('classic-1', 'pushout', 90),
-  g('classic-2', 'collect', 60),
-  g('classic-3', 'paint', 60),
-  g('classic-4', 'throwfight', 90, { proj: 'crate' }),
-  g('classic-5', 'mash', 60),
+  g('classic-1', 'pushout', 90),                          // Ring Rumble
+  g('classic-2', 'collect', 60),                          // Gem Grab
+  g('classic-3', 'paint', 60),                            // Paint Panic
+  g('classic-4', 'throwfight', 90, { proj: 'crate' }),    // Crate Brawl
+  g('classic-5', 'mash', 60),                             // Mallet Mash
 ];
 
 export function onlineGame(id: string): OnlineGameDef | undefined {

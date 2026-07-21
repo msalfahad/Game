@@ -10,10 +10,14 @@ import { show, hideScreens } from './screens';
 // Clickable between-game reactions.
 const REACTIONS = ['GG', 'EZ', '😂', '😢', '👍'];
 
-// Which catalog games each online mode offers (mirrors server/src/catalog.ts).
-const TEAM_MECHANICS = new Set(['pushout', 'throwfight', 'breaktiles', 'dodge']);
+// Which games are playable online (mirrors server/src/catalog.ts): only the
+// mechanics the server can simulate. The bespoke offline-only games (kart, maze,
+// boat, raft, foosball, sprint, …) are excluded so the picker never offers a
+// game the server can't run.
+const ONLINE_MECHANICS = new Set(['goal', 'icepush', 'climb', 'breaktiles', 'pushout', 'throwfight', 'dodge', 'collect', 'paint', 'mash']);
+const TEAM_MECHANICS = new Set(['pushout', 'throwfight', 'breaktiles', 'dodge', 'icepush']);
 function onlinePool(mode: 'ffa' | '2v2') {
-  return GAMES.filter((g) => g.familyId !== 'lab' && (mode === 'ffa' || TEAM_MECHANICS.has(g.mechanic)));
+  return GAMES.filter((g) => ONLINE_MECHANICS.has(g.mechanic) && (mode === 'ffa' || TEAM_MECHANICS.has(g.mechanic)));
 }
 
 // Online screens: sign-in (once), quick-play queue, and party rooms with
