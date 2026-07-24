@@ -791,7 +791,11 @@ export class OnlineFreeRoam {
       }
       const ea = aById.get(id) ?? e;
       mesh.position.set(ea[2] + (x - ea[2]) * t, Math.max(ea[4] + (y - ea[4]) * t, type === ET.LOG ? 1.6 : 0.2), ea[3] + (z - ea[3]) * t);
-      if (type === ET.LOOT || type === ET.MISSILE) mesh.rotation.y += 0.08;
+      // Boulders + volcano fireballs TUMBLE down-slope (offline spins them on x);
+      // loot/power crates spin on y.
+      if (type === ET.LOG) mesh.rotation.x += 0.12;
+      else if (type === ET.MISSILE && this.game.mechanic === 'climb') mesh.rotation.x += 0.14;
+      else if (type === ET.LOOT || type === ET.MISSILE) mesh.rotation.y += 0.08;
     }
     for (const [id, mesh] of this.entMeshes) {
       if (!seen.has(id)) {
