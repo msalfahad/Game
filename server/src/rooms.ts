@@ -6,7 +6,7 @@ import { onlineGame, poolFor } from './catalog.js';
 import { recordResult, type Account } from './accounts.js';
 import { HEROES } from './heroes.js';
 import {
-  MAX_PLAYERS, SERIES_GAMES, SERIES_WIN,
+  MAX_PLAYERS, SERIES_GAMES,
   type MatchEndMsg, type MatchMode, type MatchPlayerInfo, type MatchStartMsg,
   type QueueUpdateMsg, type RematchUpdateMsg, type RoomUpdateMsg,
   type SeriesEndMsg, type SeriesNextMsg,
@@ -24,6 +24,9 @@ interface SeriesState {
   seats: MatchSeat[];
   mode: MatchMode;
   gameIds: string[];
+  srcGames: string[];          // host-selected ids the series was built from (for rematch)
+  total: number;               // games in this series (3 or 5)
+  winTarget: number;           // wins needed to clinch (majority)
   index: number;                // which game (0-based)
   score: number[];             // wins per slot (FFA) or per team (2v2)
   sim: GameSim | null;
@@ -48,9 +51,13 @@ interface Room {
   hostId: string; // socket id
   members: string[]; // socket ids, insertion order
   mode: MatchMode;
-  gameId: string; // 'random' or a catalog id
+  seriesLen: number; // 3 or 5 games in the series
+  games: string[]; // host-selected catalog ids (empty = random each game)
   started: boolean;
 }
+
+const SERIES_LENGTHS = [3, 5];
+const winTargetFor = (len: number) => Math.floor(len / 2) + 1;
 
 export class Lobby {
   private sessions = new Map<string, Session>();
@@ -144,7 +151,7 @@ export class Lobby {
     do {
       code = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random() * 24)]).join('');
     } while (this.rooms.has(code));
-    this.rooms.set(code, { code, hostId: socketId, members: [socketId], mode: 'ffa', gameId: 'random', started: false });
+    this.rooms.set(code, { code, hostId: socketId, members: [socketId], mode: 'ffa', seriesLen: SERIES_GAMES, games: [], started: false });
     s.roomCode = code;
     s.team = 0;
     this.broadcastRoom(code);
@@ -174,19 +181,33 @@ export class Lobby {
     if (!room || room.hostId !== socketId || room.started) return;
     if (mode !== 'ffa' && mode !== '2v2') return;
     room.mode = mode;
-    // A game picked for the other mode may be invalid now.
-    if (room.gameId !== 'random' && !poolFor(mode).some((g) => g.id === room.gameId)) room.gameId = 'random';
+    // Games picked for the other mode may be invalid now — drop them.
+    const valid = new Set(poolFor(mode).map((g) => g.id));
+    room.games = room.games.filter((id) => valid.has(id));
     this.broadcastRoom(room.code);
   }
 
-  /** Host picks a specific map (or 'random') for the room. */
-  setRoomGame(socketId: string, gameId: string) {
+  /** Host sets how many games the series runs (3 or 5). */
+  setRoomLen(socketId: string, len: number) {
     const s = this.sessions.get(socketId);
     if (!s || !s.roomCode) return;
     const room = this.rooms.get(s.roomCode);
     if (!room || room.hostId !== socketId || room.started) return;
-    if (gameId !== 'random' && !poolFor(room.mode).some((g) => g.id === gameId)) return;
-    room.gameId = gameId;
+    if (!SERIES_LENGTHS.includes(len)) return;
+    room.seriesLen = len;
+    this.broadcastRoom(room.code);
+  }
+
+  /** Host toggles a specific game in/out of the series line-up (empty = random). */
+  toggleRoomGame(socketId: string, gameId: string) {
+    const s = this.sessions.get(socketId);
+    if (!s || !s.roomCode) return;
+    const room = this.rooms.get(s.roomCode);
+    if (!room || room.hostId !== socketId || room.started) return;
+    if (!poolFor(room.mode).some((g) => g.id === gameId)) return;
+    const i = room.games.indexOf(gameId);
+    if (i >= 0) room.games.splice(i, 1);
+    else room.games.push(gameId);
     this.broadcastRoom(room.code);
   }
 
@@ -226,14 +247,15 @@ export class Lobby {
     room.started = true;
     const members = [...room.members];
     const mode = room.mode;
-    const gameChoice = room.gameId;
+    const games = [...room.games];
+    const len = room.seriesLen;
     // The room is consumed; players return to a fresh lobby after the match.
     for (const id of members) {
       const m = this.sessions.get(id);
       if (m) m.roomCode = null;
     }
     this.rooms.delete(room.code);
-    this.startSeries(members, mode, gameChoice);
+    this.startSeries(members, mode, games, len);
   }
 
   private broadcastRoom(code: string) {
@@ -243,7 +265,8 @@ export class Lobby {
       const msg: RoomUpdateMsg = {
         code,
         mode: room.mode,
-        gameId: room.gameId,
+        seriesLen: room.seriesLen,
+        games: [...room.games],
         players: room.members.map((id) => {
           const m = this.sessions.get(id)!;
           return {
@@ -261,16 +284,18 @@ export class Lobby {
   }
 
   // --- series lifecycle -------------------------------------------------------
-  private startSeries(socketIds: string[], mode: MatchMode = 'ffa', gameChoice = 'random') {
+  private startSeries(socketIds: string[], mode: MatchMode = 'ffa', games: string[] = [], len = SERIES_GAMES) {
     const humans = socketIds
       .map((id) => this.sessions.get(id))
       .filter((s): s is Session => !!s);
     if (humans.length === 0) return;
     for (const s of humans) { s.inQueue = false; s.roomCode = null; }
 
+    const total = SERIES_LENGTHS.includes(len) ? len : SERIES_GAMES;
     const seats = this.buildSeats(humans, mode);
     const state: SeriesState = {
-      seats, mode, gameIds: this.pickSeriesGames(mode, gameChoice), index: 0,
+      seats, mode, gameIds: this.pickSeriesGames(mode, games, total),
+      srcGames: [...games], total, winTarget: winTargetFor(total), index: 0,
       score: mode === '2v2' ? [0, 0] : [0, 0, 0, 0],
       sim: null, phase: 'countdown', timer: null, rematch: new Set(),
     };
@@ -305,15 +330,19 @@ export class Lobby {
     return seats;
   }
 
-  /** 5 games for the series — random from the mode pool (host's pick leads). */
-  private pickSeriesGames(mode: MatchMode, first = 'random'): string[] {
-    const poolIds = poolFor(mode).map((g) => g.id);
+  /**
+   * Build the series line-up. If the host picked specific games, cycle through
+   * exactly those (so a single pick — e.g. frost-1 — plays every game, letting
+   * them test it online). Otherwise draw `len` shuffled games from the pool.
+   */
+  private pickSeriesGames(mode: MatchMode, chosen: string[], len: number): string[] {
+    const valid = new Set(poolFor(mode).map((g) => g.id));
+    const picked = chosen.filter((id) => valid.has(id));
+    if (picked.length > 0) return Array.from({ length: len }, (_, i) => picked[i % picked.length]);
+    const poolIds = [...valid];
     const bag: string[] = [];
     const draw = () => { if (bag.length === 0) bag.push(...poolIds); const j = Math.floor(Math.random() * bag.length); return bag.splice(j, 1)[0]; };
-    const picks: string[] = [];
-    if (first !== 'random' && poolIds.includes(first)) picks.push(first);
-    while (picks.length < SERIES_GAMES) picks.push(draw());
-    return picks.slice(0, SERIES_GAMES);
+    return Array.from({ length: len }, () => draw());
   }
 
   private playersInfo(state: SeriesState): MatchPlayerInfo[] {
@@ -335,7 +364,7 @@ export class Lobby {
     state.sim = null;
     for (const seat of state.seats) if (seat.socketId) { const sess = this.sessions.get(seat.socketId); if (sess) sess.match = null; }
     const msg: SeriesNextMsg = {
-      gameNum: state.index + 1, ofN: SERIES_GAMES, nextGameId: state.gameIds[state.index],
+      gameNum: state.index + 1, ofN: state.total, nextGameId: state.gameIds[state.index],
       mode: state.mode, score: [...state.score], players: this.playersInfo(state), inSec,
       lastRanking: last?.ranking, lastWinnerTeam: last?.winnerTeam,
     };
@@ -381,7 +410,7 @@ export class Lobby {
       recordResult(sess.account.token, won);
     }
     state.sim = null;
-    const over = Math.max(...state.score) >= SERIES_WIN || state.index + 1 >= SERIES_GAMES;
+    const over = Math.max(...state.score) >= state.winTarget || state.index + 1 >= state.total;
     if (over) {
       if (state.timer) clearTimeout(state.timer);
       state.timer = setTimeout(() => { state.timer = null; this.endSeries(state); }, INTRO_SEC * 1000);
@@ -425,9 +454,9 @@ export class Lobby {
     // Everyone still here voted → run a fresh 5-game series with the same crew.
     if (humans.length > 0 && humans.every((sl) => state.rematch.has(sl))) {
       const humanIds = state.seats.filter((seat) => seat.socketId).map((seat) => seat.socketId!);
-      const mode = state.mode;
+      const { mode, srcGames, total } = state;
       this.disposeSeries(state);
-      this.startSeries(humanIds, mode);
+      this.startSeries(humanIds, mode, srcGames, total);
     }
   }
 
@@ -450,9 +479,9 @@ export class Lobby {
       this.seriesEmit(state, 'rematch:update', { votedSlots: [...state.rematch], humanSlots: humans } as RematchUpdateMsg);
       if (humans.length > 0 && humans.every((sl) => state.rematch.has(sl))) {
         const humanIds = state.seats.filter((x) => x.socketId).map((x) => x.socketId!);
-        const mode = state.mode;
+        const { mode, srcGames, total } = state;
         this.disposeSeries(state);
-        this.startSeries(humanIds, mode);
+        this.startSeries(humanIds, mode, srcGames, total);
       }
     }
   }

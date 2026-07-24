@@ -33,7 +33,8 @@ export interface RoomPlayerInfo {
 export interface RoomUpdateMsg {
   code: string;
   mode: MatchMode;
-  gameId: string; // 'random' or a catalog id chosen by the host
+  seriesLen: number;  // how many games the series runs (3 or 5)
+  games: string[];    // host-selected catalog ids (empty = random each game)
   players: RoomPlayerInfo[];
 }
 

@@ -68,7 +68,13 @@ export class Net {
   connect(serverUrl: string, name: string): Promise<WelcomeMsg> {
     return new Promise((resolve, reject) => {
       const socket = io(serverUrl, {
-        transports: ['websocket', 'polling'],
+        // WebSocket only: skip the HTTP long-polling handshake + upgrade dance.
+        // Polling relays every input/state frame as a separate HTTP request,
+        // which is what makes real-time play feel laggy — a persistent socket
+        // is far lower latency. If a network truly blocks WS the connect fails
+        // fast and the user sees the "couldn't reach server" message.
+        transports: ['websocket'],
+        upgrade: false,
         timeout: 10000,
         reconnectionAttempts: 8,
         reconnectionDelay: 2000,
@@ -123,8 +129,11 @@ export class Net {
   setRoomMode(mode: 'ffa' | '2v2') {
     this.socket?.emit('room:mode', mode);
   }
-  setRoomGame(gameId: string) {
-    this.socket?.emit('room:game', gameId);
+  setRoomLen(len: number) {
+    this.socket?.emit('room:serieslen', len);
+  }
+  toggleRoomGame(gameId: string) {
+    this.socket?.emit('room:gametoggle', gameId);
   }
   toggleTeam() {
     this.socket?.emit('room:team');

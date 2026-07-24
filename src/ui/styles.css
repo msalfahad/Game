@@ -96,6 +96,16 @@ button.big { width: 100%; max-width: 280px; }
 .settingRow input[type=range] { width: 150px; }
 .settingRow > button, .settingRow > select { width: 118px; text-align: center; font-size: 13px; padding: 10px 8px; }
 
+/* Party game picker: tap chips to build the series line-up. */
+.gamePick { width: 100%; max-width: 340px; max-height: 200px; overflow-y: auto; margin: 4px 0 2px; -webkit-overflow-scrolling: touch; }
+.gpGroup { margin-bottom: 8px; }
+.gpLabel { font-size: 10px; font-weight: 900; letter-spacing: 1px; opacity: .6; margin: 4px 2px 3px; text-align: left; }
+.gpChips { display: flex; flex-wrap: wrap; gap: 5px; }
+.gameChip { font-size: 11px; font-weight: 800; padding: 6px 9px; border-radius: 10px; background: var(--panel); color: var(--ink);
+  border: 2px solid transparent; cursor: pointer; user-select: none; white-space: nowrap; }
+.gameChip.on { border-color: var(--gold); color: var(--gold); background: var(--panel2); }
+.gameChip.locked { cursor: default; opacity: .55; }
+
 /* HUD */
 #hudHeads { position: fixed; top: 6px; left: 0; right: 0; display: flex; justify-content: center; gap: 10px; z-index: 5; pointer-events: none; }
 .head { display: flex; flex-direction: column; align-items: center; background: rgba(13, 16, 38, .72); border-radius: 12px; padding: 3px 8px; border: 2px solid transparent; min-width: 56px; }

@@ -3,14 +3,37 @@
 # the game client, so the whole thing lives at one URL.
 #
 # How to use: push this repo, then in Render choose "New +" -> "Blueprint",
-# pick this repo, and deploy. Free plan works for playtesting (the instance
-# sleeps after idle periods and account data resets on redeploy).
+# pick this repo, and deploy.
+#
+# ---------------------------------------------------------------------------
+# LAG / "how to publish this so it plays smoothly" — read this:
+#
+# The #1 cause of laggy online play is `plan: free`. The free instance is
+# CPU-throttled AND sleeps after ~15 min idle, so the FIRST match after a
+# quiet period runs on a cold, throttled CPU that can't keep the 20 Hz
+# simulation on time — every player feels the stutter. For real games with
+# friends, switch to an always-on paid instance:
+#
+#     plan: starter        # ~$7/mo, always-on, full CPU, no cold sleep
+#
+# Second: put the server in the region CLOSEST to the players. Latency is
+# distance. Set `region` to one of: oregon (US-West), ohio (US-East),
+# virginia, frankfurt (EU), singapore. Default is Oregon.
+#
+# Third (already handled in code): the client connects over WebSocket only
+# (src/net/client.ts) instead of HTTP long-polling, which is the low-latency
+# transport for real-time input/state frames.
+#
+# Free tier is fine for a quick solo test; use `starter` + a nearby region
+# before inviting friends.
+# ---------------------------------------------------------------------------
 
 services:
   - type: web
     name: bash-arena
     runtime: node
-    plan: free
+    plan: free          # -> change to `starter` for smooth, always-on play
+    region: oregon      # -> set to the region nearest your players
     buildCommand: npm ci && npm run build && cd server && npm ci && npm run build
     startCommand: node server/dist/index.js
     healthCheckPath: /healthz
