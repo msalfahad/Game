@@ -13,6 +13,12 @@ const DURATION = 120;
 const SIDES = ['bottom', 'top', 'left', 'right'] as const;
 type Side = (typeof SIDES)[number];
 
+// Empty seats are bots. Offline hockey bots run at the player-selected
+// difficulty; online has no selector, so fill bots play at the "hard" preset
+// (matches src/game/context.ts DIFFICULTY.hard) — competent PCs, as the
+// offline game feels. cap = top speed, err = aim jitter, lapse = reaction gap.
+const BOT = { cap: 0.82, err: 0.08, lapse: 0.18 };
+
 interface HPlayer {
   slot: number;
   socketId: string | null;
@@ -36,6 +42,7 @@ interface Ball {
   vx: number; vz: number; vy: number;
   power: number;
   grace: number;
+  slow: number; // seconds the puck has been sluggish (used to re-serve it)
 }
 
 export class HockeySim {
@@ -130,13 +137,13 @@ export class HockeySim {
     }
   }
   private spawnBall() {
-    const s = this.cornerServe(25);
-    this.balls.push({ x: s.x, z: s.z, vx: s.vx, vz: s.vz, y: 1.4, vy: 0, power: 0, grace: 0.7 });
+    const s = this.cornerServe(36);
+    this.balls.push({ x: s.x, z: s.z, vx: s.vx, vz: s.vz, y: 1.4, vy: 0, power: 0, grace: 0.7, slow: 0 });
   }
   private resetBall(b: Ball) {
-    const s = this.cornerServe(23);
+    const s = this.cornerServe(34);
     b.x = s.x; b.z = s.z; b.vx = s.vx; b.vz = s.vz;
-    b.grace = 0.8; b.power = 0;
+    b.grace = 0.8; b.power = 0; b.slow = 0;
   }
 
   private paddleSpeed(p: HPlayer): number {
@@ -186,7 +193,7 @@ export class HockeySim {
   private botThink(p: HPlayer, dt: number) {
     p.retarget -= dt;
     if (p.retarget <= 0) {
-      p.retarget = 0.35 + Math.random() * 0.35;
+      p.retarget = BOT.lapse + Math.random() * BOT.lapse;
       let target: Ball | null = null;
       let best = 1e9;
       for (const b of this.balls) {
@@ -200,12 +207,12 @@ export class HockeySim {
       let w = 0.5;
       if (target) {
         const tp = p.side === 'top' || p.side === 'bottom' ? target.x : target.z;
-        const err = 0.15 / accuracyMult(p.hero);
+        const err = BOT.err / accuracyMult(p.hero);
         w = (tp / HALF + 1) / 2 + (Math.random() - 0.5) * err;
       }
       p.want = w;
     }
-    const v = this.paddleSpeed(p) * 0.66 * (1 / TICK_RATE) * TICK_RATE * dt;
+    const v = this.paddleSpeed(p) * BOT.cap * dt;
     if (Math.abs(p.want - p.pos) > 0.008) p.pos += Math.sign(p.want - p.pos) * Math.min(v, Math.abs(p.want - p.pos));
   }
 
@@ -224,12 +231,19 @@ export class HockeySim {
     for (const b of this.balls) {
       b.grace -= dt;
       b.x += b.vx * dt; b.z += b.vz * dt;
-      b.y += b.vy * dt; b.vy -= 34 * dt;
-      if (b.y < 1.4) { b.y = 1.4; b.vy = Math.abs(b.vy) * 0.7 + 6; }
+      b.y = 1.4; // puck stays flat on the ice — no vertical bounce/hop
       if (b.power > 0) b.power -= dt;
-      const cap = b.power > 0 ? 46 : 30;
+      const cap = b.power > 0 ? 58 : 42; // faster puck (matches offline)
       const sp = Math.hypot(b.vx, b.vz);
       if (sp > cap) { b.vx *= cap / sp; b.vz *= cap / sp; }
+      // Never let the puck crawl to a halt mid-rink: after a sluggish beat,
+      // retire it and serve a fresh, fast one from a corner.
+      if (sp < 8 && b.grace <= 0) {
+        b.slow += dt;
+        if (b.slow > 0.7) this.resetBall(b);
+      } else {
+        b.slow = 0;
+      }
       this.cornerBounce(b);
 
       for (const p of this.players) {
@@ -249,7 +263,6 @@ export class HockeySim {
           const steer = ((p as any)._pvel ?? 0) * HALF * 2 * 0.85;
           if (axis === 'z') { b.vz = (p.side === 'bottom' ? -1 : 1) * Math.abs(b.vz) * mult; b.vx += (b.x - px) * 0.9 + steer; }
           else { b.vx = (p.side === 'right' ? -1 : 1) * Math.abs(b.vx) * mult; b.vz += (b.z - pz) * 0.9 + steer; }
-          b.vy = 8;
           if (powered) {
             p.armed = false;
             p.cd = 6;

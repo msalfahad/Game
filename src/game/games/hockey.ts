@@ -6,7 +6,7 @@ import { speedMult, strengthMult, accuracyMult } from '../../data/characters';
 import { SFX } from '../../core/audio';
 import { matchTime } from '../../core/tuning';
 import { makeHeads } from '../../ui/hud';
-import { decorateRink, sealStrip, cornerServe, cornerBounce, type RinkDeco } from '../rinkdeco';
+import { decorateRink, sealStrip, cornerServe, cornerBounce, addRideDisc, type RinkDeco } from '../rinkdeco';
 
 // Frostbite 1.1 — Ice Hockey Brawl. Four players guard the four walls of a
 // small rink; pucks bounce around and each goal costs the conceding player a
@@ -52,7 +52,7 @@ export class HockeyGame implements GameModule {
       p.vx = 0; p.vz = 0;
       p.buildRider(ctx.scene);
       p.riding = true;
-      this.addRide(p);
+      addRideDisc(p.group, p.hero.col);
     }
     makeHeads(ctx.players, 10);
     this.deco = decorateRink(ctx.scene, this.half, ctx.players.map((p) => p.hero.col));
@@ -69,25 +69,6 @@ export class HockeyGame implements GameModule {
   }
 
   private deco!: RinkDeco;
-
-  // A rounded icy hover-disc in the player's colour that they glide on instead
-  // of running sideways along their wall.
-  private addRide(p: Player) {
-    const col = new THREE.Color(p.hero.col).getHex();
-    const disc = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.8, 2.1, 0.5, 24),
-      new THREE.MeshStandardMaterial({ color: col, roughness: 0.35, metalness: 0.45, emissive: col, emissiveIntensity: 0.18 }),
-    );
-    disc.position.y = 0.05;
-    disc.castShadow = true;
-    const rim = new THREE.Mesh(
-      new THREE.TorusGeometry(1.95, 0.24, 10, 28),
-      new THREE.MeshStandardMaterial({ color: 0xdff4ff, roughness: 0.2, metalness: 0.6, transparent: true, opacity: 0.9 }),
-    );
-    rim.rotation.x = -Math.PI / 2;
-    rim.position.y = 0.28;
-    p.group.add(disc, rim);
-  }
 
   private spawnBall() {
     const m = new THREE.Mesh(

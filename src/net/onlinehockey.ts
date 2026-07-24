@@ -6,7 +6,7 @@ import { Player, HITBOX_RADIUS } from '../game/player';
 import { buildWorld, type World } from '../game/world';
 import { victoryWalk } from '../game/victorywalk';
 import { FAMILY_GRADE } from '../core/postfx';
-import { decorateRink, sealStrip, type RinkDeco } from '../game/rinkdeco';
+import { decorateRink, sealStrip, addRideDisc, type RinkDeco } from '../game/rinkdeco';
 import { gameById, familyById } from '../data/maps';
 import { heroByKey, speedMult } from '../data/characters';
 import * as HUD from '../ui/hud';
@@ -72,6 +72,9 @@ export class OnlineHockey {
       p.pos = 0.5;
       p.pts = 10;
       p.buildRider(this.engine.scene);
+      // Glide on the ice hover-disc + face across the rink, exactly like offline.
+      p.riding = true;
+      addRideDisc(p.group, p.hero.col);
       return p;
     });
     this.placePaddles();
