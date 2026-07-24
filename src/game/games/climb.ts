@@ -8,6 +8,7 @@ import { SFX } from '../../core/audio';
 import { setScore, showClimbMap, updateClimbMap, hideClimbMap } from '../../ui/hud';
 import { HEROES } from '../../data/characters';
 import { Player as PlayerClass } from '../player';
+import { FROST } from '../../shared/frostspec';
 
 // CLIMB — Avalanche Run. A one-minute scramble up a LONG NARROW mountain
 // corridor: the summit line is far up-slope, boulders tumble down, the pace
@@ -39,7 +40,7 @@ export class ClimbGame implements GameModule {
   private rocks: Rock[] = [];
   private rockT = 1;
   private box: FreezeBox | null = null;
-  private boxT = 10;
+  private boxT = FROST.climb.boxEverySec;
   private finished = false;
   // Volcano Rush: crater guardian bot + lava balls + dressing.
   private volcano = false;
@@ -52,11 +53,11 @@ export class ClimbGame implements GameModule {
     this.ctx = ctx;
     this.title = ctx.game.name;
     this.finished = false;
-    this.timeLeft = matchTime(60);
+    this.timeLeft = matchTime(FROST.climb.durationSec);
     this.rocks = [];
     this.rockT = 1;
     this.box = null;
-    this.boxT = 10;
+    this.boxT = FROST.climb.boxEverySec;
 
     this.volcano = !!ctx.game.mods?.volcano;
     this.thrower = null;
@@ -304,7 +305,7 @@ export class ClimbGame implements GameModule {
     this.timeLeft -= dt;
     ctx.setClock(this.timeLeft);
     if (this.timeLeft <= 0) return this.doFinish('Time! Highest climber wins.');
-    const prog = 1 - this.timeLeft / matchTime(60);
+    const prog = 1 - this.timeLeft / matchTime(FROST.climb.durationSec);
 
     // Boulders from the top.
     this.rockT -= dt;
@@ -343,7 +344,7 @@ export class ClimbGame implements GameModule {
     // ❄ box every 10s.
     this.boxT -= dt;
     if (this.boxT <= 0) {
-      this.boxT = 10;
+      this.boxT = FROST.climb.boxEverySec;
       this.spawnBox();
     }
     if (this.box) {

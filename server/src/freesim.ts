@@ -3,6 +3,7 @@ import { TICK_RATE, type InputMsg, type MatchEndMsg, type MatchMode, type Entity
 import { ET } from './protocol.js';
 import type { MatchSeat } from './sim.js';
 import type { OnlineGameDef } from './catalog.js';
+import { FROST } from './shared/frostspec.js';
 
 // Universal authoritative free-roam simulation (20Hz) covering the remaining
 // online mechanics: collect, mash, paint, breaktiles, throwfight, race and
@@ -19,7 +20,7 @@ const WPS = 8; // race gates (matches the client's RaceGame)
 const PAINT_N = 9;
 const BREAK_N = 11;
 const R_ICE = 21; // Slip & Slide round rink radius
-const ICE_SEGS = 16;
+const ICE_SEGS = FROST.icePush.wallSegments;
 const CLIMB_W = 12; // Avalanche Run corridor half-width
 const CLIMB_L = 62; // Avalanche Run slope half-length (keep in sync with client)
 const CLIMB_PACE = 0.7;
@@ -161,7 +162,7 @@ export class FreeSim {
     } else if (this.mech === 'icepush') {
       // 16 breakable arc segments around the round rink (1 intact, 0 shattered).
       this.tiles = new Int8Array(ICE_SEGS).fill(1);
-      this.spawnT = 10; // first thunder box
+      this.spawnT = FROST.icePush.boxEverySec; // first thunder box
       // Spawn inside the smaller round rink.
       for (const p of this.players) { p.x *= 0.55; p.z *= 0.55; }
     } else if (this.mech === 'climb') {
@@ -169,7 +170,7 @@ export class FreeSim {
         p.x = (i - 1.5) * 5.5;
         p.z = CLIMB_L - 4;
       });
-      this.spawnT = 10; // first freeze box
+      this.spawnT = FROST.climb.boxEverySec; // first freeze box
       this.decayT = 1; // rock timer reuse
     }
   }
@@ -306,7 +307,7 @@ export class FreeSim {
       }
     }
     // Slip & Slide keeps momentum like real ice.
-    const retain = Math.pow(this.mech === 'icepush' ? 0.55 : 0.02, dt);
+    const retain = Math.pow(this.mech === 'icepush' ? FROST.icePush.iceRetainPerSec : 0.02, dt);
     p.vx *= retain;
     p.vz *= retain;
     const sp = Math.hypot(p.vx, p.vz);
@@ -495,7 +496,7 @@ export class FreeSim {
     // lightning: 3s stun (clients render victims blacked out).
     this.spawnT -= dt;
     if (this.spawnT <= 0) {
-      this.spawnT = 10;
+      this.spawnT = FROST.icePush.boxEverySec;
       for (const e of this.ents.values()) if (e.type === ET.LOOT) this.ents.delete(e.id);
       const a = Math.random() * Math.PI * 2;
       const r = Math.random() * R_ICE * 0.7;
@@ -510,7 +511,7 @@ export class FreeSim {
           this.events.push({ t: 'power', slot: p.slot });
           for (const q of this.players) {
             if (q === p || q.dead || q.team === p.team) continue;
-            q.freezeT = Math.max(q.freezeT, 3);
+            q.freezeT = Math.max(q.freezeT, FROST.icePush.zapStunSec);
             q.vx *= 0.1;
             q.vz *= 0.1;
           }
@@ -534,8 +535,8 @@ export class FreeSim {
         this.events.push({ t: 'hit', slot: p.slot }); // wall shatter cue
         const nx = -p.x / (r || 1);
         const nz = -p.z / (r || 1);
-        p.vx = nx * 22;
-        p.vz = nz * 22;
+        p.vx = nx * FROST.icePush.wallBounceVel;
+        p.vz = nz * FROST.icePush.wallBounceVel;
         const rr = R_ICE - 1.6;
         p.x = (p.x / (r || 1)) * rr;
         p.z = (p.z / (r || 1)) * rr;
@@ -634,7 +635,7 @@ export class FreeSim {
     // ❄ freeze box every 10s.
     this.spawnT -= dt;
     if (this.spawnT <= 0) {
-      this.spawnT = 10;
+      this.spawnT = FROST.climb.boxEverySec;
       for (const e of this.ents.values()) if (e.type === ET.LOOT) this.ents.delete(e.id);
       // ANYWHERE random along the pack's active stretch — luck joins skill.
       const alive = this.players.filter((p) => !p.dead);

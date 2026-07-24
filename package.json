@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "sync:shared": "node scripts/sync-shared.mjs",
     "build:single": "npm run build && node scripts/build-single.mjs"
   },
   "dependencies": {

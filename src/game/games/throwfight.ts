@@ -10,6 +10,7 @@ import { matchTime } from '../../core/tuning';
 import { SFX } from '../../core/audio';
 import { setScore, markDead } from '../../ui/hud';
 import { spawnBolt, tickBolts, type Bolt } from '../boltfx';
+import { FROST } from '../../shared/frostspec';
 
 // THROWFIGHT — grab & hurl projectiles to drain rival HP (Snowball Smash,
 // Blast Zone, Cannon Blast, Crate Brawl). Projectile flavor changes damage,
@@ -67,12 +68,12 @@ export class ThrowFightGame implements GameModule {
     this.proj = (ctx.game.mods?.proj as Proj) ?? 'crate';
     this.snow = this.proj === 'snowball';
     if (this.snow) this.objective = 'Most hits in 100s wins · grab 👟⚡🛡️ perks';
-    this.duration = this.timeLeft = matchTime(this.snow ? 100 : 90);
+    this.duration = this.timeLeft = matchTime(this.snow ? FROST.snowball.durationSec : 90);
     this.items = [];
     this.missiles = [];
     this.perks = [];
     this.perkT = 5 + Math.random() * 5;
-    setupRoster(ctx, this.snow ? 0 : 100, 0.55);
+    setupRoster(ctx, this.snow ? FROST.snowball.startScore : 100, 0.55);
     for (let i = 0; i < 6; i++) this.dropItem();
     this.powerups = this.snow ? null : new Powerups(ctx, ['speed', 'shield', 'giant', 'heal'], () => this.leader());
     if (this.snow) {

@@ -7,6 +7,9 @@ import { SFX } from '../../core/audio';
 import { matchTime } from '../../core/tuning';
 import { makeHeads } from '../../ui/hud';
 import { decorateRink, sealStrip, cornerServe, cornerBounce, addRideDisc, type RinkDeco } from '../rinkdeco';
+import { FROST } from '../../shared/frostspec';
+
+const H = FROST.hockey; // shared source of truth (see src/shared/frostspec.ts)
 
 // Frostbite 1.1 — Ice Hockey Brawl. Four players guard the four walls of a
 // small rink; pucks bounce around and each goal costs the conceding player a
@@ -38,11 +41,11 @@ export class HockeyGame implements GameModule {
     this.ctx = ctx;
     this.title = ctx.game.name;
     this.half = ctx.halfSize;
-    this.duration = this.timeLeft = matchTime(120);
+    this.duration = this.timeLeft = matchTime(H.durationSec);
     this.finished = false;
     this.balls = [];
     for (const p of ctx.players) {
-      p.pts = 10;
+      p.pts = H.startPts;
       p.pos = 0.5;
       p.dead = false;
       p.cd = 0;
@@ -54,7 +57,7 @@ export class HockeyGame implements GameModule {
       p.riding = true;
       addRideDisc(p.group, p.hero.col);
     }
-    makeHeads(ctx.players, 10);
+    makeHeads(ctx.players, H.startPts);
     this.deco = decorateRink(ctx.scene, this.half, ctx.players.map((p) => p.hero.col));
     this.spawnBall();
     this.updateRiders();
@@ -79,12 +82,12 @@ export class HockeyGame implements GameModule {
     // ice at low shadow-map density. It sits flat on the rink and reads fine.
     m.castShadow = false;
     this.ctx.scene.add(m);
-    const s = cornerServe(this.half, 36);
+    const s = cornerServe(this.half, H.serveSpeed);
     this.balls.push({ x: s.x, z: s.z, vx: s.vx, vz: s.vz, y: 1.4, vy: 0, power: 0, grace: 0.7, slow: 0, m });
   }
 
   private resetBall(b: Puck) {
-    const s = cornerServe(this.half, 34);
+    const s = cornerServe(this.half, H.resetSpeed);
     b.x = s.x; b.z = s.z; b.vx = s.vx; b.vz = s.vz;
     b.grace = 0.8; b.power = 0; b.slow = 0;
   }
@@ -240,14 +243,14 @@ export class HockeyGame implements GameModule {
       b.x += b.vx * dt; b.z += b.vz * dt;
       b.y = 1.4; // puck stays flat on the ice — no vertical bounce/hop
       if (b.power > 0) b.power -= dt;
-      const cap = b.power > 0 ? 58 : 42; // faster puck
+      const cap = b.power > 0 ? H.puckCapPowered : H.puckCap; // faster puck
       const sp = Math.hypot(b.vx, b.vz);
       if (sp > cap) { b.vx *= cap / sp; b.vz *= cap / sp; }
       // Never let the puck crawl to a halt mid-rink: if it's been sluggish for
       // a beat, retire it and serve a fresh, fast one from a corner.
-      if (sp < 8 && b.grace <= 0) {
+      if (sp < H.slowReserveSpeed && b.grace <= 0) {
         b.slow += dt;
-        if (b.slow > 0.7) { this.resetBall(b); this.ctx.fx.burst(b.x, b.z, '#bfefff', 12); }
+        if (b.slow > H.slowReserveTime) { this.resetBall(b); this.ctx.fx.burst(b.x, b.z, '#bfefff', 12); }
       } else {
         b.slow = 0;
       }
@@ -264,16 +267,16 @@ export class HockeyGame implements GameModule {
           continue;
         }
         const [px, pz] = this.edgePos(p);
-        const dp = 1.02 + strengthMult(p.hero) * 0.06;
+        const dp = H.deflectBase + strengthMult(p.hero) * H.deflectStrength;
         const deflect = (axis: 'x' | 'z') => {
           const powered = p.armed;
-          const mult = dp * (powered ? 1.8 : 1);
+          const mult = dp * (powered ? H.poweredMult : 1);
           // Steer the puck: your paddle's motion flings it left/right.
           const steer = ((p as any)._pvel ?? 0) * this.half * 2 * 0.85;
           if (axis === 'z') { b.vz = (p.side === 'bottom' ? -1 : 1) * Math.abs(b.vz) * mult; b.vx += (b.x - px) * 0.9 + steer; }
           else { b.vx = (p.side === 'right' ? -1 : 1) * Math.abs(b.vx) * mult; b.vz += (b.z - pz) * 0.9 + steer; }
           if (powered) {
-            p.armed = false; p.cd = 6; b.power = 2.5;
+            p.armed = false; p.cd = H.powerShotCd; b.power = H.powerShotTime;
             this.ctx.fx.shake(3); SFX.power(); this.ctx.fx.banner('POWER SHOT!', '#FF4D4D');
           }
           SFX.hit();
