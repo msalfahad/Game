@@ -310,6 +310,13 @@ export class OnlineFreeRoam {
       );
       line.position.set(0, 0.3, -(CLIMB_L - 2.5));
       this.engine.scene.add(line);
+      // Summit flag poles (match offline climb.ts).
+      const flagMat = new THREE.MeshBasicMaterial({ color: 0xffd23f });
+      for (const fx of [-CLIMB_W + 1.5, CLIMB_W - 1.5]) {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 8, 8), flagMat);
+        pole.position.set(fx, 4, -(CLIMB_L - 2.5));
+        this.engine.scene.add(pole);
+      }
     } else if (mech === 'dodge' && this.game.mods?.hz === 'conveyor') {
       for (const sx of [-1, 1]) {
         const wall = new THREE.Mesh(
@@ -370,7 +377,7 @@ export class OnlineFreeRoam {
     }
     if (type === ET.LOG && this.game.mechanic === 'climb') {
       return new THREE.Mesh(
-        new THREE.DodecahedronGeometry(2.3),
+        new THREE.DodecahedronGeometry(2.1 + Math.random() * 0.8),
         this.game.mods?.volcano
           ? new THREE.MeshStandardMaterial({ color: 0x35180c, emissive: 0xb03a10, emissiveIntensity: 0.55, roughness: 0.85 })
           : new THREE.MeshStandardMaterial({ color: 0x9db8cc, roughness: 0.8 }),
