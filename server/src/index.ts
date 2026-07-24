@@ -68,7 +68,8 @@ io.on('connection', (socket) => {
   });
   socket.on('room:leave', guard(() => lobby.leaveRoom(socket.id)));
   socket.on('room:mode', guard1<string>((mode) => lobby.setRoomMode(socket.id, mode as 'ffa' | '2v2')));
-  socket.on('room:game', guard1<string>((gameId) => lobby.setRoomGame(socket.id, String(gameId))));
+  socket.on('room:serieslen', guard1<number>((len) => lobby.setRoomLen(socket.id, Number(len))));
+  socket.on('room:gametoggle', guard1<string>((gameId) => lobby.toggleRoomGame(socket.id, String(gameId))));
   socket.on('room:team', guard(() => lobby.toggleTeam(socket.id)));
   socket.on('room:start', guard(() => lobby.startRoom(socket.id)));
   socket.on('input', (msg: unknown) => lobby.handleInput(socket.id, msg));

@@ -12,6 +12,27 @@ export interface RinkDeco {
   strips: THREE.Mesh[]; // per player index (bottom, top, left, right)
 }
 
+// A rounded icy hover-disc in the player's colour that they glide on instead
+// of running sideways along their wall. Added to the player's group so it
+// tracks the paddle. Shared by offline (hockey.ts) and online (onlinehockey.ts)
+// so the rider looks identical in both.
+export function addRideDisc(group: THREE.Object3D, col: string) {
+  const hex = new THREE.Color(col).getHex();
+  const disc = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.8, 2.1, 0.5, 24),
+    new THREE.MeshStandardMaterial({ color: hex, roughness: 0.35, metalness: 0.45, emissive: hex, emissiveIntensity: 0.18 }),
+  );
+  disc.position.y = 0.05;
+  disc.castShadow = true;
+  const rim = new THREE.Mesh(
+    new THREE.TorusGeometry(1.95, 0.24, 10, 28),
+    new THREE.MeshStandardMaterial({ color: 0xdff4ff, roughness: 0.2, metalness: 0.6, transparent: true, opacity: 0.9 }),
+  );
+  rim.rotation.x = -Math.PI / 2;
+  rim.position.y = 0.28;
+  group.add(disc, rim);
+}
+
 export function decorateRink(scene: THREE.Scene, half: number, cols: string[]): RinkDeco {
   // Corner posts: ice pillar + glowing cap.
   const postMat = new THREE.MeshStandardMaterial({ color: 0xdff2ff, roughness: 0.25, metalness: 0.1 });

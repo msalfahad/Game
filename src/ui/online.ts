@@ -79,7 +79,12 @@ export function buildOnlineScreens(h: OnlineHooks) {
       <div class="diff sel" data-mode="ffa">⚔️ FREE-FOR-ALL</div>
       <div class="diff" data-mode="2v2">🤝 2 VS 2</div>
     </div>
-    <div class="settingRow" id="mapRow"><span>MAP</span><select id="partyGameSel"></select></div>
+    <div class="diffRow" id="lenRow">
+      <div class="diff" data-len="3">🎯 3 GAMES</div>
+      <div class="diff sel" data-len="5">🏆 5 GAMES</div>
+    </div>
+    <p class="tinyTag" id="pickHint">Tap games to choose the line-up — leave all off for random. Pick just one to test it online.</p>
+    <div id="partyGamePick" class="gamePick"></div>
     <div id="teamCols" class="teamCols hidden">
       <div class="teamCol" id="teamCol0"><div class="teamName" style="color:#4DC3FF">TEAM BLUE</div></div>
       <div class="teamCol" id="teamCol1"><div class="teamName" style="color:#FF4D4D">TEAM RED</div></div>
@@ -171,9 +176,14 @@ export function buildOnlineScreens(h: OnlineHooks) {
   document.querySelectorAll('#modeRow .diff').forEach((d) =>
     d.addEventListener('click', () => net.setRoomMode((d as HTMLElement).dataset.mode as 'ffa' | '2v2')),
   );
-  document.getElementById('partyGameSel')!.addEventListener('change', (e) =>
-    net.setRoomGame((e.target as HTMLSelectElement).value),
+  document.querySelectorAll('#lenRow .diff').forEach((d) =>
+    d.addEventListener('click', () => net.setRoomLen(Number((d as HTMLElement).dataset.len))),
   );
+  // Game picker (delegated): each chip toggles that game in/out of the line-up.
+  document.getElementById('partyGamePick')!.addEventListener('click', (e) => {
+    const chip = (e.target as HTMLElement).closest('.gameChip') as HTMLElement | null;
+    if (chip?.dataset.game && !chip.classList.contains('locked')) net.toggleRoomGame(chip.dataset.game);
+  });
   document.getElementById('partyLeave')!.addEventListener('click', () => {
     net.leaveRoom();
     showOnline('scrOnlineHome');
@@ -223,25 +233,41 @@ export function buildOnlineScreens(h: OnlineHooks) {
       el.style.opacity = meHost || el.dataset.mode === m.mode ? '1' : '.4';
     });
 
-    // Map picker: host chooses RANDOM or a specific game, grouped by world.
-    const sel2 = document.getElementById('partyGameSel') as HTMLSelectElement;
-    sel2.disabled = !meHost;
-    sel2.innerHTML = '<option value="random">🎲 RANDOM</option>';
+    // Series length toggle: 3 or 5 games (host-only click; everyone sees it).
+    document.querySelectorAll('#lenRow .diff').forEach((d) => {
+      const el = d as HTMLElement;
+      el.classList.toggle('sel', Number(el.dataset.len) === m.seriesLen);
+      el.style.pointerEvents = meHost ? '' : 'none';
+      el.style.opacity = meHost || Number(el.dataset.len) === m.seriesLen ? '1' : '.4';
+    });
+
+    // Game picker: host taps games to build the line-up (none = random). Chips
+    // are grouped by world; selected chips are highlighted, non-hosts read-only.
+    const picked = new Set(m.games);
+    const pick = document.getElementById('partyGamePick')!;
+    pick.innerHTML = '';
     for (const f of FAMILIES) {
       const games = onlinePool(m.mode).filter((g) => g.familyId === f.id);
       if (!games.length) continue;
-      const og = document.createElement('optgroup');
-      og.label = `${f.icon} ${f.name}`;
+      const grp = document.createElement('div');
+      grp.className = 'gpGroup';
+      grp.innerHTML = `<div class="gpLabel">${f.icon} ${f.name.toUpperCase()}</div>`;
+      const row = document.createElement('div');
+      row.className = 'gpChips';
       for (const g of games) {
-        const o = document.createElement('option');
-        o.value = g.id;
-        o.textContent = `${g.icon} ${g.name}`;
-        og.appendChild(o);
+        const chip = document.createElement('div');
+        chip.className = 'gameChip' + (picked.has(g.id) ? ' on' : '') + (meHost ? '' : ' locked');
+        chip.dataset.game = g.id;
+        chip.textContent = `${g.icon} ${g.name}`;
+        row.appendChild(chip);
       }
-      sel2.appendChild(og);
+      grp.appendChild(row);
+      pick.appendChild(grp);
     }
-    sel2.value = m.gameId ?? 'random';
-    if (sel2.selectedIndex < 0) sel2.value = 'random';
+    const hint = document.getElementById('pickHint')!;
+    hint.textContent = picked.size === 0
+      ? `${m.seriesLen} random games from the pool. Tap games to pick a fixed line-up.`
+      : `${picked.size} game${picked.size > 1 ? 's' : ''} chosen — cycled to fill ${m.seriesLen}. Tap to change.`;
 
     const makeCard = (p: (typeof m.players)[0]) => {
       const hh = HEROES.find((x) => x.key === p.heroKey) ?? HEROES[0];
