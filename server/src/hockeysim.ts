@@ -1,6 +1,9 @@
 import { heroByKey, speedMult, strengthMult, accuracyMult, type HeroDef } from './heroes.js';
 import { TICK_RATE, type InputMsg, type MatchEndMsg, type MatchMode, type SimEvent, type StateMsg } from './protocol.js';
 import type { MatchSeat } from './sim.js';
+import { FROST } from './shared/frostspec.js';
+
+const H = FROST.hockey; // shared source of truth (see src/shared/frostspec.ts)
 
 // Authoritative Ice/Lava Hockey (goal mechanic) at 20Hz. Mirrors the client's
 // hockey physics: 4 paddles on the walls of a small rink (half = 14.4), pucks
@@ -9,7 +12,7 @@ import type { MatchSeat } from './sim.js';
 
 const HALF = 14.4; // ASBASE 30 * 0.48, matching the client rink
 const HITBOX = 3.0;
-const DURATION = 120;
+const DURATION = H.durationSec;
 const SIDES = ['bottom', 'top', 'left', 'right'] as const;
 type Side = (typeof SIDES)[number];
 
@@ -67,7 +70,7 @@ export class HockeySim {
       hero: heroByKey(s.heroKey),
       side: SIDES[i],
       pos: 0.5,
-      pts: 10,
+      pts: H.startPts,
       dead: false,
       armed: false,
       cd: 0,
@@ -137,11 +140,11 @@ export class HockeySim {
     }
   }
   private spawnBall() {
-    const s = this.cornerServe(36);
+    const s = this.cornerServe(H.serveSpeed);
     this.balls.push({ x: s.x, z: s.z, vx: s.vx, vz: s.vz, y: 1.4, vy: 0, power: 0, grace: 0.7, slow: 0 });
   }
   private resetBall(b: Ball) {
-    const s = this.cornerServe(34);
+    const s = this.cornerServe(H.resetSpeed);
     b.x = s.x; b.z = s.z; b.vx = s.vx; b.vz = s.vz;
     b.grace = 0.8; b.power = 0; b.slow = 0;
   }
@@ -233,14 +236,14 @@ export class HockeySim {
       b.x += b.vx * dt; b.z += b.vz * dt;
       b.y = 1.4; // puck stays flat on the ice — no vertical bounce/hop
       if (b.power > 0) b.power -= dt;
-      const cap = b.power > 0 ? 58 : 42; // faster puck (matches offline)
+      const cap = b.power > 0 ? H.puckCapPowered : H.puckCap;
       const sp = Math.hypot(b.vx, b.vz);
       if (sp > cap) { b.vx *= cap / sp; b.vz *= cap / sp; }
       // Never let the puck crawl to a halt mid-rink: after a sluggish beat,
       // retire it and serve a fresh, fast one from a corner.
-      if (sp < 8 && b.grace <= 0) {
+      if (sp < H.slowReserveSpeed && b.grace <= 0) {
         b.slow += dt;
-        if (b.slow > 0.7) this.resetBall(b);
+        if (b.slow > H.slowReserveTime) this.resetBall(b);
       } else {
         b.slow = 0;
       }
@@ -256,17 +259,17 @@ export class HockeySim {
           continue;
         }
         const [px, pz] = this.edgePos(p);
-        const dp = 1.02 + strengthMult(p.hero) * 0.06;
+        const dp = H.deflectBase + strengthMult(p.hero) * H.deflectStrength;
         const deflect = (axis: 'x' | 'z') => {
           const powered = p.armed;
-          const mult = dp * (powered ? 1.8 : 1);
+          const mult = dp * (powered ? H.poweredMult : 1);
           const steer = ((p as any)._pvel ?? 0) * HALF * 2 * 0.85;
           if (axis === 'z') { b.vz = (p.side === 'bottom' ? -1 : 1) * Math.abs(b.vz) * mult; b.vx += (b.x - px) * 0.9 + steer; }
           else { b.vx = (p.side === 'right' ? -1 : 1) * Math.abs(b.vx) * mult; b.vz += (b.z - pz) * 0.9 + steer; }
           if (powered) {
             p.armed = false;
-            p.cd = 6;
-            b.power = 2.5;
+            p.cd = H.powerShotCd;
+            b.power = H.powerShotTime;
             this.events.push({ t: 'ult', slot: p.slot });
           }
         };

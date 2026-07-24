@@ -8,6 +8,7 @@ import { spawnBolt, tickBolts, type Bolt } from '../boltfx';
 import { matchTime } from '../../core/tuning';
 import { SFX } from '../../core/audio';
 import { setScore, markDead } from '../../ui/hud';
+import { FROST } from '../../shared/frostspec';
 
 // ICE PUSH — Slip & Slide. A small ROUND rink of slippery ice: smash rivals
 // through the ice wall around the rim. Each wall segment saves you once (you
@@ -16,7 +17,7 @@ import { setScore, markDead } from '../../ui/hud';
 // lightning: they turn black and stand stunned for 3 seconds.
 // 3 lives · 2 minutes · last basher standing.
 
-const SEGS = 16; // wall segments around the rim
+const SEGS = FROST.icePush.wallSegments; // wall segments around the rim
 
 interface ThunderBox { m: THREE.Group; x: number; z: number; }
 
@@ -29,7 +30,7 @@ export class IcePushGame implements GameModule {
   private timeLeft = 120;
   private walls: { m: THREE.Mesh; alive: boolean }[] = [];
   private box: ThunderBox | null = null;
-  private boxT = 10;
+  private boxT = FROST.icePush.boxEverySec;
   private bolts: Bolt[] = [];
   private finished = false;
 
@@ -39,11 +40,11 @@ export class IcePushGame implements GameModule {
     this.finished = false;
     this.timeLeft = matchTime(120);
     this.box = null;
-    this.boxT = 10;
+    this.boxT = FROST.icePush.boxEverySec;
     this.walls = [];
     this.bolts = [];
 
-    setupRoster(ctx, 3, 0.45);
+    setupRoster(ctx, FROST.icePush.lives, 0.45);
 
     // Ice wall: 16 arc segments around the rim of the round rink.
     const R = ctx.halfSize;
@@ -116,7 +117,7 @@ export class IcePushGame implements GameModule {
     for (const q of this.ctx.players) {
       if (q === p || q.dead) continue;
       // Lightning strikes each rival: blacked out + stunned for 3 seconds.
-      q.freezeT = Math.max(q.freezeT, 3);
+      q.freezeT = Math.max(q.freezeT, FROST.icePush.zapStunSec);
       q.zapped = true;
       q.vx *= 0.1;
       q.vz *= 0.1;
@@ -137,7 +138,7 @@ export class IcePushGame implements GameModule {
     // ⚡ box every 10s.
     this.boxT -= dt;
     if (this.boxT <= 0) {
-      this.boxT = 10;
+      this.boxT = FROST.icePush.boxEverySec;
       this.spawnBox();
     }
     if (this.box) {
@@ -194,8 +195,8 @@ export class IcePushGame implements GameModule {
         if (p.you) ctx.fx.banner('THE ICE SAVED YOU!', '#9ADFFF');
         const nx = -p.x / (r || 1);
         const nz = -p.z / (r || 1);
-        p.vx = nx * 22;
-        p.vz = nz * 22;
+        p.vx = nx * FROST.icePush.wallBounceVel;
+        p.vz = nz * FROST.icePush.wallBounceVel;
         const rr = R - 1.6;
         p.x = (p.x / (r || 1)) * rr;
         p.z = (p.z / (r || 1)) * rr;

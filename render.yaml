@@ -34,7 +34,7 @@ services:
     runtime: node
     plan: free          # -> change to `starter` for smooth, always-on play
     region: oregon      # -> set to the region nearest your players
-    buildCommand: npm ci && npm run build && cd server && npm ci && npm run build
+    buildCommand: npm ci && npm run build && npm run sync:shared && cd server && npm ci && npm run build
     startCommand: node server/dist/index.js
     healthCheckPath: /healthz
     envVars:
