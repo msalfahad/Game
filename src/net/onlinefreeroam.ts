@@ -611,6 +611,8 @@ export class OnlineFreeRoam {
           SFX.power();
           this.engine.camera.shake(2);
           const freeze = this.game.mechanic === 'climb';
+          // Freeze box (climb): every rival gets a blue frost burst, like offline.
+          if (freeze) for (const q of this.players) { if (q !== p && !q.dead) this.burst(q.x, q.z, '#9ADFFF', 12); }
           HUD.banner(
             p.you ? (freeze ? '❄ FREEZE! GO GO GO!' : '⚡ ZAP THEM ALL!') : `${freeze ? '❄' : '⚡'} ${p.hero.name} GOT THE BOX!`,
             freeze ? '#9ADFFF' : '#FFD23F',
