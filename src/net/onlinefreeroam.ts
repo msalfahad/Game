@@ -143,7 +143,7 @@ export class OnlineFreeRoam {
 
     this.running = true;
     (window as any).__ONLINE_DEBUG = () =>
-      this.players.map((p) => ({ slot: p.index, team: p.team, x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10, score: p.score, lives: p.lives, dead: p.dead }));
+      this.players.map((p) => ({ slot: p.index, team: p.team, x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10, y: Math.round(p.y * 100) / 100, score: p.score, lives: p.lives, dead: p.dead }));
     SFX.unlock();
     SFX.start();
     characterVoice.spawn(this.players[this.youSlot].hero.key).catch(() => {});
@@ -636,8 +636,21 @@ export class OnlineFreeRoam {
   private tick(dt: number, elapsed: number) {
     if (!this.running) return;
     this.input.pollGamepad();
-    if (this.input.takeJump()) { this.jumpQueued = true; if (!this.players[this.youSlot].dead) SFX.tick(); }
-    if (this.input.takeAbility()) this.ultQueued = true;
+    // Jump: apply to the local player IMMEDIATELY (responsive prediction) and
+    // flag it for the server. In climb the ability button is the jump (there's
+    // no ult), matching offline. Other games keep ability = ult.
+    const jumpPressed = this.input.takeJump();
+    const abilityPressed = this.input.takeAbility();
+    const isClimb = this.game.mechanic === 'climb';
+    if (jumpPressed || (isClimb && abilityPressed)) {
+      const me = this.players[this.youSlot];
+      if (me && !me.dead && me.y <= 0 && me.freezeT <= 0) {
+        me.vy = JUMP_V;         // predict now so the jump is instant
+        this.jumpQueued = true; // tell the server on the next input tick
+        SFX.tick();
+      }
+    }
+    if (!isClimb && abilityPressed) this.ultQueued = true;
 
     this.inputTimer -= dt;
     if (this.inputTimer <= 0) {
@@ -735,7 +748,6 @@ export class OnlineFreeRoam {
       p.vy -= GRAVITY * dt;
       if (p.y <= 0) { p.y = 0; p.vy = 0; }
     }
-    if (this.jumpQueued && p.y <= 0 && p.freezeT <= 0) p.vy = JUMP_V;
     if (this.game.mechanic === 'climb') {
       const w = CLIMB_W - 1;
       p.x = Math.max(-w, Math.min(w, p.x));
