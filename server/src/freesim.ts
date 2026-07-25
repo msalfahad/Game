@@ -5,6 +5,7 @@ import type { MatchSeat } from './sim.js';
 import type { OnlineGameDef } from './catalog.js';
 import { FROST } from './shared/frostspec.js';
 import { MOVE, roamSurface, sprintMul } from './shared/roammove.js';
+import { LASER } from './shared/dodgespec.js';
 
 // Universal authoritative free-roam simulation (20Hz) covering the remaining
 // online mechanics: collect, mash, paint, breaktiles, throwfight, race and
@@ -44,6 +45,7 @@ interface FPlayer {
   invulnT: number; freezeT: number; shieldT: number; speedT: number; shoesT: number; cd: number;
   wp: number; lap: number;
   hitCd: number; // per-player laser/log damage cooldown
+  airJumps: number; // extra jumps available in the air (double jump)
   input: InputMsg;
   ackSeq: number;
   retarget: number; tx: number; tz: number;
@@ -87,6 +89,8 @@ export class FreeSim {
   private snow = false;
   private decayT = 0;
   private beltT = 8;
+  private laserDir = 1;                       // flips for the sudden laser reversal
+  private laserRevT = LASER.reverseEverySec;
   private ended = false;
   private timer: ReturnType<typeof setInterval> | null = null;
   private mech: OnlineGameDef['mechanic'];
@@ -123,6 +127,7 @@ export class FreeSim {
       invulnT: 0, freezeT: 0, shieldT: 0, speedT: 0, shoesT: 0, cd: 0,
       wp: 0, lap: 0,
       hitCd: 0,
+      airJumps: 0,
       input: { seq: 0, ax: 0, ay: 0 },
       ackSeq: 0,
       retarget: 0, tx: 0, tz: 0,
@@ -275,7 +280,10 @@ export class FreeSim {
       this.move(p, dt);
       if (p.input.jump) {
         p.input.jump = false;
-        if (p.y <= 0 && p.freezeT <= 0) p.vy = JUMP_V;
+        if (p.freezeT <= 0) {
+          if (p.y <= 0) { p.vy = JUMP_V; p.airJumps = 1; }            // ground jump
+          else if (p.airJumps > 0) { p.vy = JUMP_V * 0.85; p.airJumps--; } // double jump
+        }
       }
       if (p.input.ult) {
         p.input.ult = false;
@@ -326,7 +334,7 @@ export class FreeSim {
     if (p.y > 0 || p.vy !== 0) {
       p.y += p.vy * dt;
       p.vy -= GRAVITY * dt;
-      if (p.y <= 0) { p.y = 0; p.vy = 0; }
+      if (p.y <= 0) { p.y = 0; p.vy = 0; p.airJumps = 0; }
     }
     if (this.mech === 'climb') {
       const w = CLIMB_W - 1;
@@ -1009,11 +1017,14 @@ export class FreeSim {
         if (Math.abs(e.x) > HALF + 8 || Math.abs(e.z) > HALF + 8) this.ents.delete(e.id);
       }
     } else if (hz === 'lasers') {
-      this.beams[0] += dt * (0.7 + prog * 0.8);
-      this.beams[1] -= dt * (0.56 + prog * 0.64);
+      // Sudden direction reversals (CW <-> CCW) every few seconds.
+      this.laserRevT -= dt;
+      if (this.laserRevT <= 0) { this.laserRevT = LASER.reverseEverySec; this.laserDir *= -1; }
+      this.beams[0] += dt * (LASER.beam0Spin + prog * LASER.beam0Ramp) * this.laserDir;
+      this.beams[1] += dt * -(LASER.beam1Spin + prog * LASER.beam1Ramp) * this.laserDir;
       this.beams.forEach((angle) => {
         for (const p of this.players) {
-          if (p.dead || p.invulnT > 0 || p.y > 2.4 || p.hitCd > 0) continue;
+          if (p.dead || p.invulnT > 0 || p.y > LASER.jumpClearY || p.hitCd > 0) continue;
           const r = Math.hypot(p.x, p.z);
           if (r > HALF || r < 1) continue;
           let diff = Math.atan2(p.z, p.x) - -angle;

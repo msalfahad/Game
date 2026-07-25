@@ -11,6 +11,7 @@ import * as HUD from '../ui/hud';
 import { net } from './client';
 import { MOVE, roamSurface, sprintMul } from '../shared/roammove';
 import { FROST } from '../shared/frostspec';
+import { tryJump } from '../game/physics';
 import { ET, INPUT_RATE, type MatchEndMsg, type MatchStartMsg, type StateMsg } from './protocol';
 import { spawnBolt, tickBolts, type Bolt } from '../game/boltfx';
 import { victoryWalk } from '../game/victorywalk';
@@ -21,7 +22,6 @@ import { FAMILY_GRADE } from '../core/postfx';
 // state; this renders players (predicted/interpolated), synced entities,
 // tile grids, laser beams and race gates.
 
-const JUMP_V = 22;
 const GRAVITY = 60;
 const WPS = 8;
 const PAINT_N = 9;
@@ -49,6 +49,8 @@ export class OnlineFreeRoam {
   private entMeshes = new Map<number, THREE.Object3D>();
   private tileMeshes: THREE.Mesh[] = [];
   private beamMeshes: THREE.Group[] = [];
+  private laserPrevA0: number | null = null; // for detecting sudden laser reversals
+  private laserDirSeen = 0;
   private gateMeshes: THREE.Mesh[] = [];
   private heldMeshes: (THREE.Mesh | null)[] = [null, null, null, null];
   private seq = 0;
@@ -111,6 +113,7 @@ export class OnlineFreeRoam {
         p.z = spots[pi.slot][1] * this.half;
       }
       p.buildRider(this.engine.scene);
+      p.grounded = true; p.airJumps = 0; // for jump / double-jump prediction
       if (is2v2) {
         (p.ring.material as THREE.MeshBasicMaterial).color.setHex(TEAM_COLS[pi.team]);
         (p.glow.material as THREE.MeshBasicMaterial).color.setHex(TEAM_COLS[pi.team]);
@@ -135,6 +138,11 @@ export class OnlineFreeRoam {
     HUD.showHud(true);
     HUD.setObjective(`${this.game.name} · ONLINE${is2v2 ? ' · 2 VS 2' : ''} — ${this.game.blurb}`);
     if (isClimb) HUD.showClimbMap(this.players.map((p) => p.hero.col), this.players.findIndex((p) => p.you));
+    // Dodge (logs / lasers): a dedicated bottom-right JUMP button — hop the
+    // hazard (double-tap to double-jump), matching offline.
+    if (this.game.mechanic === 'dodge' && (this.game.mods?.hz === 'logs' || this.game.mods?.hz === 'lasers')) {
+      this.buildJumpButton();
+    }
     this.input.setEnabled(true);
     this.input.setMode('float');
 
@@ -477,6 +485,21 @@ export class OnlineFreeRoam {
     if (this.snaps.length > 30) this.snaps.shift();
     HUD.setClock(m.timeLeft);
 
+    // Lasers suddenly reverse — announce it when the spin direction flips.
+    if (m.beams && m.beams.length) {
+      const a0 = m.beams[0];
+      if (this.laserPrevA0 != null) {
+        const d = a0 - this.laserPrevA0;
+        const dir = d > 0.001 ? 1 : d < -0.001 ? -1 : this.laserDirSeen;
+        if (this.laserDirSeen !== 0 && dir !== 0 && dir !== this.laserDirSeen) {
+          HUD.banner('🔄 LASERS REVERSED!', '#FF3040');
+          SFX.crack();
+        }
+        if (dir !== 0) this.laserDirSeen = dir;
+      }
+      this.laserPrevA0 = a0;
+    }
+
     const mech = this.game.mechanic;
     for (const ps of m.players) {
       const [slot, x, z, , , , lives, dead, freezeT, shieldT, cd, score, flags] = ps;
@@ -642,14 +665,7 @@ export class OnlineFreeRoam {
     const jumpPressed = this.input.takeJump();
     const abilityPressed = this.input.takeAbility();
     const isClimb = this.game.mechanic === 'climb';
-    if (jumpPressed || (isClimb && abilityPressed)) {
-      const me = this.players[this.youSlot];
-      if (me && !me.dead && me.y <= 0 && me.freezeT <= 0) {
-        me.vy = JUMP_V;         // predict now so the jump is instant
-        this.jumpQueued = true; // tell the server on the next input tick
-        SFX.tick();
-      }
-    }
+    if (jumpPressed || (isClimb && abilityPressed)) this.doJump();
     if (!isClimb && abilityPressed) this.ultQueued = true;
 
     this.inputTimer -= dt;
@@ -721,6 +737,37 @@ export class OnlineFreeRoam {
     this.bolts = tickBolts(this.engine.scene, this.bolts, dt);
   }
 
+  /** Bottom-right touch JUMP button for dodge games (matches offline dodge.ts). */
+  private buildJumpButton() {
+    document.getElementById('dodgeUI')?.remove();
+    const ui = document.createElement('div');
+    ui.id = 'dodgeUI';
+    ui.style.cssText = 'position:fixed;inset:0;z-index:8;pointer-events:none;font-family:Bungee,system-ui,sans-serif;';
+    ui.innerHTML = `
+      <button id="djJump" data-nostick style="position:fixed;right:20px;bottom:150px;pointer-events:auto;
+        width:88px;height:88px;border-radius:50%;border:none;font-size:15px;font-weight:900;letter-spacing:1px;
+        color:#12142e;background:#7CF07C;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);
+        touch-action:none;user-select:none;">⤴<br>JUMP</button>`;
+    document.body.appendChild(ui);
+    const btn = ui.querySelector('#djJump') as HTMLButtonElement;
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.doJump();
+      btn.style.filter = 'brightness(1.25)';
+      setTimeout(() => (btn.style.filter = ''), 120);
+    });
+  }
+
+  /** Jump the local player (ground jump + one air/double jump), predict now, and flag it for the server. */
+  private doJump() {
+    const me = this.players[this.youSlot];
+    if (me && !me.dead && me.freezeT <= 0 && tryJump(me)) {
+      this.jumpQueued = true; // server re-simulates the same jump
+      SFX.tick();
+    }
+  }
+
   private predictLocal(dt: number) {
     const p = this.players[this.youSlot];
     if (p.dead) return;
@@ -746,7 +793,7 @@ export class OnlineFreeRoam {
     if (p.y > 0 || p.vy !== 0) {
       p.y += p.vy * dt;
       p.vy -= GRAVITY * dt;
-      if (p.y <= 0) { p.y = 0; p.vy = 0; }
+      if (p.y <= 0) { p.y = 0; p.vy = 0; p.grounded = true; p.airJumps = 0; }
     }
     if (this.game.mechanic === 'climb') {
       const w = CLIMB_W - 1;
@@ -875,6 +922,7 @@ export class OnlineFreeRoam {
     this.engine.stop();
     this.input.setEnabled(false);
     HUD.showHud(false);
+    document.getElementById('dodgeUI')?.remove();
     const won = m.mode === '2v2'
       ? m.ranking.find((r) => r.slot === this.youSlot)?.team === m.winnerTeam
       : m.ranking[0]?.slot === this.youSlot;
@@ -896,6 +944,7 @@ export class OnlineFreeRoam {
     this.engine.stop();
     this.input.setEnabled(false);
     HUD.showHud(false);
+    document.getElementById('dodgeUI')?.remove();
     net.cb.onState = undefined;
     net.cb.onMatchEnd = undefined;
   }
