@@ -9,6 +9,7 @@ import { Powerups } from '../powerups';
 import { matchTime } from '../../core/tuning';
 import { SFX } from '../../core/audio';
 import { setScore, markDead } from '../../ui/hud';
+import { LASER } from '../../shared/dodgespec';
 
 // DODGE — survive the arena itself (Rolling Logs, Laser Dodge, Wind Gauntlet,
 // Conveyor Chaos). Four flavors of core threat; 3 lives; survive the clock or
@@ -30,6 +31,8 @@ export class DodgeGame implements GameModule {
   private beams: THREE.Mesh[] = [];
   private beamPivots: THREE.Group[] = [];
   private beamAngles = [0, Math.PI];
+  private laserDir = 1;      // flips periodically for the sudden reversal
+  private laserRevT = LASER.reverseEverySec;
   private windAngle = 0;
   private beltDir = 1;
   private beltT = 8;
@@ -50,6 +53,8 @@ export class DodgeGame implements GameModule {
     this.beams = [];
     this.beamPivots = [];
     this.beamAngles = [Math.random() * 6, Math.random() * 6 + Math.PI];
+    this.laserDir = 1;
+    this.laserRevT = LASER.reverseEverySec;
     this.beltDir = 1;
     this.beltT = 8;
 
@@ -283,11 +288,21 @@ export class DodgeGame implements GameModule {
         return true;
       });
     } else if (this.hz === 'lasers') {
+      // The beams SUDDENLY reverse direction every few seconds — jump the beam,
+      // then watch it whip back the other way.
+      this.laserRevT -= dt;
+      if (this.laserRevT <= 0) {
+        this.laserRevT = LASER.reverseEverySec;
+        this.laserDir *= -1;
+        ctx.fx.banner('🔄 LASERS REVERSED!', '#FF3040');
+        SFX.crack();
+      }
+      const spin = (i: number) => (i === 0 ? LASER.beam0Spin + prog * LASER.beam0Ramp : -(LASER.beam1Spin + prog * LASER.beam1Ramp));
       this.beamPivots.forEach((pivot, i) => {
-        this.beamAngles[i] += dt * (0.7 + prog * 0.8) * (i === 0 ? 1 : -0.8);
+        this.beamAngles[i] += dt * spin(i) * this.laserDir;
         pivot.rotation.y = this.beamAngles[i];
         for (const p of ctx.players) {
-          if (p.dead || p.invulnT > 0 || p.y > 2.4) continue;
+          if (p.dead || p.invulnT > 0 || p.y > LASER.jumpClearY) continue;
           const r = Math.hypot(p.x, p.z);
           if (r > ctx.halfSize || r < 1) continue;
           let diff = Math.atan2(p.z, p.x) - -this.beamAngles[i];
