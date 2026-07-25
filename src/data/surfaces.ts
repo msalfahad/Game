@@ -17,17 +17,15 @@ export interface Surface {
   drift?: number;
 }
 
+// The raw grip/accel/push/drift numbers live once in src/shared/roammove.ts so
+// offline + online share them; here we just tag each with its kind.
+import { SURFACE_PHYS } from '../shared/roammove';
 export const SURFACES: Record<SurfaceKind, Surface> = {
-  // Neutral baseline. Responsive, quick stop.
-  metal: { kind: 'metal', grip: 0.02, accel: 1.0 },
-  // Very slippery: keeps almost all momentum, weaker direct control.
-  ice: { kind: 'ice', grip: 0.55, accel: 0.7 },
-  // Sticky: kills momentum fast and slows top speed.
-  mud: { kind: 'mud', grip: 0.001, accel: 0.62 },
-  // Loose: mostly responsive but adds random lateral drift.
-  sand: { kind: 'sand', grip: 0.04, accel: 0.85, drift: 2.2 },
-  // Neutral grip but a constant belt push (direction set per-hazard/map).
-  conveyor: { kind: 'conveyor', grip: 0.03, accel: 1.0, push: { x: 6, z: 0 } },
+  metal: { kind: 'metal', ...SURFACE_PHYS.metal },
+  ice: { kind: 'ice', ...SURFACE_PHYS.ice },
+  mud: { kind: 'mud', ...SURFACE_PHYS.mud },
+  sand: { kind: 'sand', ...SURFACE_PHYS.sand },
+  conveyor: { kind: 'conveyor', ...SURFACE_PHYS.conveyor },
 };
 
 export function surface(kind: SurfaceKind): Surface {

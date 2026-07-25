@@ -2,12 +2,15 @@ import * as THREE from 'three';
 import type { Engine } from '../core/engine';
 import type { Input } from '../core/input';
 import { SFX } from '../core/audio';
+import { characterVoice } from '../core/voice-barks';
 import { Player } from '../game/player';
 import { buildWorld, type World } from '../game/world';
 import { gameById, familyById, type GameDef } from '../data/maps';
 import { heroByKey, speedMult, HEROES } from '../data/characters';
 import * as HUD from '../ui/hud';
 import { net } from './client';
+import { MOVE, roamSurface, sprintMul } from '../shared/roammove';
+import { FROST } from '../shared/frostspec';
 import { ET, INPUT_RATE, type MatchEndMsg, type MatchStartMsg, type StateMsg } from './protocol';
 import { spawnBolt, tickBolts, type Bolt } from '../game/boltfx';
 import { victoryWalk } from '../game/victorywalk';
@@ -18,7 +21,6 @@ import { FAMILY_GRADE } from '../core/postfx';
 // state; this renders players (predicted/interpolated), synced entities,
 // tile grids, laser beams and race gates.
 
-const BASE_SPEED = 14;
 const JUMP_V = 22;
 const GRAVITY = 60;
 const WPS = 8;
@@ -144,6 +146,7 @@ export class OnlineFreeRoam {
       this.players.map((p) => ({ slot: p.index, team: p.team, x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10, score: p.score, lives: p.lives, dead: p.dead }));
     SFX.unlock();
     SFX.start();
+    characterVoice.spawn(this.players[this.youSlot].hero.key).catch(() => {});
     HUD.banner(this.game.name + '!', '#' + new THREE.Color(family.theme.trim).getHexString());
     this.engine.start((dt, elapsed) => this.tick(dt, elapsed));
   }
@@ -376,8 +379,9 @@ export class OnlineFreeRoam {
       return grp;
     }
     if (type === ET.LOG && this.game.mechanic === 'climb') {
+      // extra: 1 = big boulder (unjumpable), 0 = small (a jump clears it).
       return new THREE.Mesh(
-        new THREE.DodecahedronGeometry(2.1 + Math.random() * 0.8),
+        new THREE.DodecahedronGeometry(extra === 1 ? FROST.climb.bigRockR : FROST.climb.smallRockR),
         this.game.mods?.volcano
           ? new THREE.MeshStandardMaterial({ color: 0x35180c, emissive: 0xb03a10, emissiveIntensity: 0.55, roughness: 0.85 })
           : new THREE.MeshStandardMaterial({ color: 0x9db8cc, roughness: 0.8 }),
@@ -494,6 +498,8 @@ export class OnlineFreeRoam {
         HUD.markDead(p);
         SFX.out();
         HUD.banner(p.you ? 'YOU ARE OUT!' : p.hero.name + ' IS OUT!', '#FF4D4D');
+        const me = this.players[this.youSlot];
+        if (!p.you && me && !me.dead) characterVoice.trash(me.hero.key).catch(() => {});
       }
       p.freezeT = freezeT;
       if (mech === 'icepush' && freezeT > 0) p.zapped = true;
@@ -630,7 +636,7 @@ export class OnlineFreeRoam {
   private tick(dt: number, elapsed: number) {
     if (!this.running) return;
     this.input.pollGamepad();
-    if (this.input.takeJump()) this.jumpQueued = true;
+    if (this.input.takeJump()) { this.jumpQueued = true; if (!this.players[this.youSlot].dead) SFX.tick(); }
     if (this.input.takeAbility()) this.ultQueued = true;
 
     this.inputTimer -= dt;
@@ -705,13 +711,18 @@ export class OnlineFreeRoam {
   private predictLocal(dt: number) {
     const p = this.players[this.youSlot];
     if (p.dead) return;
-    const top = BASE_SPEED * speedMult(p.hero) * (p.shoesT > 0 ? 2 : 1) * (this.game.mechanic === 'climb' ? CLIMB_PACE : 1);
-    const accel = top * 2.6;
+    // Mirror the server + offline movement exactly (src/shared/roammove.ts).
+    const surf = roamSurface(this.game.familyId, this.game.mods?.proj === 'snowball');
+    const sprint = sprintMul(this.input.ax, this.input.ay);
+    const top = MOVE.baseSpeed * speedMult(p.hero) * sprint *
+      (p.speedT > 0 ? MOVE.speedBoost : 1) * (p.shoesT > 0 ? MOVE.shoesBoost : 1) *
+      (this.game.mechanic === 'climb' ? CLIMB_PACE : 1);
+    const accel = top * MOVE.accelMul * surf.accel;
     if (p.freezeT <= 0) {
       p.vx += this.input.ax * accel * dt;
       p.vz += this.input.ay * accel * dt;
     }
-    const retain = Math.pow(this.game.mechanic === 'icepush' ? 0.55 : 0.02, dt);
+    const retain = Math.pow(surf.grip, dt);
     p.vx *= retain;
     p.vz *= retain;
     const sp = Math.hypot(p.vx, p.vz);
@@ -855,8 +866,9 @@ export class OnlineFreeRoam {
     const won = m.mode === '2v2'
       ? m.ranking.find((r) => r.slot === this.youSlot)?.team === m.winnerTeam
       : m.ranking[0]?.slot === this.youSlot;
-    if (won) SFX.win();
-    else SFX.lose();
+    const meHero = this.players[this.youSlot]?.hero.key;
+    if (won) { SFX.win(); if (meHero) characterVoice.victory(meHero).catch(() => {}); }
+    else { SFX.lose(); if (meHero) characterVoice.losing(meHero).catch(() => {}); }
     // Finishing-order parade before the results screen.
     const ranked = m.ranking.map((r) => this.players[r.slot]).filter(Boolean);
     const labels = m.ranking.map((r) => `${r.lives} ${m.scoreLabel}`);

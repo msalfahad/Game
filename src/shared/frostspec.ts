@@ -48,5 +48,11 @@ export const FROST = {
     boxEverySec: 10,       // ❄ freeze box spawn cadence
     boxFreezeSec: 1.4,     // freeze from a big box (small box = half)
     boulderFreezeSec: 0.35,
+    // Boulders come in two sizes: a JUMP clears a small one (when airborne
+    // above jumpClearY) but never a big one — "jump small rocks, not big ones".
+    jumpClearY: 1.6,
+    bigRockChance: 0.3,
+    smallRockR: 2.3,
+    bigRockR: 3.4,
   },
 } as const;
