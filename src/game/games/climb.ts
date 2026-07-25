@@ -19,7 +19,7 @@ export const CLIMB_W = 12; // corridor half-width
 export const CLIMB_L = 62; // slope half-length — a proper mountain to climb
 const CLIMB_PACE = 0.7; // everyone climbs slower
 
-interface Rock { m: THREE.Mesh; x: number; z: number; vz: number; vx: number; }
+interface Rock { m: THREE.Mesh; x: number; z: number; vz: number; vx: number; big: boolean; }
 interface FreezeBox { m: THREE.Group; x: number; z: number; }
 interface LavaBall {
   m: THREE.Mesh;
@@ -252,8 +252,11 @@ export class ClimbGame implements GameModule {
   }
 
   private spawnRock(prog: number) {
+    // Big boulders can't be jumped; small ones can (see collision below).
+    const big = Math.random() < FROST.climb.bigRockChance;
+    const r = big ? FROST.climb.bigRockR : FROST.climb.smallRockR;
     const m = new THREE.Mesh(
-      new THREE.DodecahedronGeometry(2.1 + Math.random() * 0.8),
+      new THREE.DodecahedronGeometry(r),
       this.volcano
         ? new THREE.MeshStandardMaterial({ color: 0x35180c, emissive: 0xb03a10, emissiveIntensity: 0.55, roughness: 0.85 })
         : new THREE.MeshStandardMaterial({ color: 0x9db8cc, roughness: 0.8 }),
@@ -264,7 +267,7 @@ export class ClimbGame implements GameModule {
     this.ctx.scene.add(m);
     // Volcano rocks tumble DIAGONALLY and bounce between the walls.
     const vx = this.volcano ? (Math.random() < 0.5 ? -1 : 1) * (4 + Math.random() * 6) : 0;
-    this.rocks.push({ m, x, z: -(CLIMB_L + 4), vz: 13 + prog * 7 + Math.random() * 5, vx });
+    this.rocks.push({ m, x, z: -(CLIMB_L + 4), vz: 13 + prog * 7 + Math.random() * 5, vx, big });
   }
 
   private spawnBox() {
@@ -324,7 +327,9 @@ export class ClimbGame implements GameModule {
       r.m.rotation.x += dt * 3;
       for (const p of ctx.players) {
         if (p.dead || p.invulnT > 0 || (p as any)._rockCd > performance.now()) continue;
-        if (Math.hypot(p.x - r.x, p.z - r.z) < HITBOX_RADIUS + 2.2) {
+        // A jump clears a SMALL boulder; big ones are too tall to hop.
+        if (!r.big && p.y > FROST.climb.jumpClearY) continue;
+        if (Math.hypot(p.x - r.x, p.z - r.z) < HITBOX_RADIUS + (r.big ? 2.9 : 2.0)) {
           (p as any)._rockCd = performance.now() + 700;
           p.vz += 30; // knocked DOWN the mountain
           p.freezeT = Math.max(p.freezeT, 0.35);

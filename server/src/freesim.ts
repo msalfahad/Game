@@ -4,6 +4,7 @@ import { ET } from './protocol.js';
 import type { MatchSeat } from './sim.js';
 import type { OnlineGameDef } from './catalog.js';
 import { FROST } from './shared/frostspec.js';
+import { MOVE, roamSurface, sprintMul } from './shared/roammove.js';
 
 // Universal authoritative free-roam simulation (20Hz) covering the remaining
 // online mechanics: collect, mash, paint, breaktiles, throwfight, race and
@@ -12,7 +13,6 @@ import { FROST } from './shared/frostspec.js';
 
 const HALF = 30;
 const HITBOX = 3.0;
-const BASE_SPEED = 14;
 const JUMP_V = 22;
 const GRAVITY = 60;
 const ULT_CD = 14;
@@ -91,6 +91,7 @@ export class FreeSim {
   private timer: ReturnType<typeof setInterval> | null = null;
   private mech: OnlineGameDef['mechanic'];
   private mods: OnlineGameDef['mods'];
+  private familyId: string; // for surface physics (frost=ice, dune=sand, …)
 
   constructor(
     seats: MatchSeat[],
@@ -101,6 +102,7 @@ export class FreeSim {
   ) {
     this.mech = game.mechanic;
     this.mods = game.mods;
+    this.familyId = game.id.split('-')[0];
     this.snow = this.mech === 'throwfight' && this.mods.proj === 'snowball';
     this.duration = this.timeLeft = game.duration;
     const spots = [[-0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [0.5, 0.5]];
@@ -296,8 +298,14 @@ export class FreeSim {
   }
 
   private move(p: FPlayer, dt: number) {
-    const top = BASE_SPEED * speedMult(p.hero) * (p.speedT > 0 ? 1.35 : 1) * (p.shoesT > 0 ? 2 : 1) * (this.mech === 'climb' ? CLIMB_PACE : 1);
-    const accel = top * 2.6;
+    // Movement mirrors offline moveFreeRoam exactly (src/game/physics.ts):
+    // per-surface grip/accel, a full-stick sprint boost, and the powerup mults.
+    const surf = roamSurface(this.familyId, this.snow);
+    const sprint = sprintMul(p.input.ax, p.input.ay);
+    const top = MOVE.baseSpeed * speedMult(p.hero) * sprint *
+      (p.speedT > 0 ? MOVE.speedBoost : 1) * (p.shoesT > 0 ? MOVE.shoesBoost : 1) *
+      (this.mech === 'climb' ? CLIMB_PACE : 1);
+    const accel = top * MOVE.accelMul * surf.accel;
     if (p.freezeT <= 0) {
       p.vx += p.input.ax * accel * dt;
       p.vz += p.input.ay * accel * dt;
@@ -306,8 +314,8 @@ export class FreeSim {
         p.face = { x: p.input.ax / L, z: p.input.ay / L };
       }
     }
-    // Slip & Slide keeps momentum like real ice.
-    const retain = Math.pow(this.mech === 'icepush' ? FROST.icePush.iceRetainPerSec : 0.02, dt);
+    // Surface grip: ice keeps momentum (Slip & Slide, Avalanche), metal stops fast.
+    const retain = Math.pow(surf.grip, dt);
     p.vx *= retain;
     p.vz *= retain;
     const sp = Math.hypot(p.vx, p.vz);
@@ -552,7 +560,9 @@ export class FreeSim {
     this.decayT -= dt;
     if (this.decayT <= 0) {
       this.decayT = Math.max(volcano ? 1.0 : 0.55, (volcano ? 1.8 : 1.3) - prog * 0.6);
-      const e = this.addEnt(ET.LOG, (Math.random() - 0.5) * (CLIMB_W - 2) * 2, -(CLIMB_L + 4), 2, 2);
+      // extra: 1 = big boulder (can't be jumped), 0 = small (a jump clears it).
+      const big = Math.random() < FROST.climb.bigRockChance ? 1 : 0;
+      const e = this.addEnt(ET.LOG, (Math.random() - 0.5) * (CLIMB_W - 2) * 2, -(CLIMB_L + 4), 2, big);
       e.vz = 13 + prog * 7 + Math.random() * 5;
       // Volcano rocks tumble DIAGONALLY, bouncing between the walls.
       if (volcano) e.vx = (Math.random() < 0.5 ? -1 : 1) * (4 + Math.random() * 6);
@@ -564,9 +574,12 @@ export class FreeSim {
       const rw = CLIMB_W - 1.5;
       if (e.x < -rw) { e.x = -rw; e.vx = Math.abs(e.vx); }
       if (e.x > rw) { e.x = rw; e.vx = -Math.abs(e.vx); }
+      const big = e.extra === 1;
       for (const p of this.players) {
         if (p.dead || p.hitCd > 0) continue;
-        if (Math.hypot(p.x - e.x, p.z - e.z) < HITBOX + 2.2) {
+        // A jump clears a SMALL boulder; big ones are too tall to hop.
+        if (!big && p.y > FROST.climb.jumpClearY) continue;
+        if (Math.hypot(p.x - e.x, p.z - e.z) < HITBOX + (big ? 2.9 : 2.0)) {
           p.hitCd = 0.7;
           p.vz += 30;
           p.freezeT = Math.max(p.freezeT, 0.35);

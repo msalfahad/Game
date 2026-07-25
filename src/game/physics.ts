@@ -2,15 +2,17 @@ import type { Player } from './player';
 import type { Surface } from '../data/surfaces';
 import { speedMult } from '../data/characters';
 import { TUNING } from '../core/tuning';
+import { MOVE } from '../shared/roammove';
 
 // Movement + surface physics (SPEC section 4). Shared free-roam kinematics used
-// by the Surface Lab and free-roam games. Hockey uses its own 1-axis paddle
-// model. Slight momentum, responsive control, surface-dependent grip/drift/push.
+// by the free-roam games. Hockey uses its own 1-axis paddle model. Slight
+// momentum, responsive control, surface-dependent grip/drift/push. The core
+// tuning lives in src/shared/roammove.ts so online play matches exactly.
 
-const BASE_SPEED = 14; // world units/sec at hero speed midpoint
-const SPRINT = 1.15; // ~15% faster when sprinting
-const JUMP_V = 22;
-const GRAVITY = 60;
+const BASE_SPEED = MOVE.baseSpeed;
+const SPRINT = MOVE.sprint;
+const JUMP_V = MOVE.jumpV;
+const GRAVITY = MOVE.gravity;
 const DASH_V = 42;
 const DASH_CD = 2; // seconds (SPEC section 4)
 
