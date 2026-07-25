@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Engine } from '../core/engine';
 import type { Input } from '../core/input';
 import { SFX } from '../core/audio';
+import { characterVoice } from '../core/voice-barks';
 import { Player } from '../game/player';
 import { buildWorld, type World } from '../game/world';
 import { victoryWalk } from '../game/victorywalk';
@@ -105,6 +106,7 @@ export class OnlineMatch {
       this.players.map((p) => ({ slot: p.index, team: p.team, x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10, dead: p.dead }));
     SFX.unlock();
     SFX.start();
+    characterVoice.spawn(this.players[this.youSlot].hero.key).catch(() => {});
     HUD.banner(game.name + '!', '#' + new THREE.Color(family.theme.trim).getHexString());
     this.engine.start((dt, elapsed) => this.tick(dt, elapsed));
   }
@@ -128,6 +130,8 @@ export class OnlineMatch {
         HUD.markDead(p);
         SFX.out();
         HUD.banner(p.you ? 'YOU ARE OUT!' : p.hero.name + ' IS OUT!', '#FF4D4D');
+        const me = this.players[this.youSlot];
+        if (!p.you && me && !me.dead) characterVoice.trash(me.hero.key).catch(() => {});
       }
       p.freezeT = freezeT;
       p.shieldT = shieldT;
@@ -155,7 +159,7 @@ export class OnlineMatch {
         SFX.power();
         this.burst(p.x, p.z, p.hero.col, 16);
         this.engine.camera.shake(1.5);
-        if (p.you) HUD.banner(p.hero.ultName.toUpperCase() + '!', p.hero.col);
+        if (p.you) { characterVoice.ability(p.hero.key).catch(() => {}); HUD.banner(p.hero.ultName.toUpperCase() + '!', p.hero.col); }
       } else if (ev.t === 'fall') {
         SFX.fall();
         this.burst(p.x, p.z, p.hero.col, 18);
@@ -302,8 +306,9 @@ export class OnlineMatch {
     this.input.setEnabled(false);
     HUD.showHud(false);
     const won = m.ranking[0]?.slot === this.youSlot;
-    if (won) SFX.win();
-    else SFX.lose();
+    const meHero = this.players[this.youSlot]?.hero.key;
+    if (won) { SFX.win(); if (meHero) characterVoice.victory(meHero).catch(() => {}); }
+    else { SFX.lose(); if (meHero) characterVoice.losing(meHero).catch(() => {}); }
     // Finishing-order parade before the results screen.
     const ranked = m.ranking.map((r) => this.players[r.slot]).filter(Boolean);
     const labels = m.ranking.map((r) => `${r.lives} ${m.scoreLabel}`);
