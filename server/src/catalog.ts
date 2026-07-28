@@ -3,7 +3,7 @@
 // Only what the simulation needs: mechanic, flavor mods, and duration.
 
 export type Mechanic =
-  | 'goal' | 'icepush' | 'climb' | 'breaktiles' | 'pushout' | 'throwfight' | 'race' | 'dodge' | 'collect' | 'paint' | 'mash';
+  | 'goal' | 'icepush' | 'climb' | 'breaktiles' | 'pushout' | 'throwfight' | 'race' | 'dodge' | 'collect' | 'paint' | 'mash' | 'hotpotato';
 
 export interface OnlineGameDef {
   id: string;
@@ -33,6 +33,7 @@ export const ONLINE_CATALOG: OnlineGameDef[] = [
   g('inferno-4', 'climb', 60, { volcano: 1 }),            // Volcano Rush
   // Wildwood
   g('wild-2', 'dodge', 75, { hz: 'logs' }),               // Rolling Logs
+  g('wild-3', 'hotpotato', 60),                           // Watermelon Bomb
   // Sky
   g('sky-3', 'dodge', 75, { hz: 'wind' }),                // Wind Gauntlet
   // Mech

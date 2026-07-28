@@ -55,6 +55,12 @@ export class OnlineFreeRoam {
   private beamMeshes: THREE.Group[] = [];
   private laserPrevA0: number | null = null; // for detecting sudden laser reversals
   private laserDirSeen = 0;
+  // Hot potato (Watermelon Bomb): the passed melon + its count-up.
+  private melon: THREE.Group | null = null;
+  private melonSpark: THREE.Mesh | null = null;
+  private hpCountEl: HTMLElement | null = null;
+  private hpArmT = 0;
+  private hpHolder = 0;
   private gateMeshes: THREE.Mesh[] = [];
   private heldMeshes: (THREE.Mesh | null)[] = [null, null, null, null];
   private seq = 0;
@@ -147,8 +153,10 @@ export class OnlineFreeRoam {
     if (this.game.mechanic === 'dodge' && (this.game.mods?.hz === 'logs' || this.game.mods?.hz === 'lasers')) {
       this.buildJumpButton();
     }
+    if (this.game.mechanic === 'hotpotato') this.buildHotPotato();
     this.input.setEnabled(true);
-    this.input.setMode('float');
+    // Hot potato players stand still — no movement stick, just the PASS button.
+    this.input.setMode(this.game.mechanic === 'hotpotato' ? 'hidden' : 'float');
 
     net.cb.onState = (m) => this.onState(m);
     net.cb.onMatchEnd = (m) => this.end(m);
@@ -505,10 +513,13 @@ export class OnlineFreeRoam {
     }
 
     const mech = this.game.mechanic;
+    if (mech === 'hotpotato') this.hpArmT = m.aux ?? 0;
     for (const ps of m.players) {
       const [slot, x, z, , , , lives, dead, freezeT, shieldT, cd, score, flags] = ps;
       const p = this.players[slot];
       if (!p) continue;
+      // Hot potato: players are static in the ring; take positions + holder from the server.
+      if (mech === 'hotpotato') { p.x = x; p.z = z; if ((flags & 1) === 1) this.hpHolder = slot; }
       // HUD value per mechanic.
       const shown = mech === 'throwfight' ? (this.game.mods?.proj === 'snowball' ? score : Math.max(lives, 0))
         : mech === 'breaktiles' || mech === 'dodge' || mech === 'icepush' ? Math.max(lives, 0)
@@ -735,6 +746,24 @@ export class OnlineFreeRoam {
         this.players.map((p) => p.dead),
       );
     }
+    if (this.game.mechanic === 'hotpotato' && this.melon) {
+      const h = this.players[this.hpHolder];
+      if (h) this.melon.position.set(h.x, 7.2 + Math.sin(elapsed * 3) * 0.25, h.z);
+      this.melon.rotation.y += dt * 2;
+      const danger = Math.min(1, this.hpArmT / 8);
+      this.melon.scale.setScalar(1 + Math.sin(elapsed * (6 + danger * 20)) * 0.15 * (0.4 + danger));
+      if (this.melonSpark) {
+        (this.melonSpark.material as THREE.MeshBasicMaterial).color.setHex(this.hpArmT > 8 ? 0xff5a3c : 0xfff2a0);
+        this.melonSpark.visible = Math.sin(elapsed * (10 + danger * 30)) > -0.3;
+      }
+      if (this.hpCountEl) {
+        this.hpCountEl.textContent = String(Math.floor(this.hpArmT));
+        const dz = this.hpArmT >= 8;
+        this.hpCountEl.style.color = dz ? '#ff4d4d' : '#ffffff';
+        const j = dz ? (Math.random() - 0.5) * 6 : 0;
+        this.hpCountEl.style.transform = `translateX(-50%) translate(${j}px,${j}px) scale(${dz ? 1.25 : 1})`;
+      }
+    }
     HUD.setAbilityHint(you.dead ? '' : you.cd <= 0 ? 'ready' : '');
     this.world.tick(dt);
     this.tickParts(dt);
@@ -744,6 +773,7 @@ export class OnlineFreeRoam {
   /** Bottom-right touch JUMP button for dodge games (matches offline dodge.ts). */
   private buildJumpButton() {
     document.getElementById('dodgeUI')?.remove();
+    document.getElementById('hpUI')?.remove();
     const ui = document.createElement('div');
     ui.id = 'dodgeUI';
     ui.style.cssText = 'position:fixed;inset:0;z-index:8;pointer-events:none;font-family:Bungee,system-ui,sans-serif;';
@@ -763,6 +793,49 @@ export class OnlineFreeRoam {
     });
   }
 
+  /** Watermelon Bomb: build the passed melon + the big count-up / PASS button. */
+  private buildHotPotato() {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.SphereGeometry(1.7, 20, 16),
+      new THREE.MeshStandardMaterial({ color: 0x2f9e34, roughness: 0.6, emissive: 0x0d3a12 }),
+    );
+    body.scale.y = 1.12;
+    g.add(body);
+    const stripeMat = new THREE.MeshStandardMaterial({ color: 0x165a1e, roughness: 0.7 });
+    for (let i = 0; i < 6; i++) {
+      const s = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.13, 6, 24), stripeMat);
+      s.rotation.z = Math.PI / 2; s.rotation.y = (i / 6) * Math.PI; s.scale.set(1, 1.12, 1);
+      g.add(s);
+    }
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 1.1, 6), new THREE.MeshStandardMaterial({ color: 0x6b4a1e }));
+    stem.position.y = 2.0; g.add(stem);
+    const spark = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), new THREE.MeshBasicMaterial({ color: 0xfff2a0 }));
+    spark.position.y = 2.7; g.add(spark);
+    this.engine.scene.add(g);
+    this.melon = g; this.melonSpark = spark;
+
+    document.getElementById('hpUI')?.remove();
+    const ui = document.createElement('div');
+    ui.id = 'hpUI';
+    ui.style.cssText = 'position:fixed;inset:0;z-index:8;pointer-events:none;font-family:Bungee,system-ui,sans-serif;';
+    ui.innerHTML = `
+      <div id="hpCount" style="position:fixed;top:120px;left:50%;transform:translateX(-50%);font-size:74px;
+        color:#fff;text-shadow:0 4px 0 rgba(0,0,0,.5);line-height:1;">0</div>
+      <div style="position:fixed;left:0;right:0;bottom:26px;display:flex;justify-content:center;">
+        <button id="hpPass" style="pointer-events:auto;font-family:Bungee,system-ui,sans-serif;font-size:20px;border:none;
+          border-radius:16px;padding:15px 30px;background:#7ED321;color:#12331a;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);">🍉 PASS</button>
+      </div>`;
+    document.body.appendChild(ui);
+    this.hpCountEl = ui.querySelector('#hpCount');
+    ui.querySelector('#hpPass')!.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.hpPass(); });
+  }
+
+  /** Throw the melon (only matters while you hold it — the server enforces that). */
+  private hpPass() {
+    this.ultQueued = true; // sent as `ult`; the server passes the melon to a random rival
+  }
+
   /** Jump the local player (ground jump + one air/double jump), predict now, and flag it for the server. */
   private doJump() {
     const me = this.players[this.youSlot];
@@ -773,6 +846,7 @@ export class OnlineFreeRoam {
   }
 
   private predictLocal(dt: number) {
+    if (this.game.mechanic === 'hotpotato') return; // players stand still in the ring
     const p = this.players[this.youSlot];
     if (p.dead) return;
     // Mirror the server + offline movement exactly (src/shared/roammove.ts).
@@ -929,6 +1003,7 @@ export class OnlineFreeRoam {
     this.input.setEnabled(false);
     HUD.showHud(false);
     document.getElementById('dodgeUI')?.remove();
+    document.getElementById('hpUI')?.remove();
     const won = m.mode === '2v2'
       ? m.ranking.find((r) => r.slot === this.youSlot)?.team === m.winnerTeam
       : m.ranking[0]?.slot === this.youSlot;
@@ -951,6 +1026,7 @@ export class OnlineFreeRoam {
     this.input.setEnabled(false);
     HUD.showHud(false);
     document.getElementById('dodgeUI')?.remove();
+    document.getElementById('hpUI')?.remove();
     net.cb.onState = undefined;
     net.cb.onMatchEnd = undefined;
   }
