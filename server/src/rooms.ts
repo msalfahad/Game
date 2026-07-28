@@ -1,6 +1,7 @@
 import type { Socket } from 'socket.io';
 import { MatchSim, type GameSim, type MatchSeat } from './sim.js';
 import { HockeySim } from './hockeysim.js';
+import { HotPotatoSim } from './hotpotatosim.js';
 import { FreeSim } from './freesim.js';
 import { onlineGame, poolFor } from './catalog.js';
 import { recordResult, type Account } from './accounts.js';
@@ -383,6 +384,7 @@ export class Lobby {
     const endMatch = (endMsg: MatchEndMsg) => this.onGameEnd(state, endMsg);
     const sim: GameSim = def.mechanic === 'goal' ? new HockeySim(seats, mode, sendState, endMatch)
       : def.mechanic === 'pushout' ? new MatchSim(seats, mode, sendState, endMatch)
+      : def.mechanic === 'hotpotato' ? new HotPotatoSim(seats, mode, sendState, endMatch)
       : new FreeSim(seats, def, mode, sendState, endMatch);
     state.sim = sim; state.phase = 'playing';
     for (const seat of seats) if (seat.socketId) { const sess = this.sessions.get(seat.socketId); if (sess) sess.match = sim; }

@@ -14,7 +14,7 @@ const REACTIONS = ['GG', 'EZ', '😂', '😢', '👍'];
 // mechanics the server can simulate. The bespoke offline-only games (kart, maze,
 // boat, raft, foosball, sprint, …) are excluded so the picker never offers a
 // game the server can't run.
-const ONLINE_MECHANICS = new Set(['goal', 'icepush', 'climb', 'breaktiles', 'pushout', 'throwfight', 'dodge', 'collect', 'paint', 'mash']);
+const ONLINE_MECHANICS = new Set(['goal', 'icepush', 'climb', 'breaktiles', 'pushout', 'throwfight', 'dodge', 'collect', 'paint', 'mash', 'hotpotato']);
 const TEAM_MECHANICS = new Set(['pushout', 'throwfight', 'breaktiles', 'dodge', 'icepush']);
 function onlinePool(mode: 'ffa' | '2v2') {
   return GAMES.filter((g) => ONLINE_MECHANICS.has(g.mechanic) && (mode === 'ffa' || TEAM_MECHANICS.has(g.mechanic)));
