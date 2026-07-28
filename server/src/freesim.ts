@@ -1007,6 +1007,11 @@ export class FreeSim {
           if (p.dead || p.invulnT > 0 || p.y > 2.6) continue;
           const along = e.vx !== 0 ? Math.abs(p.z - e.z) : Math.abs(p.x - e.x);
           const across = e.vx !== 0 ? Math.abs(p.x - e.x) : Math.abs(p.z - e.z);
+          // Bots hop an imminent log (like offline) — jump just before it arrives.
+          if (p.socketId === null && p.y <= 0 && p.freezeT <= 0 && along < HALF * 0.55 && across < 6) {
+            const toward = e.vx !== 0 ? (p.x - e.x) * e.vx : (p.z - e.z) * e.vz;
+            if (toward > 0) { p.vy = JUMP_V; p.airJumps = 1; }
+          }
           if (across < HITBOX + 1.6 && along < HALF * 0.55) {
             const L = Math.hypot(e.vx, e.vz) || 1;
             p.vx += (e.vx / L) * 34;

@@ -29,6 +29,10 @@ const BREAK_N = 11;
 const CLIMB_W = 12;
 const CLIMB_L = 62; // KEEP IN SYNC with climb.ts + server freesim.ts
 const CLIMB_PACE = 0.7;
+// Rolling-log axles: a log rolls around its own long axis. extra 0 = moves in
+// x (long axis Z → roll around Z); extra 1 = moves in z (long axis X → roll around X).
+const LOG_AXLE_VX = new THREE.Vector3(0, 0, -1);
+const LOG_AXLE_VZ = new THREE.Vector3(1, 0, 0);
 // Snowball Smash "SLIPPERY" sign cover. KEEP IN SYNC with throwfight + server.
 const SIGN_HW = 4.6;
 const SIGN_HD = 1.1;
@@ -863,10 +867,12 @@ export class OnlineFreeRoam {
       }
       const ea = aById.get(id) ?? e;
       mesh.position.set(ea[2] + (x - ea[2]) * t, Math.max(ea[4] + (y - ea[4]) * t, type === ET.LOG ? 1.6 : 0.2), ea[3] + (z - ea[3]) * t);
-      // Boulders + volcano fireballs TUMBLE down-slope (offline spins them on x);
-      // loot/power crates spin on y.
-      if (type === ET.LOG) mesh.rotation.x += 0.12;
-      else if (type === ET.MISSILE && this.game.mechanic === 'climb') mesh.rotation.x += 0.14;
+      // Climb boulders + volcano fireballs TUMBLE on x; rolling logs spin around
+      // their own axle (so they actually ROLL, not tumble randomly); loot spins on y.
+      if (type === ET.LOG) {
+        if (this.game.mechanic === 'climb') mesh.rotation.x += 0.12;
+        else mesh.rotateOnWorldAxis(extra === 0 ? LOG_AXLE_VX : LOG_AXLE_VZ, 0.3);
+      } else if (type === ET.MISSILE && this.game.mechanic === 'climb') mesh.rotation.x += 0.14;
       else if (type === ET.LOOT || type === ET.MISSILE) mesh.rotation.y += 0.08;
     }
     for (const [id, mesh] of this.entMeshes) {
