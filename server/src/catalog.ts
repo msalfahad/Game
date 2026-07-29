@@ -3,7 +3,7 @@
 // Only what the simulation needs: mechanic, flavor mods, and duration.
 
 export type Mechanic =
-  | 'goal' | 'icepush' | 'climb' | 'breaktiles' | 'pushout' | 'throwfight' | 'race' | 'dodge' | 'collect' | 'paint' | 'mash' | 'hotpotato' | 'musicalchairs';
+  | 'goal' | 'icepush' | 'climb' | 'breaktiles' | 'pushout' | 'throwfight' | 'race' | 'dodge' | 'collect' | 'paint' | 'mash' | 'hotpotato' | 'musicalchairs' | 'chase';
 
 export interface OnlineGameDef {
   id: string;
@@ -36,6 +36,7 @@ export const ONLINE_CATALOG: OnlineGameDef[] = [
   g('wild-3', 'hotpotato', 60),                           // Watermelon Bomb
   // Dune Clash
   g('dune-2', 'musicalchairs', 90),                       // Musical Chairs
+  g('dune-3', 'chase', 55),                               // The Great Escape
   // Sky
   g('sky-3', 'dodge', 75, { hz: 'wind' }),                // Wind Gauntlet
   // Mech

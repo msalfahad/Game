@@ -71,6 +71,7 @@ export class OnlineFreeRoam {
   private mcPhase = 0;
   private mcHitLit = false;
   private mcChairs: { x: number; z: number; occ: number }[] = [];
+  private chaseGuard = -1;
   private gateMeshes: THREE.Mesh[] = [];
   private heldMeshes: (THREE.Mesh | null)[] = [null, null, null, null];
   private seq = 0;
@@ -124,6 +125,8 @@ export class OnlineFreeRoam {
       this.engine.camera.frame(18, 1.0, 55);
     } else if (this.game.mechanic === 'musicalchairs') {
       this.engine.camera.frame(19, 1.0, 52); // top-down-ish so the ring + chairs read clearly
+    } else if (this.game.mechanic === 'chase') {
+      this.engine.camera.frame(this.half, 1.0, 58); // top-down so you can read the maze
     } else {
       this.engine.camera.frame(isClimb ? 17 : this.half, this.game.mechanic === 'icepush' ? 1.18 : 1.0);
     }
@@ -369,11 +372,40 @@ export class OnlineFreeRoam {
         wall.position.set(sx * (this.half - 1.2), 3, 0);
         this.engine.scene.add(wall);
       }
+    } else if (mech === 'chase') {
+      // Sandstone yard: inner square with a centred gap on each side + boulders
+      // (matches server/src/chasesim.ts collision layout).
+      const inner = this.half * 0.5, gap = 5.5, thick = 1.5, height = 4.4, seg = (inner - gap) / 2;
+      const wallMat = new THREE.MeshStandardMaterial({ color: 0xcaa25c, roughness: 1, flatShading: true, emissive: 0x2a1c0a });
+      const wall = (cx: number, cz: number, hw: number, hd: number) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(hw * 2, height, hd * 2), wallMat);
+        m.position.set(cx, height / 2, cz); m.castShadow = true; this.engine.scene.add(m);
+      };
+      for (const sz of [-inner, inner]) { wall(-(gap + seg), sz, seg, thick); wall(gap + seg, sz, seg, thick); }
+      for (const sx of [-inner, inner]) { wall(sx, -(gap + seg), thick, seg); wall(sx, gap + seg, thick, seg); }
+      const rockMat = new THREE.MeshStandardMaterial({ color: 0xb08050, roughness: 1, flatShading: true, emissive: 0x241206 });
+      for (const [x, z, s] of [[8, 8, 1.9], [-8, -8, 1.9], [9, -7, 1.8], [-7, 9, 1.8]] as const) {
+        const r = new THREE.Mesh(new THREE.DodecahedronGeometry(s * 1.15, 0), rockMat);
+        r.position.set(x, s * 0.7, z); r.scale.y = 0.9; r.castShadow = true; this.engine.scene.add(r);
+      }
     }
   }
 
   // --- entity rendering --------------------------------------------------------
   private makeEntMesh(type: number, extra: number): THREE.Object3D {
+    if (type === ET.LOOT && this.game.mechanic === 'chase') {
+      // 👟 SHOES pickup: a green shoe on a glowing ring.
+      const g = new THREE.Group();
+      const sole = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.5, 1.25), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 }));
+      sole.position.y = 2.4; g.add(sole);
+      const upper = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.0, 1.15),
+        new THREE.MeshStandardMaterial({ color: 0x2fbf4a, roughness: 0.5, emissive: 0x0d3a12, emissiveIntensity: 0.4 }));
+      upper.position.set(-0.35, 3.1, 0); g.add(upper);
+      const ring = new THREE.Mesh(new THREE.RingGeometry(1.6, 2.2, 20),
+        new THREE.MeshBasicMaterial({ color: 0x7ed321, transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2; ring.position.y = 0.2; g.add(ring);
+      return g;
+    }
     if (type === ET.LOOT && extra >= 4 && this.game.mechanic === 'throwfight') {
       // Snowball Smash perks: 4 = shoes, 5 = zap, 6 = shield.
       const emoji = extra === 4 ? '\u{1F45F}' : extra === 5 ? '\u26A1' : '\u{1F6E1}\uFE0F';
@@ -550,6 +582,11 @@ export class OnlineFreeRoam {
     if (mech === 'musicalchairs') {
       this.mcSetPhase(m.aux ?? 0);
       this.mcChairs = (m.entities ?? []).map((e) => ({ x: e[2], z: e[3], occ: e[5] }));
+    }
+    if (mech === 'chase' && (m.aux ?? 0) !== this.chaseGuard) {
+      this.chaseGuard = m.aux ?? 0;
+      this.players.forEach((p, i) => p.setStatusIcon(i === this.chaseGuard ? '🥢' : '🏃', 9999));
+      HUD.setObjective(this.youSlot === this.chaseGuard ? '🥢 You are the GUARD — catch all 3!' : '🏃 RUN! Escape the guard!');
     }
     for (const ps of m.players) {
       const [slot, x, z, , , , lives, dead, freezeT, shieldT, cd, score, flags] = ps;
@@ -972,7 +1009,10 @@ export class OnlineFreeRoam {
   }
 
   private predictLocal(dt: number) {
-    if (this.game.mechanic === 'hotpotato' || this.game.mechanic === 'musicalchairs') return; // server-driven positions
+    // Hot potato / musical chairs / chase are server-authoritative for position
+    // (static ring, server-driven march, or maze collision) — no local predict.
+    const m = this.game.mechanic;
+    if (m === 'hotpotato' || m === 'musicalchairs' || m === 'chase') return;
     const p = this.players[this.youSlot];
     if (p.dead) return;
     // Mirror the server + offline movement exactly (src/shared/roammove.ts).
@@ -1042,9 +1082,9 @@ export class OnlineFreeRoam {
 
     for (const psB of b.msg.players) {
       const slot = psB[0];
-      // In musical chairs the march is server-driven, so interpolate everyone
+      // Musical chairs + chase are server-authoritative, so interpolate everyone
       // (including you); other games predict the local player instead.
-      if (slot === this.youSlot && this.game.mechanic !== 'musicalchairs') continue;
+      if (slot === this.youSlot && this.game.mechanic !== 'musicalchairs' && this.game.mechanic !== 'chase') continue;
       const p = this.players[slot];
       if (!p || p.dead) continue;
       const psA = a.msg.players.find((q) => q[0] === slot) ?? psB;
