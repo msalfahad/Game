@@ -63,6 +63,11 @@ export class OnlineFreeRoam {
   private hpHolder = 0;
   private passTarget: number | null = null;
   private hpOnDown: ((e: PointerEvent) => void) | null = null;
+  // Musical chairs UI.
+  private mcRunBtn: HTMLButtonElement | null = null;
+  private mcSitBtn: HTMLButtonElement | null = null;
+  private mcSitText: HTMLElement | null = null;
+  private mcPhase = 0;
   private gateMeshes: THREE.Mesh[] = [];
   private heldMeshes: (THREE.Mesh | null)[] = [null, null, null, null];
   private seq = 0;
@@ -114,6 +119,8 @@ export class OnlineFreeRoam {
     // angle so the characters spread out and are easy to tap.
     if (this.game.mechanic === 'hotpotato') {
       this.engine.camera.frame(18, 1.0, 55);
+    } else if (this.game.mechanic === 'musicalchairs') {
+      this.engine.camera.frame(19, 1.0, 52); // top-down-ish so the ring + chairs read clearly
     } else {
       this.engine.camera.frame(isClimb ? 17 : this.half, this.game.mechanic === 'icepush' ? 1.18 : 1.0);
     }
@@ -162,9 +169,11 @@ export class OnlineFreeRoam {
       this.buildJumpButton();
     }
     if (this.game.mechanic === 'hotpotato') this.buildHotPotato();
+    if (this.game.mechanic === 'musicalchairs') this.buildMusicChairs();
     this.input.setEnabled(true);
-    // Hot potato players stand still — no movement stick, just the PASS button.
-    this.input.setMode(this.game.mechanic === 'hotpotato' ? 'hidden' : 'float');
+    // Hot potato / musical chairs are button-driven — no movement stick.
+    const noStick = this.game.mechanic === 'hotpotato' || this.game.mechanic === 'musicalchairs';
+    this.input.setMode(noStick ? 'hidden' : 'float');
 
     net.cb.onState = (m) => this.onState(m);
     net.cb.onMatchEnd = (m) => this.end(m);
@@ -415,6 +424,19 @@ export class OnlineFreeRoam {
           : new THREE.MeshStandardMaterial({ color: 0x9db8cc, roughness: 0.8 }),
       );
     }
+    if (type === ET.TARGET && this.game.mechanic === 'musicalchairs') {
+      const g = new THREE.Group();
+      const wood = new THREE.MeshStandardMaterial({ color: 0xb9762f, roughness: 0.7, emissive: 0x2a1608 });
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.6, 3.4), wood); seat.position.y = 2.1; g.add(seat);
+      const back = new THREE.Mesh(new THREE.BoxGeometry(3.4, 3.2, 0.5), wood); back.position.set(0, 3.6, -1.5); g.add(back);
+      for (const [lx, lz] of [[-1.4, -1.4], [1.4, -1.4], [-1.4, 1.4], [1.4, 1.4]] as const) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.5, 2.1, 0.5), wood); leg.position.set(lx, 1.05, lz); g.add(leg);
+      }
+      const cushion = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.3, 3.0),
+        new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xffb020, emissiveIntensity: 0.6, roughness: 0.5 }));
+      cushion.position.y = 2.5; g.add(cushion);
+      return g;
+    }
     if (type === ET.MISSILE && this.game.mechanic === 'climb') {
       // Guardian fireball; extra&4 = the BIG one (1.5x).
       const big = (extra & 4) !== 0;
@@ -522,12 +544,15 @@ export class OnlineFreeRoam {
 
     const mech = this.game.mechanic;
     if (mech === 'hotpotato') this.hpArmT = m.aux ?? 0;
+    if (mech === 'musicalchairs') this.mcSetPhase(m.aux ?? 0);
     for (const ps of m.players) {
       const [slot, x, z, , , , lives, dead, freezeT, shieldT, cd, score, flags] = ps;
       const p = this.players[slot];
       if (!p) continue;
       // Hot potato: players are static in the ring; take positions + holder from the server.
       if (mech === 'hotpotato') { p.x = x; p.z = z; if ((flags & 1) === 1) this.hpHolder = slot; }
+      // Musical chairs: interpolate handles positions; just reflect the sit pose.
+      if (mech === 'musicalchairs') p.sitting = (flags & 1) === 1;
       // HUD value per mechanic.
       const shown = mech === 'throwfight' ? (this.game.mods?.proj === 'snowball' ? score : Math.max(lives, 0))
         : mech === 'breaktiles' || mech === 'dodge' || mech === 'icepush' ? Math.max(lives, 0)
@@ -784,6 +809,7 @@ export class OnlineFreeRoam {
   private buildJumpButton() {
     document.getElementById('dodgeUI')?.remove();
     document.getElementById('hpUI')?.remove();
+    document.getElementById('mcUI')?.remove();
     if (this.hpOnDown) { document.removeEventListener('pointerdown', this.hpOnDown); this.hpOnDown = null; }
     const ui = document.createElement('div');
     ui.id = 'dodgeUI';
@@ -827,6 +853,7 @@ export class OnlineFreeRoam {
     this.melon = g; this.melonSpark = spark;
 
     document.getElementById('hpUI')?.remove();
+    document.getElementById('mcUI')?.remove();
     if (this.hpOnDown) { document.removeEventListener('pointerdown', this.hpOnDown); this.hpOnDown = null; }
     const ui = document.createElement('div');
     ui.id = 'hpUI';
@@ -861,6 +888,37 @@ export class OnlineFreeRoam {
     document.addEventListener('pointerdown', this.hpOnDown);
   }
 
+  /** Musical Chairs: RUN (walk) / SIT (music stopped) buttons + the SIT! cue. */
+  private buildMusicChairs() {
+    document.getElementById('mcUI')?.remove();
+    const ui = document.createElement('div');
+    ui.id = 'mcUI';
+    ui.style.cssText = 'position:fixed;inset:0;z-index:8;pointer-events:none;font-family:Bungee,system-ui,sans-serif;';
+    ui.innerHTML = `
+      <div id="mcSit" style="position:fixed;top:108px;left:50%;transform:translateX(-50%);font-size:48px;color:#FF4D4D;
+        text-shadow:0 4px 0 rgba(0,0,0,.5);opacity:0;transition:opacity .08s;">SIT!</div>
+      <div style="position:fixed;left:0;right:0;bottom:24px;display:flex;justify-content:center;gap:14px;">
+        <button id="mcRun" style="pointer-events:auto;font-size:18px;border:none;border-radius:14px;padding:14px 24px;color:#12142e;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);background:#4DC3FF;">🏃 RUN</button>
+        <button id="mcSitBtn" style="pointer-events:auto;display:none;font-size:18px;border:none;border-radius:14px;padding:14px 24px;color:#12142e;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);background:#7ED321;">🪑 SIT</button>
+      </div>`;
+    document.body.appendChild(ui);
+    this.mcSitText = ui.querySelector('#mcSit');
+    this.mcRunBtn = ui.querySelector('#mcRun');
+    this.mcSitBtn = ui.querySelector('#mcSitBtn');
+    const tap = (el: HTMLElement) => el.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.ultQueued = true; });
+    tap(this.mcRunBtn!); tap(this.mcSitBtn!);
+  }
+
+  private mcSetPhase(phase: number) {
+    if (phase === this.mcPhase) return;
+    this.mcPhase = phase;
+    const sit = phase === 1;
+    if (this.mcSitText) this.mcSitText.style.opacity = sit ? '1' : '0';
+    if (this.mcRunBtn) this.mcRunBtn.style.display = phase === 0 ? 'inline-block' : 'none';
+    if (this.mcSitBtn) this.mcSitBtn.style.display = sit ? 'inline-block' : 'none';
+    if (sit) { SFX.out(); HUD.banner('SIT!', '#FF4D4D'); this.engine.camera.shake(1.5); }
+  }
+
   /** Throw the melon (only matters while you hold it — the server enforces that). */
   private hpPass(target?: number) {
     this.ultQueued = true; // sent as `ult`
@@ -877,7 +935,7 @@ export class OnlineFreeRoam {
   }
 
   private predictLocal(dt: number) {
-    if (this.game.mechanic === 'hotpotato') return; // players stand still in the ring
+    if (this.game.mechanic === 'hotpotato' || this.game.mechanic === 'musicalchairs') return; // server-driven positions
     const p = this.players[this.youSlot];
     if (p.dead) return;
     // Mirror the server + offline movement exactly (src/shared/roammove.ts).
@@ -947,7 +1005,9 @@ export class OnlineFreeRoam {
 
     for (const psB of b.msg.players) {
       const slot = psB[0];
-      if (slot === this.youSlot) continue;
+      // In musical chairs the march is server-driven, so interpolate everyone
+      // (including you); other games predict the local player instead.
+      if (slot === this.youSlot && this.game.mechanic !== 'musicalchairs') continue;
       const p = this.players[slot];
       if (!p || p.dead) continue;
       const psA = a.msg.players.find((q) => q[0] === slot) ?? psB;
@@ -978,6 +1038,7 @@ export class OnlineFreeRoam {
         if (this.game.mechanic === 'climb') mesh.rotation.x += 0.12;
         else mesh.rotateOnWorldAxis(extra === 0 ? LOG_AXLE_VX : LOG_AXLE_VZ, 0.3);
       } else if (type === ET.MISSILE && this.game.mechanic === 'climb') mesh.rotation.x += 0.14;
+      else if (type === ET.TARGET && this.game.mechanic === 'musicalchairs') mesh.rotation.y = Math.atan2(-mesh.position.x, -mesh.position.z);
       else if (type === ET.LOOT || type === ET.MISSILE) mesh.rotation.y += 0.08;
     }
     for (const [id, mesh] of this.entMeshes) {
@@ -1035,6 +1096,7 @@ export class OnlineFreeRoam {
     HUD.showHud(false);
     document.getElementById('dodgeUI')?.remove();
     document.getElementById('hpUI')?.remove();
+    document.getElementById('mcUI')?.remove();
     if (this.hpOnDown) { document.removeEventListener('pointerdown', this.hpOnDown); this.hpOnDown = null; }
     const won = m.mode === '2v2'
       ? m.ranking.find((r) => r.slot === this.youSlot)?.team === m.winnerTeam
@@ -1059,6 +1121,7 @@ export class OnlineFreeRoam {
     HUD.showHud(false);
     document.getElementById('dodgeUI')?.remove();
     document.getElementById('hpUI')?.remove();
+    document.getElementById('mcUI')?.remove();
     if (this.hpOnDown) { document.removeEventListener('pointerdown', this.hpOnDown); this.hpOnDown = null; }
     net.cb.onState = undefined;
     net.cb.onMatchEnd = undefined;
