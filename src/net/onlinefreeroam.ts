@@ -1204,7 +1204,7 @@ export class OnlineFreeRoam {
 
   private interpolate() {
     if (this.snaps.length < 2) return;
-    const renderAt = performance.now() - 120;
+    const renderAt = performance.now() - 100; // 2-snapshot buffer at 20Hz; fresher remote players
     let a = this.snaps[0], b = this.snaps[this.snaps.length - 1];
     for (let i = 0; i < this.snaps.length - 1; i++) {
       if (this.snaps[i].at <= renderAt && this.snaps[i + 1].at >= renderAt) {
