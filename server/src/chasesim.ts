@@ -12,8 +12,8 @@ import type { GameSim, MatchSeat } from './sim.js';
 
 const HALF = 30;
 const DUR = 55;
-const GUARD_SPEED = 1.4;
-const SHOES_SPEED = 1.62;
+const GUARD_SPEED = 1.18; // reeled-in feel, not a sprint (was 1.4)
+const SHOES_SPEED = 1.45;  // shoes still clearly beat the guard
 const HITBOX = 3.0;
 const CATCH_R = HITBOX * 2 + 3.2;
 
@@ -149,7 +149,7 @@ export class ChaseSim implements GameSim {
       if (prey.length) {
         let d = Infinity;
         for (const q of prey) d = Math.min(d, Math.hypot(q.x - p.x, q.z - p.z));
-        boost = d > 20 ? 1.42 : d > 12 ? 1.2 : 1;
+        boost = d > 22 ? 1.16 : d > 13 ? 1.08 : 1;
       }
       return GUARD_SPEED * boost;
     }
