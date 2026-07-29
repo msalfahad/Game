@@ -66,8 +66,11 @@ export class OnlineFreeRoam {
   // Musical chairs UI.
   private mcRunBtn: HTMLButtonElement | null = null;
   private mcSitBtn: HTMLButtonElement | null = null;
+  private mcHitBtn: HTMLButtonElement | null = null;
   private mcSitText: HTMLElement | null = null;
   private mcPhase = 0;
+  private mcHitLit = false;
+  private mcChairs: { x: number; z: number; occ: number }[] = [];
   private gateMeshes: THREE.Mesh[] = [];
   private heldMeshes: (THREE.Mesh | null)[] = [null, null, null, null];
   private seq = 0;
@@ -544,15 +547,23 @@ export class OnlineFreeRoam {
 
     const mech = this.game.mechanic;
     if (mech === 'hotpotato') this.hpArmT = m.aux ?? 0;
-    if (mech === 'musicalchairs') this.mcSetPhase(m.aux ?? 0);
+    if (mech === 'musicalchairs') {
+      this.mcSetPhase(m.aux ?? 0);
+      this.mcChairs = (m.entities ?? []).map((e) => ({ x: e[2], z: e[3], occ: e[5] }));
+    }
     for (const ps of m.players) {
       const [slot, x, z, , , , lives, dead, freezeT, shieldT, cd, score, flags] = ps;
       const p = this.players[slot];
       if (!p) continue;
       // Hot potato: players are static in the ring; take positions + holder from the server.
       if (mech === 'hotpotato') { p.x = x; p.z = z; if ((flags & 1) === 1) this.hpHolder = slot; }
-      // Musical chairs: interpolate handles positions; just reflect the sit pose.
-      if (mech === 'musicalchairs') p.sitting = (flags & 1) === 1;
+      // Musical chairs: interpolate handles positions; reflect sit/fallen + punch-lit.
+      if (mech === 'musicalchairs') {
+        p.sitting = (flags & 1) === 1;
+        p.fallen = (flags & 4) === 4;
+        p.standFacing = p.sitting ? Math.atan2(-p.x, -p.z) : null; // seated: face the centre
+        if (slot === this.youSlot) this.mcHitLit = (flags & 2) === 2;
+      }
       // HUD value per mechanic.
       const shown = mech === 'throwfight' ? (this.game.mods?.proj === 'snowball' ? score : Math.max(lives, 0))
         : mech === 'breaktiles' || mech === 'dodge' || mech === 'icepush' ? Math.max(lives, 0)
@@ -713,8 +724,13 @@ export class OnlineFreeRoam {
     const jumpPressed = this.input.takeJump();
     const abilityPressed = this.input.takeAbility();
     const isClimb = this.game.mechanic === 'climb';
-    if (jumpPressed || (isClimb && abilityPressed)) this.doJump();
-    if (!isClimb && abilityPressed) this.ultQueued = true;
+    if (this.game.mechanic === 'musicalchairs') {
+      if (jumpPressed) this.jumpQueued = true;   // PUNCH
+      if (abilityPressed) this.ultQueued = true; // RUN / SIT
+    } else {
+      if (jumpPressed || (isClimb && abilityPressed)) this.doJump();
+      if (!isClimb && abilityPressed) this.ultQueued = true;
+    }
 
     this.inputTimer -= dt;
     if (this.inputTimer <= 0) {
@@ -799,6 +815,7 @@ export class OnlineFreeRoam {
         this.hpCountEl.style.transform = `translateX(-50%) translate(${j}px,${j}px) scale(${dz ? 1.25 : 1})`;
       }
     }
+    if (this.game.mechanic === 'musicalchairs') this.mcUpdateButtons();
     HUD.setAbilityHint(you.dead ? '' : you.cd <= 0 ? 'ready' : '');
     this.world.tick(dt);
     this.tickParts(dt);
@@ -899,14 +916,18 @@ export class OnlineFreeRoam {
         text-shadow:0 4px 0 rgba(0,0,0,.5);opacity:0;transition:opacity .08s;">SIT!</div>
       <div style="position:fixed;left:0;right:0;bottom:24px;display:flex;justify-content:center;gap:14px;">
         <button id="mcRun" style="pointer-events:auto;font-size:18px;border:none;border-radius:14px;padding:14px 24px;color:#12142e;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);background:#4DC3FF;">🏃 RUN</button>
+        <button id="mcHit" style="pointer-events:auto;display:none;font-size:18px;border:none;border-radius:14px;padding:14px 24px;color:#12142e;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);background:#FFD23F;">👊 PUNCH</button>
         <button id="mcSitBtn" style="pointer-events:auto;display:none;font-size:18px;border:none;border-radius:14px;padding:14px 24px;color:#12142e;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);background:#7ED321;">🪑 SIT</button>
       </div>`;
     document.body.appendChild(ui);
     this.mcSitText = ui.querySelector('#mcSit');
     this.mcRunBtn = ui.querySelector('#mcRun');
+    this.mcHitBtn = ui.querySelector('#mcHit');
     this.mcSitBtn = ui.querySelector('#mcSitBtn');
-    const tap = (el: HTMLElement) => el.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.ultQueued = true; });
-    tap(this.mcRunBtn!); tap(this.mcSitBtn!);
+    const tap = (el: HTMLElement, fn: () => void) => el.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); fn(); });
+    tap(this.mcRunBtn!, () => { this.ultQueued = true; }); // RUN
+    tap(this.mcSitBtn!, () => { this.ultQueued = true; }); // SIT
+    tap(this.mcHitBtn!, () => { this.jumpQueued = true; }); // PUNCH
   }
 
   private mcSetPhase(phase: number) {
@@ -914,9 +935,25 @@ export class OnlineFreeRoam {
     this.mcPhase = phase;
     const sit = phase === 1;
     if (this.mcSitText) this.mcSitText.style.opacity = sit ? '1' : '0';
-    if (this.mcRunBtn) this.mcRunBtn.style.display = phase === 0 ? 'inline-block' : 'none';
-    if (this.mcSitBtn) this.mcSitBtn.style.display = sit ? 'inline-block' : 'none';
     if (sit) { SFX.out(); HUD.banner('SIT!', '#FF4D4D'); this.engine.camera.shake(1.5); }
+  }
+
+  /** Per-frame RUN / PUNCH / SIT button visibility. SIT enables only when a free
+   *  chair is within reach (you must be near one) — the sit radius. */
+  private mcUpdateButtons() {
+    const me = this.players[this.youSlot];
+    const walk = this.mcPhase === 0, sit = this.mcPhase === 1;
+    if (this.mcRunBtn) this.mcRunBtn.style.display = walk && me && !me.dead ? 'inline-block' : 'none';
+    if (this.mcHitBtn) this.mcHitBtn.style.display = walk && this.mcHitLit && me && !me.dead ? 'inline-block' : 'none';
+    if (this.mcSitBtn) {
+      const show = sit && me && !me.dead && !me.sitting;
+      this.mcSitBtn.style.display = show ? 'inline-block' : 'none';
+      if (show) {
+        const near = this.mcChairs.some((c) => c.occ === 0 && Math.hypot(c.x - me.x, c.z - me.z) <= 10);
+        this.mcSitBtn.style.opacity = near ? '1' : '0.4';
+        this.mcSitBtn.style.filter = near ? '' : 'grayscale(1)';
+      }
+    }
   }
 
   /** Throw the melon (only matters while you hold it — the server enforces that). */
@@ -1038,7 +1075,7 @@ export class OnlineFreeRoam {
         if (this.game.mechanic === 'climb') mesh.rotation.x += 0.12;
         else mesh.rotateOnWorldAxis(extra === 0 ? LOG_AXLE_VX : LOG_AXLE_VZ, 0.3);
       } else if (type === ET.MISSILE && this.game.mechanic === 'climb') mesh.rotation.x += 0.14;
-      else if (type === ET.TARGET && this.game.mechanic === 'musicalchairs') mesh.rotation.y = Math.atan2(-mesh.position.x, -mesh.position.z);
+      else if (type === ET.TARGET && this.game.mechanic === 'musicalchairs') mesh.rotation.y = -Math.atan2(mesh.position.z, mesh.position.x) + Math.PI / 2;
       else if (type === ET.LOOT || type === ET.MISSILE) mesh.rotation.y += 0.08;
     }
     for (const [id, mesh] of this.entMeshes) {
