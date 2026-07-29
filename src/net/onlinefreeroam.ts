@@ -72,6 +72,7 @@ export class OnlineFreeRoam {
   private mcHitLit = false;
   private mcChairs: { x: number; z: number; occ: number }[] = [];
   private chaseGuard = -1;
+  private _chaseCrates: { x: number; z: number; hw: number; hd: number }[] | null = null;
   private gateMeshes: THREE.Mesh[] = [];
   private heldMeshes: (THREE.Mesh | null)[] = [null, null, null, null];
   private seq = 0;
@@ -388,6 +389,81 @@ export class OnlineFreeRoam {
         const r = new THREE.Mesh(new THREE.DodecahedronGeometry(s * 1.15, 0), rockMat);
         r.position.set(x, s * 0.7, z); r.scale.y = 0.9; r.castShadow = true; this.engine.scene.add(r);
       }
+      this.buildDesert();
+    }
+  }
+
+  /** Desert surroundings for The Great Escape — ported from offline chase.ts:
+   *  one continuous sand floor, red-rock mountains/buttes, saguaro cacti,
+   *  low dunes and scattered rocks, so online reads the same as offline. */
+  private buildDesert() {
+    const H = this.half;
+    const scene = this.engine.scene;
+
+    const sand = new THREE.Mesh(
+      new THREE.PlaneGeometry(360, 360),
+      new THREE.MeshStandardMaterial({ color: 0xc9a25b, roughness: 1 }),
+    );
+    sand.rotation.x = -Math.PI / 2;
+    sand.position.y = -0.06;
+    sand.receiveShadow = true;
+    scene.add(sand);
+
+    const mesaMats = [
+      new THREE.MeshStandardMaterial({ color: 0xb5651d, roughness: 1, flatShading: true }),
+      new THREE.MeshStandardMaterial({ color: 0x9c4f1a, roughness: 1, flatShading: true }),
+    ];
+    const duneMat = new THREE.MeshStandardMaterial({ color: 0xd7ad64, roughness: 1 });
+    const cactusMat = new THREE.MeshStandardMaterial({ color: 0x3f7a34, roughness: 0.9 });
+
+    const butte = (x: number, z: number, rad: number, hgt: number) => {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(rad * 0.78, rad, hgt, 7), mesaMats[0]);
+      m.position.set(x, hgt / 2 - 4, z); scene.add(m);
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(rad * 0.42, rad * 0.6, hgt * 0.5, 7), mesaMats[1]);
+      top.position.set(x, hgt + hgt * 0.25 - 4, z); scene.add(top);
+    };
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + 0.5;
+      butte(Math.cos(a) * H * 2.7, Math.sin(a) * H * 2.7, 20 + Math.random() * 14, 34 + Math.random() * 26);
+    }
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + 0.9;
+      butte(Math.cos(a) * H * 1.65, Math.sin(a) * H * 1.65, 7 + Math.random() * 5, 10 + Math.random() * 8);
+    }
+
+    const saguaro = (x: number, z: number, sc: number) => {
+      const grp = new THREE.Group();
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.9 * sc, 1.1 * sc, 10 * sc, 8), cactusMat);
+      trunk.position.y = 5 * sc; trunk.castShadow = true; grp.add(trunk);
+      const arm = (side: number, y: number) => {
+        const horiz = new THREE.Mesh(new THREE.CylinderGeometry(0.5 * sc, 0.55 * sc, 2.4 * sc, 7), cactusMat);
+        horiz.rotation.z = Math.PI / 2; horiz.position.set(side * 1.5 * sc, y, 0); grp.add(horiz);
+        const up = new THREE.Mesh(new THREE.CylinderGeometry(0.5 * sc, 0.55 * sc, 3 * sc, 7), cactusMat);
+        up.position.set(side * 2.6 * sc, y + 1.5 * sc, 0); grp.add(up);
+      };
+      arm(1, 6 * sc); arm(-1, 7.5 * sc);
+      grp.position.set(x, 0, z); grp.rotation.y = Math.random() * 6;
+      scene.add(grp);
+    };
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2 + 0.1;
+      const r = H * (1.14 + Math.random() * 0.55);
+      saguaro(Math.cos(a) * r, Math.sin(a) * r, 0.7 + Math.random() * 0.6);
+    }
+
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2, r = H * (1.25 + Math.random() * 1.1);
+      const dune = new THREE.Mesh(new THREE.SphereGeometry(9 + Math.random() * 10, 12, 6), duneMat);
+      dune.scale.set(1, 0.14, 1);
+      dune.position.set(Math.cos(a) * r, -0.5, Math.sin(a) * r);
+      scene.add(dune);
+    }
+    const desertRockMat = new THREE.MeshStandardMaterial({ color: 0xa8794c, roughness: 1, flatShading: true });
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2, r = H * (1.1 + Math.random() * 0.9);
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(1.2 + Math.random() * 2, 0), desertRockMat);
+      rock.position.set(Math.cos(a) * r, 0.4, Math.sin(a) * r);
+      scene.add(rock);
     }
   }
 
@@ -1009,10 +1085,11 @@ export class OnlineFreeRoam {
   }
 
   private predictLocal(dt: number) {
-    // Hot potato / musical chairs / chase are server-authoritative for position
-    // (static ring, server-driven march, or maze collision) — no local predict.
+    // Hot potato / musical chairs are server-authoritative for position
+    // (static ring or server-driven march) — no local predict.
     const m = this.game.mechanic;
-    if (m === 'hotpotato' || m === 'musicalchairs' || m === 'chase') return;
+    if (m === 'hotpotato' || m === 'musicalchairs') return;
+    if (m === 'chase') { this.predictChase(dt); return; }
     const p = this.players[this.youSlot];
     if (p.dead) return;
     // Mirror the server + offline movement exactly (src/shared/roammove.ts).
@@ -1067,6 +1144,64 @@ export class OnlineFreeRoam {
     }
   }
 
+  // Wall + boulder rects for The Great Escape, mirroring server buildWalls().
+  private chaseCrates(): { x: number; z: number; hw: number; hd: number }[] {
+    if (this._chaseCrates) return this._chaseCrates;
+    const inner = this.half * 0.5, gap = 5.5, thick = 1.5, seg = (inner - gap) / 2;
+    const c: { x: number; z: number; hw: number; hd: number }[] = [];
+    for (const sz of [-inner, inner]) { c.push({ x: -(gap + seg), z: sz, hw: seg, hd: thick }, { x: gap + seg, z: sz, hw: seg, hd: thick }); }
+    for (const sx of [-inner, inner]) { c.push({ x: sx, z: -(gap + seg), hw: thick, hd: seg }, { x: sx, z: gap + seg, hw: thick, hd: seg }); }
+    for (const [x, z, s] of [[8, 8, 1.9], [-8, -8, 1.9], [9, -7, 1.8], [-7, 9, 1.8]] as const) c.push({ x, z, hw: s, hd: s });
+    this._chaseCrates = c;
+    return c;
+  }
+
+  /** Client-side prediction for The Great Escape: mirror server applyMove +
+   *  resolveCrates + clampWalls so the local runner responds instantly; the
+   *  soft reconcile in onState() pulls it back to the authoritative position. */
+  private predictChase(dt: number) {
+    const p = this.players[this.youSlot];
+    if (!p || p.dead || p.freezeT > 0) return;
+    const HITBOX = 3.0, HALF = this.half; // arena matches server HALF=30
+    // Chase speed multiplier (mirrors ChaseSim.speedMul).
+    let mul = 1;
+    if (this.youSlot === this.chaseGuard) {
+      let d = Infinity;
+      this.players.forEach((q, i) => { if (i !== this.chaseGuard && !q.dead) d = Math.min(d, Math.hypot(q.x - p.x, q.z - p.z)); });
+      const boost = d > 22 ? 1.16 : d > 13 ? 1.08 : 1;
+      mul = 1.18 * boost;
+    } else if (p.shoesT > 0) {
+      mul = 1.45;
+    }
+    const surf = roamSurface('dune', false); // sand
+    const top = MOVE.baseSpeed * speedMult(p.hero) * sprintMul(this.input.ax, this.input.ay) * mul;
+    const accel = top * MOVE.accelMul * surf.accel;
+    p.vx += this.input.ax * accel * dt;
+    p.vz += this.input.ay * accel * dt;
+    const retain = Math.pow(surf.grip, dt);
+    p.vx *= retain; p.vz *= retain;
+    const sp = Math.hypot(p.vx, p.vz);
+    if (sp > top) { p.vx *= top / sp; p.vz *= top / sp; }
+    p.x += p.vx * dt; p.z += p.vz * dt;
+    // Boulder / wall collision.
+    for (const c of this.chaseCrates()) {
+      const dx = p.x - c.x, dz = p.z - c.z;
+      const nx = c.x + Math.max(-c.hw, Math.min(c.hw, dx)), nz = c.z + Math.max(-c.hd, Math.min(c.hd, dz));
+      let ox = p.x - nx, oz = p.z - nz; let d = Math.hypot(ox, oz);
+      if (d >= HITBOX) continue;
+      if (d < 0.0001) { const px = c.hw - Math.abs(dx), pz = c.hd - Math.abs(dz); if (px < pz) { ox = Math.sign(dx) || 1; oz = 0; } else { ox = 0; oz = Math.sign(dz) || 1; } d = 1; }
+      const push = HITBOX - d, ux = ox / d, uz = oz / d;
+      p.x += ux * push; p.z += uz * push;
+      const into = p.vx * ux + p.vz * uz;
+      if (into < 0) { p.vx -= into * ux; p.vz -= into * uz; }
+    }
+    const mrg = HALF - HITBOX;
+    if (p.x < -mrg) { p.x = -mrg; if (p.vx < 0) p.vx = 0; }
+    if (p.x > mrg) { p.x = mrg; if (p.vx > 0) p.vx = 0; }
+    if (p.z < -mrg) { p.z = -mrg; if (p.vz < 0) p.vz = 0; }
+    if (p.z > mrg) { p.z = mrg; if (p.vz > 0) p.vz = 0; }
+  }
+
   private interpolate() {
     if (this.snaps.length < 2) return;
     const renderAt = performance.now() - 120;
@@ -1082,9 +1217,9 @@ export class OnlineFreeRoam {
 
     for (const psB of b.msg.players) {
       const slot = psB[0];
-      // Musical chairs + chase are server-authoritative, so interpolate everyone
-      // (including you); other games predict the local player instead.
-      if (slot === this.youSlot && this.game.mechanic !== 'musicalchairs' && this.game.mechanic !== 'chase') continue;
+      // Musical chairs is server-authoritative, so interpolate everyone
+      // (including you); other games (incl. chase) predict the local player.
+      if (slot === this.youSlot && this.game.mechanic !== 'musicalchairs') continue;
       const p = this.players[slot];
       if (!p || p.dead) continue;
       const psA = a.msg.players.find((q) => q[0] === slot) ?? psB;
