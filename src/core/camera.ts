@@ -18,6 +18,7 @@ export class IsoCamera {
   private chasing = false;
   private arena = false;
   private angled = false;
+  private frameElev: number | undefined;
   private arenaHalfW = 20;
   private arenaHalfL = 24;
 
@@ -29,9 +30,10 @@ export class IsoCamera {
    * Frame the arena. `halfSize` is the arena half-extent in world units;
    * `zoom` > 1 pulls in tighter (used for the small hockey rink).
    */
-  frame(halfSize: number, zoom = 1) {
+  frame(halfSize: number, zoom = 1, elevDeg?: number) {
     this.halfSize = halfSize;
     this.zoom = zoom;
+    this.frameElev = elevDeg;
     const aspect = innerWidth / innerHeight;
     this.cam.fov = 56;
     this.cam.aspect = aspect;
@@ -44,7 +46,14 @@ export class IsoCamera {
     const wide = aspect > 1.8 ? 1 / 1.14 : 1;
     const dist = halfSize * 2.25 * portrait * zoom * wide;
     const height = halfSize * 1.5 * portrait * zoom * wide;
-    this.base.set(0, height, dist);
+    if (elevDeg != null) {
+      // Same overall distance, but a steeper (more top-down) elevation angle.
+      const D = Math.hypot(dist, height);
+      const e = (elevDeg * Math.PI) / 180;
+      this.base.set(0, D * Math.sin(e), D * Math.cos(e));
+    } else {
+      this.base.set(0, height, dist);
+    }
     this.look.set(0, -2, -halfSize * 0.06);
     this.topDown = false;
     this.chasing = false;
@@ -187,7 +196,7 @@ export class IsoCamera {
     if (this.arena) { this.frameArena(this.arenaHalfW, this.arenaHalfL); return; }
     if (this.base.lengthSq() > 0) {
       if (this.topDown) this.frameTopDown(this.halfSize);
-      else this.frame(this.halfSize, this.zoom);
+      else this.frame(this.halfSize, this.zoom, this.frameElev);
     }
   }
 

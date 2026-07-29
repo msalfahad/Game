@@ -110,9 +110,13 @@ export class OnlineFreeRoam {
       isClimb ? { w: CLIMB_W, l: CLIMB_L } : undefined,
     );
     // Ice push pulls back a touch so the FULL circular rink fits on phones.
-    // Hot potato zooms in on the ring so the characters are big + easy to tap.
-    const frameHalf = isClimb ? 17 : this.game.mechanic === 'hotpotato' ? 15 : this.half;
-    this.engine.camera.frame(frameHalf, this.game.mechanic === 'icepush' ? 1.18 : 1.0);
+    // Hot potato: frame the ring a bit tighter, from a steeper (more top-down)
+    // angle so the characters spread out and are easy to tap.
+    if (this.game.mechanic === 'hotpotato') {
+      this.engine.camera.frame(18, 1.0, 55);
+    } else {
+      this.engine.camera.frame(isClimb ? 17 : this.half, this.game.mechanic === 'icepush' ? 1.18 : 1.0);
+    }
     this.engine.post.setGrade(FAMILY_GRADE[family.id] ?? {});
 
     const is2v2 = msg.mode === '2v2';
