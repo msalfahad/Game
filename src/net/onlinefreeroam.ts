@@ -73,6 +73,34 @@ export class OnlineFreeRoam {
   private mcChairs: { x: number; z: number; occ: number }[] = [];
   private chaseGuard = -1;
   private _chaseCrates: { x: number; z: number; hw: number; hd: number }[] | null = null;
+  // Race Kart.
+  private kartMeshes: (THREE.Group | null)[] = [null, null, null, null];
+  private kartHead: number[] = [0, 0, 0, 0];
+  private kartHeld: number[] = [0, 0, 0, 0];
+  private kartItemBtn: HTMLButtonElement | null = null;
+  private kartSpeedBtn: HTMLButtonElement | null = null;
+  private kartBoostHeld = false;
+  private kartItemQueued = false;
+  // Night Heist (maze).
+  private mazeCop = -1;
+  private mazeFace: number[] = [0, 0, 0, 0];
+  private mazeBattery: number[] = [9, 9, 9, 9];
+  private mazeTorchOn: boolean[] = [false, false, false, false];
+  private mazeExposure = 0;
+  private _mazeWalls: { x: number; z: number; hw: number; hd: number }[] | null = null;
+  private mazeSpots: (THREE.SpotLight | null)[] = [null, null, null, null];
+  private mazeSpotTargets: (THREE.Object3D | null)[] = [null, null, null, null];
+  private mazeGlows: (THREE.PointLight | null)[] = [null, null, null, null];
+  private mazeLabels: (THREE.Sprite | null)[] = [null, null, null, null];
+  private mazeSelfLantern: THREE.PointLight | null = null;
+  private mazeReveal: THREE.AmbientLight | null = null;
+  private mazeRevealT = 4;
+  private mazeFlashes: number[] = [];
+  private mazeFlashed: boolean[] = [];
+  private mazeTorchBtn: HTMLButtonElement | null = null;
+  private mazeExposeFill: HTMLElement | null = null;
+  private mazeBars: HTMLElement[] = [];
+  private mazeTorchQueued = false;
   private gateMeshes: THREE.Mesh[] = [];
   private heldMeshes: (THREE.Mesh | null)[] = [null, null, null, null];
   private seq = 0;
@@ -128,6 +156,10 @@ export class OnlineFreeRoam {
       this.engine.camera.frame(19, 1.0, 52); // top-down-ish so the ring + chairs read clearly
     } else if (this.game.mechanic === 'chase') {
       this.engine.camera.frame(this.half, 1.0, 58); // top-down so you can read the maze
+    } else if (this.game.mechanic === 'maze') {
+      this.engine.camera.frame(this.half, 1.0, 60); // top-down so the dark maze reads
+    } else if (this.game.mechanic === 'kart') {
+      this.engine.camera.frame(this.half + 2, 1.0, 46); // a touch wider + lower for the ring
     } else {
       this.engine.camera.frame(isClimb ? 17 : this.half, this.game.mechanic === 'icepush' ? 1.18 : 1.0);
     }
@@ -177,6 +209,8 @@ export class OnlineFreeRoam {
     }
     if (this.game.mechanic === 'hotpotato') this.buildHotPotato();
     if (this.game.mechanic === 'musicalchairs') this.buildMusicChairs();
+    if (this.game.mechanic === 'kart') this.buildKartUI();
+    if (this.game.mechanic === 'maze') this.buildMazeUI();
     this.input.setEnabled(true);
     // Hot potato / musical chairs are button-driven — no movement stick.
     const noStick = this.game.mechanic === 'hotpotato' || this.game.mechanic === 'musicalchairs';
@@ -390,7 +424,191 @@ export class OnlineFreeRoam {
         r.position.set(x, s * 0.7, z); r.scale.y = 0.9; r.castShadow = true; this.engine.scene.add(r);
       }
       this.buildDesert();
+    } else if (mech === 'kart') {
+      this.buildKartTrack();
+    } else if (mech === 'maze') {
+      this.buildMaze();
+      // Torch/lantern lighting is set up once the cop slot arrives (onState).
     }
+  }
+
+  // --- Race Kart ---------------------------------------------------------------
+  private buildKartTrack() {
+    const scene = this.engine.scene;
+    const outerR = this.half - 3, innerR = this.half * 0.42, midR = (innerR + outerR) / 2;
+    const asphalt = new THREE.Mesh(
+      new THREE.RingGeometry(innerR, outerR, 72),
+      new THREE.MeshStandardMaterial({ color: 0x8b8e94, roughness: 0.92, emissive: 0x1a1c20, emissiveIntensity: 0.6 }),
+    );
+    asphalt.rotation.x = -Math.PI / 2; asphalt.position.y = 0.04; asphalt.receiveShadow = true; scene.add(asphalt);
+    // Dashed centre line.
+    for (let i = 0; i < 40; i++) {
+      if (i % 2) continue;
+      const a = (i / 40) * Math.PI * 2;
+      const dash = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 1.6),
+        new THREE.MeshStandardMaterial({ color: 0xf2e9c0, emissive: 0x3a3520, roughness: 0.8 }));
+      dash.position.set(Math.cos(a) * midR, 0.09, Math.sin(a) * midR); dash.rotation.y = -a; scene.add(dash);
+    }
+    // Kerb rings just off each road edge.
+    const kerb = (edgeR: number, dir: 1 | -1) => {
+      const bandW = 1.6, h = 0.9, radius = edgeR + dir * (bandW / 2 + 0.05);
+      const n = Math.max(16, Math.round((Math.PI * 2 * radius) / 1.8));
+      const arcLen = ((Math.PI * 2 * radius) / n) * 1.04;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2, yellow = i % 2 === 0;
+        const block = new THREE.Mesh(new THREE.BoxGeometry(arcLen, h, bandW),
+          new THREE.MeshStandardMaterial({ color: yellow ? 0xf2c200 : 0x111111, roughness: 0.7, emissive: yellow ? 0x3a2c00 : 0x000000 }));
+        block.position.set(Math.cos(a) * radius, h / 2, Math.sin(a) * radius); block.rotation.y = Math.PI / 2 - a; scene.add(block);
+      }
+    };
+    kerb(outerR, +1); kerb(innerR, -1);
+    // Centre hub.
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(innerR - 2.1, innerR - 1.6, 2, 40),
+      new THREE.MeshStandardMaterial({ color: 0x8a7550, roughness: 1, flatShading: true }));
+    hub.position.y = 1; scene.add(hub);
+    const hubTop = new THREE.Mesh(new THREE.CylinderGeometry(innerR - 2.7, innerR - 2.1, 0.6, 40),
+      new THREE.MeshStandardMaterial({ color: 0xc9a25b, roughness: 1 }));
+    hubTop.position.y = 2.2; scene.add(hubTop);
+    // A cactus + rock on the hub.
+    const cactusMat = new THREE.MeshStandardMaterial({ color: 0x3f7a34, roughness: 0.9 });
+    const cg = new THREE.Group();
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.8, 6, 8), cactusMat); trunk.position.y = 3; cg.add(trunk);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 1.7, 7), cactusMat); arm.rotation.z = Math.PI / 2; arm.position.set(1.1, 3.5, 0); cg.add(arm);
+    const armUp = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 1.9, 7), cactusMat); armUp.position.set(1.9, 4.4, 0); cg.add(armUp);
+    cg.position.set(0, 2.5, 0); scene.add(cg);
+    // Checkered finish line at +x.
+    const rows = 10, w = (outerR - innerR) / rows;
+    for (let r = 0; r < rows; r++) for (let c = 0; c < 3; c++) {
+      const rad = innerR + (r + 0.5) * w, dz = (c - 1) * 1.4, col = (r + c) % 2 === 0 ? 0xffffff : 0x111111;
+      const tile = new THREE.Mesh(new THREE.BoxGeometry(w, 0.12, 1.4), new THREE.MeshStandardMaterial({ color: col, roughness: 0.7 }));
+      tile.position.set(rad, 0.11, dz); scene.add(tile);
+    }
+    // Desert dressing outside the ring.
+    this.buildDesert();
+    // Karts, one per player, with the rider seated.
+    this.players.forEach((p) => {
+      const kart = this.makeKart(p.hero.col);
+      this.engine.scene.add(kart);
+      this.kartMeshes[p.index] = kart;
+      p.sitting = true; p.y = 0.55;
+    });
+  }
+
+  private makeKart(col: number | string): THREE.Group {
+    const g = new THREE.Group();
+    const body = new THREE.MeshStandardMaterial({ color: col, roughness: 0.5, metalness: 0.3 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x1a1a1e, roughness: 0.7 });
+    const chassis = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.7, 4.2), body); chassis.position.y = 0.7; chassis.castShadow = true; g.add(chassis);
+    const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 1.2, 1.6, 8), body); nose.rotation.x = Math.PI / 2; nose.position.set(0, 0.7, 2.6); g.add(nose);
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.6, 0.5), dark); seat.position.set(0, 1.5, -1.5); g.add(seat);
+    for (const [wx, wz] of [[-1.6, 1.4], [1.6, 1.4], [-1.6, -1.4], [1.6, -1.4]] as const) {
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.7, 12), dark); wheel.rotation.z = Math.PI / 2; wheel.position.set(wx, 0.6, wz); wheel.castShadow = true; g.add(wheel);
+    }
+    return g;
+  }
+
+  // Kart item models (0 ball, 1 banana, 2 boost, 3 zap, 4 rocket).
+  private kartItemModel(kind: number): THREE.Object3D {
+    const g = new THREE.Group();
+    if (kind === 0) {
+      g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(1.0, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 })));
+      const spot = new THREE.Mesh(new THREE.IcosahedronGeometry(0.4, 0), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+      spot.position.set(0, 0.7, 0.7); g.add(spot);
+    } else if (kind === 1) {
+      const m = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 1.4, 4, 8), new THREE.MeshStandardMaterial({ color: 0xffe23a, roughness: 0.5, emissive: 0x3a3000 }));
+      m.rotation.z = 0.7; m.scale.set(1, 1, 0.7); g.add(m);
+    } else if (kind === 2) {
+      for (let i = 0; i < 2; i++) {
+        const c = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.2, 4), new THREE.MeshStandardMaterial({ color: 0x2fe04a, emissive: 0x0d5a1a, emissiveIntensity: 0.6, roughness: 0.4 }));
+        c.rotation.x = -Math.PI / 2; c.position.z = -0.6 + i * 1.0; g.add(c);
+      }
+    } else if (kind === 3) {
+      const m = new THREE.Mesh(new THREE.OctahedronGeometry(1.1, 0), new THREE.MeshStandardMaterial({ color: 0xffe23a, emissive: 0xffd000, emissiveIntensity: 0.8, roughness: 0.3, flatShading: true }));
+      m.scale.set(0.6, 1.5, 0.6); g.add(m);
+    } else {
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.8, 10), new THREE.MeshStandardMaterial({ color: 0xd23b3b, roughness: 0.4, metalness: 0.3 }));
+      b.rotation.x = Math.PI / 2; g.add(b);
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.9, 10), new THREE.MeshStandardMaterial({ color: 0xeeeeee }));
+      tip.rotation.x = Math.PI / 2; tip.position.z = 1.3; g.add(tip);
+    }
+    return g;
+  }
+
+  private emojiSprite(txt: string, scale: number, y: number): THREE.Sprite {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d')!;
+    x.font = '90px serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(txt, 64, 70);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    sp.scale.set(scale, scale, 1); sp.position.y = y;
+    return sp;
+  }
+
+  // --- Night Heist (maze) ------------------------------------------------------
+  private mazeWalls() {
+    if (this._mazeWalls) return this._mazeWalls;
+    const T = 1.0;
+    this._mazeWalls = ([
+      [0, -13, 3.5, T], [0, 13, 3.5, T], [-13, 0, T, 3.5], [13, 0, T, 3.5],
+      [-9, -9, 1.4, 1.4], [9, -9, 1.4, 1.4], [-9, 9, 1.4, 1.4], [9, 9, 1.4, 1.4],
+      [0, -21, 3.5, T], [0, 21, 3.5, T], [-21, 0, T, 3.5], [21, 0, T, 3.5],
+    ] as const).map(([x, z, hw, hd]) => ({ x, z, hw, hd }));
+    return this._mazeWalls;
+  }
+  private buildMaze() {
+    const scene = this.engine.scene;
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x39415a, roughness: 1, flatShading: true, emissive: 0x0a0e1a });
+    const capMat = new THREE.MeshStandardMaterial({ color: 0x4a5474, roughness: 1, flatShading: true });
+    const height = 5;
+    for (const c of this.mazeWalls()) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(c.hw * 2, height, c.hd * 2), wallMat);
+      m.position.set(c.x, height / 2, c.z); m.castShadow = true; m.receiveShadow = true; scene.add(m);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(c.hw * 2 + 0.4, 0.6, c.hd * 2 + 0.4), capMat);
+      cap.position.set(c.x, height + 0.05, c.z); scene.add(cap);
+    }
+  }
+  private setupMazeLighting() {
+    const scene = this.engine.scene;
+    const youCop = this.youSlot === this.mazeCop;
+    scene.add(new THREE.AmbientLight(0x28324c, youCop ? 0.42 : 0.34));
+    this.mazeSelfLantern = youCop
+      ? new THREE.PointLight(0xdfeaff, 26, 15, 0)
+      : new THREE.PointLight(0xffe8b0, 16, 14, 0);
+    scene.add(this.mazeSelfLantern);
+    this.mazeReveal = new THREE.AmbientLight(0xdce6ff, 4.0); // bright opening reveal
+    scene.add(this.mazeReveal);
+    // A torch spotlight + glow for every robber.
+    for (const p of this.players) {
+      if (p.index === this.mazeCop) continue;
+      const isLocal = p.index === this.youSlot;
+      const s = new THREE.SpotLight(0xfff3d0, 0, 22, 0.6, 0.35, 0);
+      s.castShadow = isLocal;
+      if (isLocal) { s.shadow.mapSize.set(512, 512); s.shadow.camera.near = 1; s.shadow.camera.far = 30; }
+      const tgt = new THREE.Object3D(); scene.add(tgt); s.target = tgt; scene.add(s);
+      this.mazeSpots[p.index] = s; this.mazeSpotTargets[p.index] = tgt;
+      const glow = new THREE.PointLight(0xffdf9a, 0, 9, 0); scene.add(glow); this.mazeGlows[p.index] = glow;
+    }
+    // Role labels.
+    for (const p of this.players) {
+      const cop = p.index === this.mazeCop;
+      const sp = this.makeMazeLabel(cop ? 'FIND THEM' : 'ESCAPE', cop ? '#ff3b3b' : '#5cf07a');
+      sp.position.y = 7.2; p.group.add(sp); this.mazeLabels[p.index] = sp;
+    }
+    // Reveal timing: 4s opening + two random 2s flashes.
+    this.mazeRevealT = 4;
+    const T = 60, a = 12 + Math.random() * (T - 26); let bt = 12 + Math.random() * (T - 26);
+    while (Math.abs(bt - a) < 9) bt = 12 + Math.random() * (T - 26);
+    this.mazeFlashes = [Math.max(a, bt), Math.min(a, bt)]; this.mazeFlashed = [false, false];
+  }
+  private makeMazeLabel(text: string, color: string): THREE.Sprite {
+    const c = document.createElement('canvas'); c.width = 320; c.height = 72;
+    const x = c.getContext('2d')!;
+    x.font = '900 46px Bungee, Nunito, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.lineWidth = 9; x.strokeStyle = 'rgba(0,0,0,0.9)'; x.strokeText(text, 160, 40);
+    x.fillStyle = color; x.fillText(text, 160, 40);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false }));
+    sp.scale.set(11, 2.5, 1); return sp;
   }
 
   /** Desert surroundings for The Great Escape — ported from offline chase.ts:
@@ -469,6 +687,19 @@ export class OnlineFreeRoam {
 
   // --- entity rendering --------------------------------------------------------
   private makeEntMesh(type: number, extra: number): THREE.Object3D {
+    if (this.game.mechanic === 'kart') {
+      if (type === ET.MISSILE) return this.kartItemModel(extra === 1 ? 4 : 0); // shot: ball / rocket
+      if (type === ET.ITEM) { const b = this.kartItemModel(1); b.position.y = 0.6; const g = new THREE.Group(); g.add(b); return g; } // banana
+      // ET.LOOT: item pickup (extra = kind 0..4) with an emoji + glow ring.
+      const g = new THREE.Group();
+      const model = this.kartItemModel(extra); model.position.y = 1.8; g.add(model);
+      const emoji = ['⚽', '\u{1F34C}', '\u{1F45F}', '⚡', '\u{1F680}'][extra] ?? '❓';
+      g.add(this.emojiSprite(emoji, 3, 4.2));
+      const ring = new THREE.Mesh(new THREE.RingGeometry(1.6, 2.2, 20),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2; ring.position.y = 0.12; g.add(ring);
+      return g;
+    }
     if (type === ET.LOOT && this.game.mechanic === 'chase') {
       // 👟 SHOES pickup: a green shoe on a glowing ring.
       const g = new THREE.Group();
@@ -664,10 +895,32 @@ export class OnlineFreeRoam {
       this.players.forEach((p, i) => p.setStatusIcon(i === this.chaseGuard ? '🥢' : '🏃', 9999));
       HUD.setObjective(this.youSlot === this.chaseGuard ? '🥢 You are the GUARD — catch all 3!' : '🏃 RUN! Escape the guard!');
     }
+    if (mech === 'maze') {
+      this.mazeExposure = m.ring ?? 0;
+      if ((m.aux ?? -1) >= 0 && this.mazeCop < 0) {
+        this.mazeCop = m.aux ?? 0;
+        this.setupMazeLighting(); // now that we know who the cop is
+        HUD.setObjective(this.youSlot === this.mazeCop ? '🚔 Survive the night — stun torchers from behind!' : '🔦 Torch the cop together for 6s — mind your back!');
+      }
+    }
     for (const ps of m.players) {
       const [slot, x, z, , , , lives, dead, freezeT, shieldT, cd, score, flags] = ps;
       const p = this.players[slot];
       if (!p) continue;
+      // Kart: cd = heading, score = laps, flags = held item (0 none, 1..5).
+      if (mech === 'kart') {
+        this.kartHead[slot] = cd;
+        this.kartHeld[slot] = flags;
+        if (slot === this.youSlot && p.score !== score && score > 0) { SFX.gem(); HUD.banner(`LAP ${score + 1}!`, p.hero.col); }
+      }
+      // Maze: cd = facing, score = battery, flags bit0 = torch on.
+      if (mech === 'maze') {
+        this.mazeFace[slot] = cd;
+        this.mazeBattery[slot] = score;
+        this.mazeTorchOn[slot] = (flags & 1) === 1;
+        p.standFacing = cd; // face torch/heading direction
+        p.zapped = freezeT > 0; // stunned look
+      }
       // Hot potato: players are static in the ring; take positions + holder from the server.
       if (mech === 'hotpotato') { p.x = x; p.z = z; if ((flags & 1) === 1) this.hpHolder = slot; }
       // Musical chairs: interpolate handles positions; reflect sit/fallen + punch-lit.
@@ -682,6 +935,8 @@ export class OnlineFreeRoam {
         : mech === 'breaktiles' || mech === 'dodge' || mech === 'icepush' ? Math.max(lives, 0)
         : mech === 'race' ? `${score}/${WPS * Number(this.game.mods?.laps ?? 2)}`
         : mech === 'climb' ? `${score}m`
+        : mech === 'kart' ? `Lap ${score + 1}`
+        : mech === 'maze' ? (slot === this.mazeCop ? '🚔' : '🔦')
         : score;
       if (p.lives !== lives || p.score !== score) {
         p.lives = lives;
@@ -837,9 +1092,14 @@ export class OnlineFreeRoam {
     const jumpPressed = this.input.takeJump();
     const abilityPressed = this.input.takeAbility();
     const isClimb = this.game.mechanic === 'climb';
-    if (this.game.mechanic === 'musicalchairs') {
+    const mechIn = this.game.mechanic;
+    if (mechIn === 'musicalchairs') {
       if (jumpPressed) this.jumpQueued = true;   // PUNCH
       if (abilityPressed) this.ultQueued = true; // RUN / SIT
+    } else if (mechIn === 'kart') {
+      if (jumpPressed || abilityPressed) this.kartItemQueued = true; // ITEM (or ability)
+    } else if (mechIn === 'maze') {
+      if (jumpPressed || abilityPressed) this.mazeTorchQueued = true; // TORCH toggle
     } else {
       if (jumpPressed || (isClimb && abilityPressed)) this.doJump();
       if (!isClimb && abilityPressed) this.ultQueued = true;
@@ -849,21 +1109,38 @@ export class OnlineFreeRoam {
     if (this.inputTimer <= 0) {
       this.inputTimer = 1 / INPUT_RATE;
       this.seq++;
+      // ult is a held boost for kart, an edge-triggered toggle for maze, else the ult.
+      const ultVal = mechIn === 'kart' ? (this.kartBoostHeld || undefined)
+        : mechIn === 'maze' ? (this.mazeTorchQueued || undefined)
+        : (this.ultQueued || undefined);
+      const jumpVal = mechIn === 'kart' ? (this.kartItemQueued || undefined) : (this.jumpQueued || undefined);
       net.sendInput({
         seq: this.seq,
         ax: this.input.ax,
         ay: this.input.ay,
-        jump: this.jumpQueued || undefined,
-        ult: this.ultQueued || undefined,
+        jump: jumpVal,
+        ult: ultVal,
         target: this.ultQueued ? (this.passTarget ?? undefined) : undefined,
       });
       this.jumpQueued = false;
       this.ultQueued = false;
+      this.kartItemQueued = false;
+      this.mazeTorchQueued = false;
       this.passTarget = null;
     }
 
     this.predictLocal(dt);
     this.interpolate();
+
+    // Kart: seat riders + point the karts along their heading before bob().
+    if (this.game.mechanic === 'kart') {
+      for (const p of this.players) {
+        p.sitting = true; p.y = 0.55;
+        p.standFacing = this.kartHead[p.index];
+        const k = this.kartMeshes[p.index];
+        if (k) { k.position.set(p.x, 0, p.z); k.rotation.y = this.kartHead[p.index]; k.visible = !p.dead; }
+      }
+    }
 
     for (const p of this.players) {
       p.tickEffects(dt);
@@ -873,6 +1150,8 @@ export class OnlineFreeRoam {
         p.bob(elapsed, p.index + p.x * 0.1);
       }
     }
+
+    if (this.game.mechanic === 'maze') this.updateMaze(dt);
 
     // Race gate highlight for your own next gate.
     if (this.game.mechanic === 'race') {
@@ -940,6 +1219,8 @@ export class OnlineFreeRoam {
     document.getElementById('dodgeUI')?.remove();
     document.getElementById('hpUI')?.remove();
     document.getElementById('mcUI')?.remove();
+    document.getElementById('kartUI')?.remove();
+    document.getElementById('mzUI')?.remove();
     if (this.hpOnDown) { document.removeEventListener('pointerdown', this.hpOnDown); this.hpOnDown = null; }
     const ui = document.createElement('div');
     ui.id = 'dodgeUI';
@@ -984,6 +1265,8 @@ export class OnlineFreeRoam {
 
     document.getElementById('hpUI')?.remove();
     document.getElementById('mcUI')?.remove();
+    document.getElementById('kartUI')?.remove();
+    document.getElementById('mzUI')?.remove();
     if (this.hpOnDown) { document.removeEventListener('pointerdown', this.hpOnDown); this.hpOnDown = null; }
     const ui = document.createElement('div');
     ui.id = 'hpUI';
@@ -1088,8 +1371,11 @@ export class OnlineFreeRoam {
     // Hot potato / musical chairs are server-authoritative for position
     // (static ring or server-driven march) — no local predict.
     const m = this.game.mechanic;
-    if (m === 'hotpotato' || m === 'musicalchairs') return;
+    // Kart is heading-based + server-authoritative (interpolated); hot potato /
+    // musical chairs are static/server-driven — no roam predict for these.
+    if (m === 'hotpotato' || m === 'musicalchairs' || m === 'kart') return;
     if (m === 'chase') { this.predictChase(dt); return; }
+    if (m === 'maze') { this.predictMaze(dt); return; }
     const p = this.players[this.youSlot];
     if (p.dead) return;
     // Mirror the server + offline movement exactly (src/shared/roammove.ts).
@@ -1202,6 +1488,178 @@ export class OnlineFreeRoam {
     if (p.z > mrg) { p.z = mrg; if (p.vz > 0) p.vz = 0; }
   }
 
+  /** Client-side prediction for Night Heist: mirror server metal-grip movement +
+   *  maze wall collision + cop speed, so the local player responds instantly. */
+  private predictMaze(dt: number) {
+    const p = this.players[this.youSlot];
+    if (!p || p.dead || p.freezeT > 0) return;
+    const HITBOX = 3.0, HALF = this.half;
+    const mul = this.youSlot === this.mazeCop ? 1.5 : 1;
+    const grip = 0.02, accelF = 1.0; // metal surface
+    const top = MOVE.baseSpeed * speedMult(p.hero) * sprintMul(this.input.ax, this.input.ay) * mul;
+    const accel = top * MOVE.accelMul * accelF;
+    p.vx += this.input.ax * accel * dt;
+    p.vz += this.input.ay * accel * dt;
+    const retain = Math.pow(grip, dt);
+    p.vx *= retain; p.vz *= retain;
+    const sp = Math.hypot(p.vx, p.vz);
+    if (sp > top) { p.vx *= top / sp; p.vz *= top / sp; }
+    p.x += p.vx * dt; p.z += p.vz * dt;
+    for (const c of this.mazeWalls()) {
+      const dx = p.x - c.x, dz = p.z - c.z;
+      const nx = c.x + Math.max(-c.hw, Math.min(c.hw, dx)), nz = c.z + Math.max(-c.hd, Math.min(c.hd, dz));
+      let ox = p.x - nx, oz = p.z - nz; let d = Math.hypot(ox, oz);
+      if (d >= HITBOX) continue;
+      if (d < 0.0001) { const px = c.hw - Math.abs(dx), pz = c.hd - Math.abs(dz); if (px < pz) { ox = Math.sign(dx) || 1; oz = 0; } else { ox = 0; oz = Math.sign(dz) || 1; } d = 1; }
+      const push = HITBOX - d, ux = ox / d, uz = oz / d;
+      p.x += ux * push; p.z += uz * push;
+      const into = p.vx * ux + p.vz * uz;
+      if (into < 0) { p.vx -= into * ux; p.vz -= into * uz; }
+    }
+    const mrg = HALF - HITBOX;
+    if (p.x < -mrg) { p.x = -mrg; if (p.vx < 0) p.vx = 0; }
+    if (p.x > mrg) { p.x = mrg; if (p.vx > 0) p.vx = 0; }
+    if (p.z < -mrg) { p.z = -mrg; if (p.vz < 0) p.vz = 0; }
+    if (p.z > mrg) { p.z = mrg; if (p.vz > 0) p.vz = 0; }
+  }
+
+  // --- Night Heist per-frame ---------------------------------------------------
+  private readonly MZ_RANGE = [0, 11, 16, 22];
+  private readonly MZ_CONE = [0, 0.42, 0.5, 0.6];
+  private mazeBarCount(slot: number): number { return Math.min(3, Math.ceil(this.mazeBattery[slot] / 3 - 1e-6)); }
+  private mazeSegClear(x0: number, z0: number, x1: number, z1: number): boolean {
+    const dx = x1 - x0, dz = z1 - z0, dist = Math.hypot(dx, dz);
+    const steps = Math.max(2, Math.ceil(dist / 1.4));
+    for (let s = 1; s < steps; s++) {
+      const t = s / steps, x = x0 + dx * t, z = z0 + dz * t;
+      for (const c of this.mazeWalls()) if (Math.abs(x - c.x) < c.hw && Math.abs(z - c.z) < c.hd) return false;
+    }
+    return true;
+  }
+  private mazeEmitting(slot: number): boolean { return this.mazeTorchOn[slot] && this.mazeBattery[slot] > 0.001; }
+  private mazeLitForLocal(p: Player): boolean {
+    const you = this.players[this.youSlot];
+    if (this.mazeRevealT > 0) return true;
+    if (p.index !== this.mazeCop && p.freezeT > 0) return true;   // stunned robber visible
+    if (p.index !== this.mazeCop && this.mazeEmitting(p.index)) return true; // lit-up ally
+    const youCop = this.youSlot === this.mazeCop;
+    const d = Math.hypot(p.x - you.x, p.z - you.z);
+    if (d < (youCop ? 13 : 7)) return true;
+    if (this.mazeEmitting(this.youSlot) && !youCop) {
+      const b = this.mazeBarCount(this.youSlot);
+      if (d < this.MZ_RANGE[b] && d > 0.001) {
+        const fx = Math.sin(this.mazeFace[this.youSlot]), fz = Math.cos(this.mazeFace[this.youSlot]);
+        const cosang = ((p.x - you.x) / d) * fx + ((p.z - you.z) / d) * fz;
+        if (cosang > Math.cos(this.MZ_CONE[b]) && this.mazeSegClear(you.x, you.z, p.x, p.z)) return true;
+      }
+    }
+    return false;
+  }
+  private updateMaze(dt: number) {
+    // Reveal (4s opening) + two 2s flashes keyed off the clock.
+    if (this.mazeRevealT > 0) this.mazeRevealT -= dt;
+    const tl = this.snaps.length ? this.snaps[this.snaps.length - 1].msg.timeLeft : 60;
+    for (let k = 0; k < this.mazeFlashes.length; k++) {
+      if (!this.mazeFlashed[k] && tl <= this.mazeFlashes[k] && tl > 0) {
+        this.mazeFlashed[k] = true; this.mazeRevealT = Math.max(this.mazeRevealT, 2);
+        HUD.banner('⚡ LIGHTS!', '#ffe66d');
+      }
+    }
+    if (this.mazeReveal) this.mazeReveal.intensity = this.mazeRevealT > 0 ? 4.0 : 0;
+
+    // Torch spotlights + glows.
+    for (const p of this.players) {
+      const s = this.mazeSpots[p.index], tgt = this.mazeSpotTargets[p.index];
+      if (!s || !tgt) continue;
+      const on = this.mazeEmitting(p.index) && !p.dead;
+      const b = this.mazeBarCount(p.index);
+      s.intensity = on ? (p.index === this.youSlot ? 55 : 32) : 0;
+      s.distance = this.MZ_RANGE[b] || 1;
+      s.angle = this.MZ_CONE[b] || 0.3;
+      const fx = Math.sin(this.mazeFace[p.index]), fz = Math.cos(this.mazeFace[p.index]);
+      s.position.set(p.x, 3.2, p.z);
+      tgt.position.set(p.x + fx * 10, 1.2, p.z + fz * 10);
+      const glow = this.mazeGlows[p.index];
+      if (glow) { glow.intensity = on ? 7 : 0; glow.position.set(p.x, 3, p.z); }
+    }
+    if (this.mazeSelfLantern) {
+      const you = this.players[this.youSlot];
+      this.mazeSelfLantern.position.set(you.x, 4, you.z);
+      this.mazeSelfLantern.visible = !you.dead;
+    }
+    // Stealth visibility: hide players you can't currently see.
+    for (const p of this.players) {
+      const vis = !p.dead && (p.index === this.youSlot || this.mazeLitForLocal(p));
+      p.group.visible = vis;
+      const lbl = this.mazeLabels[p.index]; if (lbl) lbl.visible = vis;
+      if (p.ring) p.ring.visible = vis;
+      if (p.glow) p.glow.visible = vis;
+    }
+    // UI.
+    if (this.mazeExposeFill) this.mazeExposeFill.style.width = `${(this.mazeExposure / 6) * 100}%`;
+    if (this.youSlot !== this.mazeCop && this.mazeBars.length) {
+      const b = this.mazeBarCount(this.youSlot), on = this.mazeEmitting(this.youSlot);
+      this.mazeBars.forEach((bar, k) => {
+        const lit = k < b;
+        bar.style.background = lit ? (on ? '#ffd23f' : '#2fe04a') : 'rgba(255,255,255,.15)';
+      });
+      if (this.mazeTorchBtn) { this.mazeTorchBtn.style.opacity = this.mazeBattery[this.youSlot] > 0.1 ? '1' : '0.4'; this.mazeTorchBtn.textContent = on ? '🔦 ON' : '🔦 TORCH'; }
+    }
+  }
+
+  // --- kart + maze UI ----------------------------------------------------------
+  private buildKartUI() {
+    document.getElementById('kartUI')?.remove();
+    const ui = document.createElement('div');
+    ui.id = 'kartUI';
+    ui.style.cssText = 'position:fixed;inset:0;z-index:8;pointer-events:none;font-family:Nunito,system-ui,sans-serif;';
+    ui.innerHTML = `<div data-nostick style="position:fixed;right:20px;bottom:26px;display:flex;flex-direction:column;gap:14px;align-items:center;">
+      <button id="kItem" style="pointer-events:auto;">🎁 ITEM</button>
+      <button id="kSpeed" style="pointer-events:auto;">🏁 SPEED</button></div>`;
+    document.body.appendChild(ui);
+    const btnCss = 'font-family:Bungee,system-ui,sans-serif;font-size:18px;border:none;border-radius:16px;padding:16px 22px;color:#12142e;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);touch-action:none;user-select:none;';
+    this.kartItemBtn = ui.querySelector('#kItem')!;
+    this.kartSpeedBtn = ui.querySelector('#kSpeed')!;
+    this.kartItemBtn.style.cssText += btnCss + 'background:#FFD23F;opacity:0.45;';
+    this.kartSpeedBtn.style.cssText += btnCss + 'background:#4DC3FF;';
+    this.kartItemBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.kartItemQueued = true; SFX.tick(); });
+    const down = (e: Event) => { e.preventDefault(); e.stopPropagation(); this.kartBoostHeld = true; this.kartSpeedBtn!.style.filter = 'brightness(1.25)'; };
+    const up = (e: Event) => { e.preventDefault(); this.kartBoostHeld = false; this.kartSpeedBtn!.style.filter = ''; };
+    this.kartSpeedBtn.addEventListener('pointerdown', down);
+    this.kartSpeedBtn.addEventListener('pointerup', up);
+    this.kartSpeedBtn.addEventListener('pointerleave', up);
+    this.kartSpeedBtn.addEventListener('pointercancel', up);
+  }
+
+  private buildMazeUI() {
+    document.getElementById('mzUI')?.remove();
+    const youCop = this.youSlot === this.mazeCop; // may be -1 (unknown) → treat as robber for now
+    const ui = document.createElement('div');
+    ui.id = 'mzUI';
+    ui.style.cssText = 'position:fixed;inset:0;z-index:8;pointer-events:none;font-family:Nunito,system-ui,sans-serif;color:#fff;';
+    ui.innerHTML = `
+      <div style="position:fixed;top:160px;left:50%;transform:translateX(-50%);text-align:center;">
+        <div style="font-family:Bungee,system-ui,sans-serif;font-size:13px;letter-spacing:1px;text-shadow:0 2px 0 rgba(0,0,0,.6);">🔦 COP BLINDED</div>
+        <div style="width:200px;height:14px;background:rgba(0,0,0,.5);border-radius:8px;overflow:hidden;margin-top:3px;border:2px solid rgba(255,255,255,.25);">
+          <div id="mzExpose" style="height:100%;width:0%;background:linear-gradient(90deg,#ffe66d,#ff9f1c);transition:width .1s;"></div>
+        </div>
+      </div>
+      <div id="mzRobber" style="position:fixed;left:0;right:0;bottom:24px;display:flex;flex-direction:column;align-items:center;gap:10px;">
+        <div style="display:flex;gap:6px;"><span class="mzBar"></span><span class="mzBar"></span><span class="mzBar"></span></div>
+        <button id="mzLight" style="pointer-events:auto;">🔦 TORCH</button>
+      </div>`;
+    document.body.appendChild(ui);
+    this.mazeExposeFill = ui.querySelector('#mzExpose')!;
+    this.mazeBars = Array.from(ui.querySelectorAll('.mzBar')) as HTMLElement[];
+    for (const bar of this.mazeBars) bar.style.cssText = 'width:34px;height:12px;border-radius:4px;background:#2fe04a;';
+    this.mazeTorchBtn = ui.querySelector('#mzLight')!;
+    this.mazeTorchBtn.style.cssText += 'font-family:Bungee,system-ui,sans-serif;font-size:18px;border:none;border-radius:14px;padding:14px 26px;color:#12142e;background:#FFD23F;cursor:pointer;box-shadow:0 5px 0 rgba(0,0,0,.35);';
+    this.mazeTorchBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.mazeTorchQueued = true; SFX.tick(); });
+    // The cop has no torch controls; hide the robber row if we already know.
+    if (youCop) (ui.querySelector('#mzRobber') as HTMLElement).style.display = 'none';
+    void youCop;
+  }
+
   private interpolate() {
     if (this.snaps.length < 2) return;
     const renderAt = performance.now() - 100; // 2-snapshot buffer at 20Hz; fresher remote players
@@ -1217,9 +1675,9 @@ export class OnlineFreeRoam {
 
     for (const psB of b.msg.players) {
       const slot = psB[0];
-      // Musical chairs is server-authoritative, so interpolate everyone
-      // (including you); other games (incl. chase) predict the local player.
-      if (slot === this.youSlot && this.game.mechanic !== 'musicalchairs') continue;
+      // Musical chairs + kart are server-authoritative, so interpolate everyone
+      // (including you); other games (incl. chase, maze) predict the local player.
+      if (slot === this.youSlot && this.game.mechanic !== 'musicalchairs' && this.game.mechanic !== 'kart') continue;
       const p = this.players[slot];
       if (!p || p.dead) continue;
       const psA = a.msg.players.find((q) => q[0] === slot) ?? psB;
@@ -1309,6 +1767,8 @@ export class OnlineFreeRoam {
     document.getElementById('dodgeUI')?.remove();
     document.getElementById('hpUI')?.remove();
     document.getElementById('mcUI')?.remove();
+    document.getElementById('kartUI')?.remove();
+    document.getElementById('mzUI')?.remove();
     if (this.hpOnDown) { document.removeEventListener('pointerdown', this.hpOnDown); this.hpOnDown = null; }
     const won = m.mode === '2v2'
       ? m.ranking.find((r) => r.slot === this.youSlot)?.team === m.winnerTeam
@@ -1334,6 +1794,8 @@ export class OnlineFreeRoam {
     document.getElementById('dodgeUI')?.remove();
     document.getElementById('hpUI')?.remove();
     document.getElementById('mcUI')?.remove();
+    document.getElementById('kartUI')?.remove();
+    document.getElementById('mzUI')?.remove();
     if (this.hpOnDown) { document.removeEventListener('pointerdown', this.hpOnDown); this.hpOnDown = null; }
     net.cb.onState = undefined;
     net.cb.onMatchEnd = undefined;

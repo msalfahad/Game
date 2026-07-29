@@ -4,6 +4,8 @@ import { HockeySim } from './hockeysim.js';
 import { HotPotatoSim } from './hotpotatosim.js';
 import { MusicalChairsSim } from './musicalchairssim.js';
 import { ChaseSim } from './chasesim.js';
+import { KartSim } from './kartsim.js';
+import { MazeSim } from './mazesim.js';
 import { FreeSim } from './freesim.js';
 import { onlineGame, poolFor } from './catalog.js';
 import { recordResult, type Account } from './accounts.js';
@@ -389,6 +391,8 @@ export class Lobby {
       : def.mechanic === 'hotpotato' ? new HotPotatoSim(seats, mode, sendState, endMatch)
       : def.mechanic === 'musicalchairs' ? new MusicalChairsSim(seats, mode, sendState, endMatch)
       : def.mechanic === 'chase' ? new ChaseSim(seats, mode, sendState, endMatch)
+      : def.mechanic === 'kart' ? new KartSim(seats, mode, sendState, endMatch)
+      : def.mechanic === 'maze' ? new MazeSim(seats, mode, sendState, endMatch)
       : new FreeSim(seats, def, mode, sendState, endMatch);
     state.sim = sim; state.phase = 'playing';
     for (const seat of seats) if (seat.socketId) { const sess = this.sessions.get(seat.socketId); if (sess) sess.match = sim; }
