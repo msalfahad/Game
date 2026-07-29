@@ -15,7 +15,9 @@ const DUR = 55;
 const GUARD_SPEED = 1.18; // reeled-in feel, not a sprint (was 1.4)
 const SHOES_SPEED = 1.45;  // shoes still clearly beat the guard
 const HITBOX = 3.0;
-const CATCH_R = HITBOX * 2 + 3.2;
+// Bodies must actually overlap for a catch — no long "stick reach", so with
+// network lag the guard has to physically touch the runner, not pass nearby.
+const CATCH_R = HITBOX * 2 - 0.4;
 
 interface Crate { x: number; z: number; hw: number; hd: number; }
 interface CPlayer {
