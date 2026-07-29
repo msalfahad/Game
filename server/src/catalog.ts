@@ -3,7 +3,7 @@
 // Only what the simulation needs: mechanic, flavor mods, and duration.
 
 export type Mechanic =
-  | 'goal' | 'icepush' | 'climb' | 'breaktiles' | 'pushout' | 'throwfight' | 'race' | 'dodge' | 'collect' | 'paint' | 'mash' | 'hotpotato' | 'musicalchairs' | 'chase';
+  | 'goal' | 'icepush' | 'climb' | 'breaktiles' | 'pushout' | 'throwfight' | 'race' | 'dodge' | 'collect' | 'paint' | 'mash' | 'hotpotato' | 'musicalchairs' | 'chase' | 'kart' | 'maze';
 
 export interface OnlineGameDef {
   id: string;
@@ -18,9 +18,9 @@ const g = (id: string, mechanic: Mechanic, duration: number, mods: OnlineGameDef
 // Only games whose CURRENT client mechanic (src/data/maps.ts) is one the server
 // can simulate appear online — and each entry's mechanic + mods MUST match the
 // client id exactly, or the client renders one game while the server simulates
-// another. Games with bespoke offline-only mechanics (kart, maze, boat, raft,
-// foosball, sprint, lavafloor, hotpotato, musicalchairs, chase, dodgeball,
-// coaster) are NOT online until they get a server simulation.
+// another. Games with bespoke offline-only mechanics (boat, raft, foosball,
+// sprint, lavafloor, dodgeball, coaster) are NOT online until they get a
+// server simulation.
 export const ONLINE_CATALOG: OnlineGameDef[] = [
   // Frostbite
   g('frost-1', 'goal', 120),                              // Ice Hockey Brawl
@@ -35,8 +35,10 @@ export const ONLINE_CATALOG: OnlineGameDef[] = [
   g('wild-2', 'dodge', 75, { hz: 'logs' }),               // Rolling Logs
   g('wild-3', 'hotpotato', 60),                           // Watermelon Bomb
   // Dune Clash
+  g('dune-1', 'kart', 60),                                // Race Kart
   g('dune-2', 'musicalchairs', 90),                       // Musical Chairs
   g('dune-3', 'chase', 55),                               // The Great Escape
+  g('dune-4', 'maze', 60),                                // Night Heist
   // Sky
   g('sky-3', 'dodge', 75, { hz: 'wind' }),                // Wind Gauntlet
   // Mech
