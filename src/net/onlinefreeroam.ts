@@ -61,6 +61,8 @@ export class OnlineFreeRoam {
   private hpCountEl: HTMLElement | null = null;
   private hpArmT = 0;
   private hpHolder = 0;
+  private passTarget: number | null = null;
+  private hpOnDown: ((e: PointerEvent) => void) | null = null;
   private gateMeshes: THREE.Mesh[] = [];
   private heldMeshes: (THREE.Mesh | null)[] = [null, null, null, null];
   private seq = 0;
@@ -108,7 +110,9 @@ export class OnlineFreeRoam {
       isClimb ? { w: CLIMB_W, l: CLIMB_L } : undefined,
     );
     // Ice push pulls back a touch so the FULL circular rink fits on phones.
-    this.engine.camera.frame(isClimb ? 17 : this.half, this.game.mechanic === 'icepush' ? 1.18 : 1.0);
+    // Hot potato zooms in on the ring so the characters are big + easy to tap.
+    const frameHalf = isClimb ? 17 : this.game.mechanic === 'hotpotato' ? 15 : this.half;
+    this.engine.camera.frame(frameHalf, this.game.mechanic === 'icepush' ? 1.18 : 1.0);
     this.engine.post.setGrade(FAMILY_GRADE[family.id] ?? {});
 
     const is2v2 = msg.mode === '2v2';
@@ -693,9 +697,11 @@ export class OnlineFreeRoam {
         ay: this.input.ay,
         jump: this.jumpQueued || undefined,
         ult: this.ultQueued || undefined,
+        target: this.ultQueued ? (this.passTarget ?? undefined) : undefined,
       });
       this.jumpQueued = false;
       this.ultQueued = false;
+      this.passTarget = null;
     }
 
     this.predictLocal(dt);
@@ -774,6 +780,7 @@ export class OnlineFreeRoam {
   private buildJumpButton() {
     document.getElementById('dodgeUI')?.remove();
     document.getElementById('hpUI')?.remove();
+    if (this.hpOnDown) { document.removeEventListener('pointerdown', this.hpOnDown); this.hpOnDown = null; }
     const ui = document.createElement('div');
     ui.id = 'dodgeUI';
     ui.style.cssText = 'position:fixed;inset:0;z-index:8;pointer-events:none;font-family:Bungee,system-ui,sans-serif;';
@@ -816,6 +823,7 @@ export class OnlineFreeRoam {
     this.melon = g; this.melonSpark = spark;
 
     document.getElementById('hpUI')?.remove();
+    if (this.hpOnDown) { document.removeEventListener('pointerdown', this.hpOnDown); this.hpOnDown = null; }
     const ui = document.createElement('div');
     ui.id = 'hpUI';
     ui.style.cssText = 'position:fixed;inset:0;z-index:8;pointer-events:none;font-family:Bungee,system-ui,sans-serif;';
@@ -829,11 +837,30 @@ export class OnlineFreeRoam {
     document.body.appendChild(ui);
     this.hpCountEl = ui.querySelector('#hpCount');
     ui.querySelector('#hpPass')!.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.hpPass(); });
+
+    // Tap directly ON a rival to throw the melon to THAT rival (like offline).
+    this.hpOnDown = (e: PointerEvent) => {
+      if (!this.running) return;
+      if ((e.target as HTMLElement)?.closest('#hpUI')) return; // the PASS button handles itself
+      if (this.hpHolder !== this.youSlot || this.players[this.youSlot]?.dead) return;
+      const cam = this.engine.camera.cam;
+      let best: number | null = null, bd = Infinity;
+      for (const p of this.players) {
+        if (p.index === this.youSlot || p.dead) continue;
+        const v = new THREE.Vector3(p.x, 3, p.z).project(cam);
+        const sx = (v.x * 0.5 + 0.5) * innerWidth, sy = (-v.y * 0.5 + 0.5) * innerHeight;
+        const d = Math.hypot(sx - e.clientX, sy - e.clientY);
+        if (d < bd) { bd = d; best = p.index; }
+      }
+      if (best != null && bd < Math.min(innerWidth, innerHeight) * 0.4) this.hpPass(best);
+    };
+    document.addEventListener('pointerdown', this.hpOnDown);
   }
 
   /** Throw the melon (only matters while you hold it — the server enforces that). */
-  private hpPass() {
-    this.ultQueued = true; // sent as `ult`; the server passes the melon to a random rival
+  private hpPass(target?: number) {
+    this.ultQueued = true; // sent as `ult`
+    if (typeof target === 'number') this.passTarget = target; // a specific rival (else nearest/random)
   }
 
   /** Jump the local player (ground jump + one air/double jump), predict now, and flag it for the server. */
@@ -1004,6 +1031,7 @@ export class OnlineFreeRoam {
     HUD.showHud(false);
     document.getElementById('dodgeUI')?.remove();
     document.getElementById('hpUI')?.remove();
+    if (this.hpOnDown) { document.removeEventListener('pointerdown', this.hpOnDown); this.hpOnDown = null; }
     const won = m.mode === '2v2'
       ? m.ranking.find((r) => r.slot === this.youSlot)?.team === m.winnerTeam
       : m.ranking[0]?.slot === this.youSlot;
@@ -1027,6 +1055,7 @@ export class OnlineFreeRoam {
     HUD.showHud(false);
     document.getElementById('dodgeUI')?.remove();
     document.getElementById('hpUI')?.remove();
+    if (this.hpOnDown) { document.removeEventListener('pointerdown', this.hpOnDown); this.hpOnDown = null; }
     net.cb.onState = undefined;
     net.cb.onMatchEnd = undefined;
   }

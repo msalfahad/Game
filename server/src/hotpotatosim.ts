@@ -33,7 +33,7 @@ export class HotPotatoSim implements GameSim {
   private canThrowAt = 0;
   private botThrowAt = 3;
   private outCount = 0;
-  private wantPass = new Set<string>(); // holder socketIds that pressed pass
+  private wantPass = new Map<string, number>(); // holder socketId -> target slot (-1 = nearest/random)
   private events: SimEvent[] = [];
   private ended = false;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -64,7 +64,9 @@ export class HotPotatoSim implements GameSim {
   applyInput(socketId: string, msg: InputMsg) {
     // Only the current holder can pass; the ult/jump press throws the melon.
     const p = this.players.find((q) => q.socketId === socketId);
-    if (p && !p.dead && p.slot === this.holder && (msg.ult || msg.jump)) this.wantPass.add(socketId);
+    if (p && !p.dead && p.slot === this.holder && (msg.ult || msg.jump)) {
+      this.wantPass.set(socketId, typeof msg.target === 'number' ? msg.target : -1);
+    }
   }
 
   private alive(): HPlayer[] { return this.players.filter((p) => !p.dead); }
@@ -77,11 +79,12 @@ export class HotPotatoSim implements GameSim {
     this.botThrowAt = 2.5 + Math.random() * 4;
   }
 
-  private pass() {
+  private pass(target = -1) {
     if (this.elapsed < this.canThrowAt) return;
     const others = this.alive().filter((p) => p.slot !== this.holder);
     if (!others.length) return;
-    const to = others[Math.floor(Math.random() * others.length)];
+    // Pass to the tapped rival if valid, otherwise a random one.
+    const to = others.find((p) => p.slot === target) ?? others[Math.floor(Math.random() * others.length)];
     this.holder = to.slot;
     this.canThrowAt = this.elapsed + THROW_CD;
     this.botThrowAt = 2 + Math.random() * 3.5;
@@ -113,7 +116,7 @@ export class HotPotatoSim implements GameSim {
         // Bot holder gets nervous and passes.
         if (this.elapsed >= this.canThrowAt && (this.armT > this.botThrowAt || this.armT > 7)) this.pass();
       } else if (this.wantPass.has(holderP.socketId)) {
-        this.pass();
+        this.pass(this.wantPass.get(holderP.socketId) ?? -1);
       }
     }
     this.wantPass.clear();

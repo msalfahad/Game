@@ -72,6 +72,8 @@ export interface InputMsg {
   ay: number;
   jump?: boolean;
   ult?: boolean;
+  // Hot potato: the slot to pass the melon to (tap a rival). Omitted = nearest.
+  target?: number;
 }
 
 // Per-player state: [slot, x, z, vx, vz, y, lives, dead, freezeT, shieldT, cd, score, flags]
