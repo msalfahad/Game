@@ -101,6 +101,20 @@ export class OnlineFreeRoam {
   private mazeExposeFill: HTMLElement | null = null;
   private mazeBars: HTMLElement[] = [];
   private mazeTorchQueued = false;
+  // Foot Brawl (foosball).
+  private fbRailX: number[] = [];
+  private fbBall: THREE.Mesh | null = null;
+  private fbGoalGroups: THREE.Group[] = [];
+  private fbScore = [0, 0];
+  private fbSmashCd = 0;
+  private fbWidenCd = 0;
+  private fbSmashQueued = false;
+  private fbWidenQueued = false;
+  private fbSmashBtn: HTMLButtonElement | null = null;
+  private fbWidenBtn: HTMLButtonElement | null = null;
+  private fbBlueEl: HTMLElement | null = null;
+  private fbRedEl: HTMLElement | null = null;
+  private fbBallPrev = { x: 0, z: 0 };
   private gateMeshes: THREE.Mesh[] = [];
   private heldMeshes: (THREE.Mesh | null)[] = [null, null, null, null];
   private seq = 0;
@@ -160,6 +174,8 @@ export class OnlineFreeRoam {
       this.engine.camera.frame(this.half, 1.0, 60); // top-down so the dark maze reads
     } else if (this.game.mechanic === 'kart') {
       this.engine.camera.frame(this.half + 2, 1.0, 46); // a touch wider + lower for the ring
+    } else if (this.game.mechanic === 'foosball') {
+      this.engine.camera.frameAngled(this.half * 0.52 + 4, this.half * 0.42 + 5); // 3/4 stadium view
     } else {
       this.engine.camera.frame(isClimb ? 17 : this.half, this.game.mechanic === 'icepush' ? 1.18 : 1.0);
     }
@@ -211,6 +227,7 @@ export class OnlineFreeRoam {
     if (this.game.mechanic === 'musicalchairs') this.buildMusicChairs();
     if (this.game.mechanic === 'kart') this.buildKartUI();
     if (this.game.mechanic === 'maze') this.buildMazeUI();
+    if (this.game.mechanic === 'foosball') this.buildFoosballUI();
     this.input.setEnabled(true);
     // Hot potato / musical chairs are button-driven — no movement stick.
     const noStick = this.game.mechanic === 'hotpotato' || this.game.mechanic === 'musicalchairs';
@@ -429,7 +446,135 @@ export class OnlineFreeRoam {
     } else if (mech === 'maze') {
       this.buildMaze();
       // Torch/lantern lighting is set up once the cop slot arrives (onState).
+    } else if (mech === 'foosball') {
+      this.buildFoosball();
     }
+  }
+
+  // --- Foot Brawl (foosball) ---------------------------------------------------
+  private buildFoosball() {
+    const scene = this.engine.scene;
+    const X = this.half * 0.52, Z = this.half * 0.42, goalHalf = Z * 0.44;
+    this.fbRailX = [-X * 0.34, -X * 0.80, X * 0.34, X * 0.80];
+    scene.fog = null;
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    scene.add(new THREE.HemisphereLight(0xffe8c8, 0x3a5a3a, 0.5));
+    scene.background = this.fbSky();
+    // Striped pitch.
+    const stripes = 10;
+    for (let i = 0; i < stripes; i++) {
+      const w = (X * 2) / stripes;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, Z * 2), new THREE.MeshStandardMaterial({ color: i % 2 ? 0x3f8a3a : 0x357a32, roughness: 1 }));
+      m.rotation.x = -Math.PI / 2; m.position.set(-X + w * (i + 0.5), 0.02, 0); m.receiveShadow = true; scene.add(m);
+    }
+    const line = (x: number, z: number, w: number, d: number) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.08, d), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 }));
+      m.position.set(x, 0.1, z); scene.add(m);
+    };
+    line(0, 0, 0.5, Z * 2);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(Z * 0.34, 0.22, 6, 40), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.1; scene.add(ring);
+    // Side boards + goal-end coloured boards.
+    const board = (x: number, z: number, w: number, d: number, col: number) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, 2.2, d), new THREE.MeshStandardMaterial({ color: col, roughness: 0.7, emissive: (col & 0xfefefe) >> 1, emissiveIntensity: 0.15 }));
+      m.position.set(x, 1.1, z); m.castShadow = true; scene.add(m);
+    };
+    board(0, Z + 0.6, X * 2 + 2, 1.2, 0xece8d8); board(0, -Z - 0.6, X * 2 + 2, 1.2, 0xece8d8);
+    const seg = (Z - goalHalf) / 2;
+    for (const [sx, col] of [[-1, 0x2f6bd8], [1, 0xd8452f]] as const) {
+      board(sx * (X + 0.6), (goalHalf + seg), 1.2, seg * 2, col);
+      board(sx * (X + 0.6), -(goalHalf + seg), 1.2, seg * 2, col);
+      this.buildFoosGoal(sx, col, X, goalHalf);
+    }
+    // Coloured rails.
+    [-1, -1, 1, 1].forEach((s, i) => {
+      const col = s < 0 ? 0x2f6bd8 : 0xd8452f;
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.06, Z * 2 - 2), new THREE.MeshStandardMaterial({ color: col, emissive: s < 0 ? 0x123a7a : 0x7a1a12, emissiveIntensity: 0.5, roughness: 0.5 }));
+      rail.position.set(this.fbRailX[i], 0.12, 0); scene.add(rail);
+    });
+    // Stadium riser + fans on the two long sides + corner flags.
+    const spanX = X * 2 + 8, oz = Z + 1.4;
+    for (const sz of [-1, 1]) {
+      const riser = new THREE.Mesh(new THREE.BoxGeometry(spanX, 1.4, 4.5), new THREE.MeshStandardMaterial({ color: 0x394055, roughness: 1 }));
+      riser.position.set(0, 0.7, sz * (oz + 2.6)); scene.add(riser);
+      this.buildFoosFans(sz, spanX, oz);
+    }
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(340, 130), new THREE.MeshBasicMaterial({ map: this.fbBackdrop(), depthWrite: false }));
+    back.position.set(0, 30, -(Z + 30)); scene.add(back);
+    // Team dots + ball + seat riders facing the camera.
+    this.players.forEach((p) => {
+      p.z = (p.index % 2 === 0 ? -1 : 1) * Z * 0.28;
+      p.x = this.fbRailX[p.index];
+      p.standFacing = p.index < 2 ? 0.5 : -0.5;
+      if (p.ring) p.ring.visible = false;
+      if (p.glow) p.glow.visible = false;
+      const col = p.index < 2 ? 0x2f6bd8 : 0xd8452f;
+      const dot = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 0.3, 16), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.7, roughness: 0.5 }));
+      dot.position.set(this.fbRailX[p.index], 0.14, p.z); p.group.add(dot); dot.position.set(0, -0.4, 0);
+    });
+    this.fbBall = new THREE.Mesh(new THREE.SphereGeometry(1.1, 18, 14), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }));
+    const spot = new THREE.Mesh(new THREE.SphereGeometry(0.46, 8, 8), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+    spot.position.set(0.4, 0.4, 0.3); this.fbBall.add(spot); this.fbBall.castShadow = true;
+    scene.add(this.fbBall);
+  }
+
+  private buildFoosGoal(sx: number, col: number, X: number, gh: number) {
+    const g = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.4, metalness: 0.2, emissive: (col & 0xfefefe) >> 2, emissiveIntensity: 0.5 });
+    const depth = 4.5, postR = 0.45, H = 3.6;
+    for (const sz of [-gh, gh]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(postR, postR, H, 10), mat); post.position.set(sx * (X + 0.2), H / 2, sz); g.add(post); }
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(postR, postR, gh * 2, 10), mat); bar.rotation.x = Math.PI / 2; bar.position.set(sx * (X + 0.2), H, 0); g.add(bar);
+    for (const sz of [-gh, gh]) { const bp = new THREE.Mesh(new THREE.CylinderGeometry(postR, postR, H, 10), mat); bp.position.set(sx * (X + depth), H / 2, sz); g.add(bp); }
+    const netMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.5 });
+    const backNet = new THREE.Mesh(new THREE.PlaneGeometry(gh * 2, H, 6, 4), netMat); backNet.rotation.y = Math.PI / 2; backNet.position.set(sx * (X + depth), H / 2, 0); g.add(backNet);
+    const mouth = new THREE.Mesh(new THREE.PlaneGeometry(3.0, gh * 2), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.5, side: THREE.DoubleSide }));
+    mouth.rotation.x = -Math.PI / 2; mouth.position.set(sx * (X - 1.5), 0.13, 0); g.add(mouth);
+    this.engine.scene.add(g);
+    this.fbGoalGroups[sx < 0 ? 0 : 1] = g;
+  }
+
+  private buildFoosFans(sz: number, spanX: number, innerZ: number) {
+    const scene = this.engine.scene;
+    const rows = 2, cols = Math.max(12, Math.round(spanX / 2.2)), n = rows * cols;
+    const bodies = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.55, 1.1, 3, 6), new THREE.MeshStandardMaterial({ roughness: 0.9 }), n);
+    const heads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.46, 6, 6), new THREE.MeshStandardMaterial({ roughness: 0.9 }), n);
+    const cloth = ['#ff5a5a', '#4dc3ff', '#ffd23f', '#7cf07c', '#b06bff', '#ff7a3a', '#ffffff', '#2f6bd8'];
+    const skin = ['#f2cda2', '#d9a06a', '#a06a40', '#ffe0b8', '#8a5a34'];
+    const m = new THREE.Matrix4(), col = new THREE.Color();
+    let k = 0;
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const x = -spanX / 2 + (c + 0.5) * (spanX / cols) + (Math.random() - 0.5) * 0.6;
+      const z = sz * (innerZ + 1.6 + r * 2.4), y = 1.4 + r * 1.2, s = 0.9 + Math.random() * 0.35;
+      m.makeScale(s, s, s); m.setPosition(x, y, z); bodies.setMatrixAt(k, m); bodies.setColorAt(k, col.set(cloth[(Math.random() * cloth.length) | 0]));
+      m.setPosition(x, y + 1.15 * s, z); heads.setMatrixAt(k, m); heads.setColorAt(k, col.set(skin[(Math.random() * skin.length) | 0]));
+      k++;
+    }
+    bodies.instanceMatrix.needsUpdate = true; heads.instanceMatrix.needsUpdate = true;
+    scene.add(bodies); scene.add(heads);
+  }
+
+  private fbSky(): THREE.CanvasTexture {
+    const c = document.createElement('canvas'); c.width = 16; c.height = 256;
+    const x = c.getContext('2d')!;
+    const g = x.createLinearGradient(0, 0, 0, 256);
+    g.addColorStop(0.0, '#243a7a'); g.addColorStop(0.45, '#5a6bb0'); g.addColorStop(0.72, '#d98a6a'); g.addColorStop(1.0, '#f0b070');
+    x.fillStyle = g; x.fillRect(0, 0, 16, 256);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; return tex;
+  }
+  private fbBackdrop(): THREE.CanvasTexture {
+    const c = document.createElement('canvas'); c.width = 1024; c.height = 384;
+    const x = c.getContext('2d')!;
+    const g = x.createLinearGradient(0, 0, 0, 384);
+    g.addColorStop(0.0, '#213a80'); g.addColorStop(0.4, '#5a6bb4'); g.addColorStop(0.68, '#e0906a'); g.addColorStop(0.82, '#ffb56a');
+    x.fillStyle = g; x.fillRect(0, 0, 1024, 384);
+    const standTop = 286; x.fillStyle = '#2a3350'; x.fillRect(0, standTop, 1024, 384 - standTop);
+    for (let row = 0; row < 3; row++) {
+      const y = standTop + 14 + row * 24;
+      x.fillStyle = row % 2 ? '#333c5c' : '#2c3452'; x.fillRect(0, y - 8, 1024, 18);
+      for (let i = 0; i < 150; i++) { x.fillStyle = ['#ff5a5a', '#4dc3ff', '#ffd23f', '#7cf07c', '#ffffff', '#ff7a3a', '#b06bff'][(Math.random() * 7) | 0]; x.beginPath(); x.arc(Math.random() * 1024, y + (Math.random() - 0.5) * 8, 2.4, 0, Math.PI * 2); x.fill(); }
+    }
+    for (const px of [120, 380, 640, 900]) { x.strokeStyle = '#20263a'; x.lineWidth = 6; x.beginPath(); x.moveTo(px, standTop); x.lineTo(px, 70); x.stroke(); x.fillStyle = '#fff6d8'; x.fillRect(px - 34, 48, 68, 26); }
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; return tex;
   }
 
   // --- Race Kart ---------------------------------------------------------------
@@ -895,6 +1040,10 @@ export class OnlineFreeRoam {
       this.players.forEach((p, i) => p.setStatusIcon(i === this.chaseGuard ? '🥢' : '🏃', 9999));
       HUD.setObjective(this.youSlot === this.chaseGuard ? '🥢 You are the GUARD — catch all 3!' : '🏃 RUN! Escape the guard!');
     }
+    if (mech === 'foosball') {
+      const aux = m.aux ?? 0;
+      this.fbScore = [Math.floor(aux / 100), aux % 100];
+    }
     if (mech === 'maze') {
       this.mazeExposure = m.ring ?? 0;
       if ((m.aux ?? -1) >= 0 && this.mazeCop < 0) {
@@ -917,6 +1066,12 @@ export class OnlineFreeRoam {
         this.kartHead[slot] = cd;
         this.kartHeld[slot] = flags;
         if (slot === this.youSlot && p.score !== score && score > 0) { SFX.gem(); HUD.banner(`LAP ${score + 1}!`, p.hero.col); }
+      }
+      // Foosball: cd = smash cd, shieldT = widen cd, freezeT = stun.
+      if (mech === 'foosball') {
+        if (slot === this.youSlot) { this.fbSmashCd = cd; this.fbWidenCd = shieldT; }
+        p.standFacing = slot < 2 ? 0.5 : -0.5;
+        p.zapped = freezeT > 0;
       }
       // Maze: cd = facing, score = battery, flags bit0 = torch on.
       if (mech === 'maze') {
@@ -942,6 +1097,7 @@ export class OnlineFreeRoam {
         : mech === 'climb' ? `${score}m`
         : mech === 'kart' ? `Lap ${score + 1}`
         : mech === 'maze' ? (slot === this.mazeCop ? '🚔' : '🔦')
+        : mech === 'foosball' ? (slot < 2 ? '🔵' : '🔴')
         : score;
       if (p.lives !== lives || p.score !== score) {
         p.lives = lives;
@@ -1028,6 +1184,14 @@ export class OnlineFreeRoam {
     for (const ev of m.events) {
       const p = this.players[ev.slot];
       if (!p) continue;
+      // Foot Brawl has its own SMASH / WIDEN / stun / goal cues.
+      if (mech === 'foosball') {
+        if (ev.t === 'hit') { SFX.hit(); this.engine.camera.shake(1.6); this.burst(p.x, p.z, '#FFD23F', 14); if (p.you) HUD.banner('⚡ SMASH!', '#FFD23F'); }
+        else if (ev.t === 'power' && ev.k === 9) { p.setStatusIcon('💫', 1.2); this.burst(p.x, p.z, '#FFE23A', 12); if (p.you) HUD.banner('😵 DIZZY!', '#FFD23F'); }
+        else if (ev.t === 'power' && ev.k === 8) { SFX.power(); if (p.you) HUD.banner('🥅 GOAL WIDE OPEN — shoot!', '#7CF07C'); }
+        else if (ev.t === 'goal') { SFX.win(); this.engine.camera.shake(2.4); HUD.banner(ev.slot === 0 ? '🔵 BLUE GOAL!' : '🔴 RED GOAL!', ev.slot === 0 ? '#4DC3FF' : '#ff4da6'); }
+        continue;
+      }
       if (ev.t === 'ult') {
         SFX.power();
         this.burst(p.x, p.z, p.hero.col, 16);
@@ -1105,6 +1269,9 @@ export class OnlineFreeRoam {
       if (jumpPressed || abilityPressed) this.kartItemQueued = true; // ITEM (or ability)
     } else if (mechIn === 'maze') {
       if (jumpPressed || abilityPressed) this.mazeTorchQueued = true; // TORCH toggle
+    } else if (mechIn === 'foosball') {
+      if (jumpPressed) this.fbSmashQueued = true;   // SMASH (or button)
+      if (abilityPressed) this.fbWidenQueued = true; // WIDEN
     } else {
       if (jumpPressed || (isClimb && abilityPressed)) this.doJump();
       if (!isClimb && abilityPressed) this.ultQueued = true;
@@ -1117,8 +1284,11 @@ export class OnlineFreeRoam {
       // ult is a held boost for kart, an edge-triggered toggle for maze, else the ult.
       const ultVal = mechIn === 'kart' ? (this.kartBoostHeld || undefined)
         : mechIn === 'maze' ? (this.mazeTorchQueued || undefined)
+        : mechIn === 'foosball' ? (this.fbWidenQueued || undefined)
         : (this.ultQueued || undefined);
-      const jumpVal = mechIn === 'kart' ? (this.kartItemQueued || undefined) : (this.jumpQueued || undefined);
+      const jumpVal = mechIn === 'kart' ? (this.kartItemQueued || undefined)
+        : mechIn === 'foosball' ? (this.fbSmashQueued || undefined)
+        : (this.jumpQueued || undefined);
       net.sendInput({
         seq: this.seq,
         ax: this.input.ax,
@@ -1131,6 +1301,8 @@ export class OnlineFreeRoam {
       this.ultQueued = false;
       this.kartItemQueued = false;
       this.mazeTorchQueued = false;
+      this.fbSmashQueued = false;
+      this.fbWidenQueued = false;
       this.passTarget = null;
     }
 
@@ -1157,6 +1329,7 @@ export class OnlineFreeRoam {
     }
 
     if (this.game.mechanic === 'maze') this.updateMaze(dt);
+    if (this.game.mechanic === 'foosball') this.updateFoosballUI();
 
     // Race gate highlight for your own next gate.
     if (this.game.mechanic === 'race') {
@@ -1226,6 +1399,7 @@ export class OnlineFreeRoam {
     document.getElementById('mcUI')?.remove();
     document.getElementById('kartUI')?.remove();
     document.getElementById('mzUI')?.remove();
+    document.getElementById('fbUI')?.remove();
     if (this.hpOnDown) { document.removeEventListener('pointerdown', this.hpOnDown); this.hpOnDown = null; }
     const ui = document.createElement('div');
     ui.id = 'dodgeUI';
@@ -1272,6 +1446,7 @@ export class OnlineFreeRoam {
     document.getElementById('mcUI')?.remove();
     document.getElementById('kartUI')?.remove();
     document.getElementById('mzUI')?.remove();
+    document.getElementById('fbUI')?.remove();
     if (this.hpOnDown) { document.removeEventListener('pointerdown', this.hpOnDown); this.hpOnDown = null; }
     const ui = document.createElement('div');
     ui.id = 'hpUI';
@@ -1381,6 +1556,16 @@ export class OnlineFreeRoam {
     if (m === 'hotpotato' || m === 'musicalchairs' || m === 'kart') return;
     if (m === 'chase') { this.predictChase(dt); return; }
     if (m === 'maze') { this.predictMaze(dt); return; }
+    if (m === 'foosball') {
+      // Rail movement: slide along z only, x pinned to the rail.
+      const p = this.players[this.youSlot];
+      if (!p || p.freezeT > 0) return;
+      const Z = this.half * 0.42;
+      p.z += this.input.ay * 22 * dt;
+      p.z = Math.max(-Z + 3, Math.min(Z - 3, p.z));
+      p.x = this.fbRailX[this.youSlot];
+      return;
+    }
     const p = this.players[this.youSlot];
     if (p.dead) return;
     // Mirror the server + offline movement exactly (src/shared/roammove.ts).
@@ -1638,6 +1823,7 @@ export class OnlineFreeRoam {
 
   private buildMazeUI() {
     document.getElementById('mzUI')?.remove();
+    document.getElementById('fbUI')?.remove();
     const youCop = this.youSlot === this.mazeCop; // may be -1 (unknown) → treat as robber for now
     const ui = document.createElement('div');
     ui.id = 'mzUI';
@@ -1663,6 +1849,36 @@ export class OnlineFreeRoam {
     // The cop has no torch controls; hide the robber row if we already know.
     if (youCop) (ui.querySelector('#mzRobber') as HTMLElement).style.display = 'none';
     void youCop;
+  }
+
+  private buildFoosballUI() {
+    document.getElementById('fbUI')?.remove();
+    const ui = document.createElement('div');
+    ui.id = 'fbUI';
+    ui.style.cssText = 'position:fixed;inset:0;z-index:8;pointer-events:none;font-family:Bungee,system-ui,sans-serif;';
+    const bar = (side: string, col: string, label: string) =>
+      `<div id="fb${side}" style="position:fixed;top:66px;${side === 'Blue' ? 'left:16px' : 'right:16px'};background:${col};color:#fff;padding:6px 12px;border-radius:12px;font-size:14px;box-shadow:0 3px 0 rgba(0,0,0,.4);display:flex;gap:6px;align-items:center;">${side === 'Blue' ? label + ' ' : ''}<span class="balls"></span>${side === 'Red' ? ' ' + label : ''}</div>`;
+    ui.innerHTML = `${bar('Blue', '#2f6bd8', 'BLUE')}${bar('Red', '#d8452f', 'RED')}
+      <button id="fbWiden" data-nostick style="pointer-events:auto;position:fixed;right:158px;bottom:30px;">🥅<br>WIDEN</button>
+      <button id="fbSmash" data-nostick style="pointer-events:auto;position:fixed;right:18px;bottom:22px;">⚡<br>SMASH</button>`;
+    document.body.appendChild(ui);
+    const round = 'font-family:Bungee,system-ui,sans-serif;border:none;cursor:pointer;box-shadow:0 6px 0 rgba(0,0,0,.35);touch-action:none;user-select:none;text-align:center;line-height:1.05;border-radius:50%;';
+    this.fbSmashBtn = ui.querySelector('#fbSmash')!;
+    this.fbWidenBtn = ui.querySelector('#fbWiden')!;
+    this.fbSmashBtn.style.cssText += round + 'width:118px;height:118px;font-size:19px;color:#12142e;background:#FFD23F;';
+    this.fbWidenBtn.style.cssText += round + 'width:100px;height:100px;font-size:15px;color:#08320f;background:#3bd45a;';
+    this.fbSmashBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.fbSmashQueued = true; });
+    this.fbWidenBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.fbWidenQueued = true; });
+    this.fbBlueEl = ui.querySelector('#fbBlue .balls')!;
+    this.fbRedEl = ui.querySelector('#fbRed .balls')!;
+  }
+
+  private updateFoosballUI() {
+    const balls = (n: number) => '⚽'.repeat(n) + '·'.repeat(Math.max(0, 3 - n));
+    if (this.fbBlueEl) this.fbBlueEl.textContent = balls(this.fbScore[0]);
+    if (this.fbRedEl) this.fbRedEl.textContent = balls(this.fbScore[1]);
+    if (this.fbSmashBtn) { this.fbSmashBtn.style.opacity = this.fbSmashCd > 0 ? '0.5' : '1'; this.fbSmashBtn.innerHTML = this.fbSmashCd > 0 ? `⚡<br>${Math.ceil(this.fbSmashCd)}s` : '⚡<br>SMASH'; }
+    if (this.fbWidenBtn) { this.fbWidenBtn.style.opacity = this.fbWidenCd > 0 ? '0.5' : '1'; this.fbWidenBtn.innerHTML = this.fbWidenCd > 0 ? `🥅<br>${Math.ceil(this.fbWidenCd)}s` : '🥅<br>WIDEN'; }
   }
 
   private interpolate() {
@@ -1698,6 +1914,25 @@ export class OnlineFreeRoam {
     for (const e of bEnts) {
       const [id, type, x, z, y, extra] = e;
       seen.add(id);
+      // Foosball ball: routed to the pre-built fbBall + drives goal widen scale.
+      if (this.game.mechanic === 'foosball') {
+        const ea = aById.get(id) ?? e;
+        const bxp = ea[2] + (x - ea[2]) * t, bzp = ea[3] + (z - ea[3]) * t;
+        if (this.fbBall) {
+          this.fbBall.position.set(bxp, 1.2, bzp);
+          this.fbBall.rotation.z -= (bxp - this.fbBallPrev.x) * 0.4;
+          this.fbBall.rotation.x += (bzp - this.fbBallPrev.z) * 0.4;
+          this.fbBallPrev = { x: bxp, z: bzp };
+        }
+        // extra bit0/bit1 = goal widened (left/right).
+        const gh = this.half * 0.42 * 0.44;
+        for (const side of [0, 1]) {
+          const g = this.fbGoalGroups[side];
+          if (g) { const target = (extra & (side === 0 ? 1 : 2)) ? 1.8 : 1; g.scale.z += (target - g.scale.z) * 0.2; }
+        }
+        void gh;
+        continue;
+      }
       let mesh = this.entMeshes.get(id);
       if (!mesh) {
         mesh = this.makeEntMesh(type, extra);
@@ -1774,6 +2009,7 @@ export class OnlineFreeRoam {
     document.getElementById('mcUI')?.remove();
     document.getElementById('kartUI')?.remove();
     document.getElementById('mzUI')?.remove();
+    document.getElementById('fbUI')?.remove();
     if (this.hpOnDown) { document.removeEventListener('pointerdown', this.hpOnDown); this.hpOnDown = null; }
     const won = m.mode === '2v2'
       ? m.ranking.find((r) => r.slot === this.youSlot)?.team === m.winnerTeam
@@ -1801,6 +2037,7 @@ export class OnlineFreeRoam {
     document.getElementById('mcUI')?.remove();
     document.getElementById('kartUI')?.remove();
     document.getElementById('mzUI')?.remove();
+    document.getElementById('fbUI')?.remove();
     if (this.hpOnDown) { document.removeEventListener('pointerdown', this.hpOnDown); this.hpOnDown = null; }
     net.cb.onState = undefined;
     net.cb.onMatchEnd = undefined;
