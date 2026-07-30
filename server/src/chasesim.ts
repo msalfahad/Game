@@ -1,6 +1,6 @@
 import { heroByKey, speedMult, type HeroDef } from './heroes.js';
 import { ET, TICK_RATE, type EntityState, type InputMsg, type MatchEndMsg, type MatchMode, type PlayerState, type SimEvent, type StateMsg } from './protocol.js';
-import { MOVE, roamSurface, sprintMul } from './shared/roammove.js';
+import { MOVE, SURFACE_PHYS, sprintMul } from './shared/roammove.js';
 import type { GameSim, MatchSeat } from './sim.js';
 
 // Authoritative The Great Escape (Dune Clash chase) at 20Hz. 1 GUARD (faster,
@@ -15,9 +15,9 @@ const DUR = 55;
 const GUARD_SPEED = 1.18; // reeled-in feel, not a sprint (was 1.4)
 const SHOES_SPEED = 1.45;  // shoes still clearly beat the guard
 const HITBOX = 3.0;
-// Bodies must actually overlap for a catch — no long "stick reach", so with
-// network lag the guard has to physically touch the runner, not pass nearby.
-const CATCH_R = HITBOX * 2 - 0.4;
+// Guard must be right on top of a runner to catch — a tight overlap so with
+// network lag it reads as a real touch, never a catch from a body-width away.
+const CATCH_R = HITBOX * 2 - 1.6;
 
 interface Crate { x: number; z: number; hw: number; hd: number; }
 interface CPlayer {
@@ -159,11 +159,12 @@ export class ChaseSim implements GameSim {
   }
 
   private applyMove(p: CPlayer, ax: number, ay: number, dt: number) {
-    const surf = roamSurface('dune', false); // sand
+    // Crisp metal grip (NO sand drift): the client predicts this exactly, so the
+    // local runner never rubber-bands against unpredictable server noise.
+    const surf = SURFACE_PHYS.metal;
     const top = MOVE.baseSpeed * speedMult(p.hero) * sprintMul(ax, ay) * this.speedMul(p);
     const accel = top * MOVE.accelMul * surf.accel;
     p.vx += ax * accel * dt; p.vz += ay * accel * dt;
-    if (surf.drift) { p.vx += (Math.random() - 0.5) * surf.drift; p.vz += (Math.random() - 0.5) * surf.drift; }
     const retain = Math.pow(surf.grip, dt);
     p.vx *= retain; p.vz *= retain;
     const sp = Math.hypot(p.vx, p.vz);

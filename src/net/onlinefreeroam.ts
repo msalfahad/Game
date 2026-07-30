@@ -155,7 +155,7 @@ export class OnlineFreeRoam {
     } else if (this.game.mechanic === 'musicalchairs') {
       this.engine.camera.frame(19, 1.0, 52); // top-down-ish so the ring + chairs read clearly
     } else if (this.game.mechanic === 'chase') {
-      this.engine.camera.frame(this.half, 1.0, 58); // top-down so you can read the maze
+      this.engine.camera.frame(this.half + 5, 1.0, 54); // zoomed out so the FULL yard fits
     } else if (this.game.mechanic === 'maze') {
       this.engine.camera.frame(this.half, 1.0, 60); // top-down so the dark maze reads
     } else if (this.game.mechanic === 'kart') {
@@ -900,7 +900,12 @@ export class OnlineFreeRoam {
       if ((m.aux ?? -1) >= 0 && this.mazeCop < 0) {
         this.mazeCop = m.aux ?? 0;
         this.setupMazeLighting(); // now that we know who the cop is
-        HUD.setObjective(this.youSlot === this.mazeCop ? '🚔 Survive the night — stun torchers from behind!' : '🔦 Torch the cop together for 6s — mind your back!');
+        const youCop = this.youSlot === this.mazeCop;
+        HUD.setObjective(youCop ? '🚔 Survive the night — stun torchers from behind!' : '🔦 Torch the cop together for 6s — mind your back!');
+        // The cop has no torch: hide the robber battery + TORCH button for them.
+        const robberRow = document.getElementById('mzRobber');
+        if (robberRow) robberRow.style.display = youCop ? 'none' : 'flex';
+        HUD.banner(youCop ? 'COP 🚔 — memorise the map!' : 'ROBBER 🔦 — memorise the map!', youCop ? '#4DA6FF' : '#FFD23F');
       }
     }
     for (const ps of m.players) {
@@ -1459,12 +1464,12 @@ export class OnlineFreeRoam {
     } else if (p.shoesT > 0) {
       mul = 1.45;
     }
-    const surf = roamSurface('dune', false); // sand
+    const grip = 0.02, accelF = 1.0; // crisp metal grip — matches server (no drift)
     const top = MOVE.baseSpeed * speedMult(p.hero) * sprintMul(this.input.ax, this.input.ay) * mul;
-    const accel = top * MOVE.accelMul * surf.accel;
+    const accel = top * MOVE.accelMul * accelF;
     p.vx += this.input.ax * accel * dt;
     p.vz += this.input.ay * accel * dt;
-    const retain = Math.pow(surf.grip, dt);
+    const retain = Math.pow(grip, dt);
     p.vx *= retain; p.vz *= retain;
     const sp = Math.hypot(p.vx, p.vz);
     if (sp > top) { p.vx *= top / sp; p.vz *= top / sp; }
