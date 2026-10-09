@@ -11,6 +11,9 @@ services:
     name: bash-arena
     runtime: node
     plan: free
+    # Frankfurt is the closest Render region to the Gulf — ~3x lower ping
+    # from Kuwait than the default US-Oregon region.
+    region: frankfurt
     buildCommand: npm ci && npm run build && cd server && npm ci && npm run build
     startCommand: node server/dist/index.js
     healthCheckPath: /healthz
