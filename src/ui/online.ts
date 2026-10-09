@@ -1,5 +1,6 @@
 import { HEROES, heroImg, type Hero } from '../data/characters';
 import { portraitImg, attachPortraitFallback } from './portrait';
+import { characterVoice } from '../core/voice-barks';
 import { GAMES, FAMILIES, gameById } from '../data/maps';
 import { net, resolveServerUrl, rememberServerUrl, savedName } from '../net/client';
 import type {
@@ -489,6 +490,8 @@ function renderSeriesEnd(m: SeriesEndMsg) {
   const myTeam = m.players[mySlot]?.team ?? 0;
   const topSlot = [...m.standings].sort((a, b) => b.wins - a.wins)[0]?.slot;
   const youWon = m.mode === '2v2' ? myTeam === m.winnerTeam : topSlot === mySlot;
+  const myHero = m.players[mySlot]?.heroKey ?? hero.key;
+  (youWon ? characterVoice.victory(myHero) : characterVoice.losing(myHero)).catch(() => {});
   const titleEl = document.getElementById('onlineOverTitle')!;
   titleEl.textContent = m.mode === '2v2'
     ? (youWon ? '🏆 ' : '') + TEAM_NAMES[m.winnerTeam] + ' WIN THE SERIES!'

@@ -10,6 +10,7 @@ import { gameById, familyById } from '../data/maps';
 import { heroByKey, speedMult } from '../data/characters';
 import * as HUD from '../ui/hud';
 import { koTaunt } from '../game/taunt';
+import { characterVoice } from '../core/voice-barks';
 import { net } from './client';
 import { InterpDelay } from './interp';
 import { INPUT_RATE, type MatchEndMsg, type MatchStartMsg, type StateMsg } from './protocol';
@@ -159,6 +160,7 @@ export class OnlineMatch {
         SFX.power();
         this.burst(p.x, p.z, p.hero.col, 16);
         this.engine.camera.shake(1.5);
+        if (p.you) characterVoice.ability(p.hero.key).catch(() => {});
         if (p.you) HUD.banner(p.hero.ultName.toUpperCase() + '!', p.hero.col);
       } else if (ev.t === 'fall') {
         SFX.fall();

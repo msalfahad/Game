@@ -8,6 +8,7 @@ import { gameById, familyById, type GameDef } from '../data/maps';
 import { heroByKey, speedMult, HEROES } from '../data/characters';
 import * as HUD from '../ui/hud';
 import { koTaunt } from '../game/taunt';
+import { characterVoice } from '../core/voice-barks';
 import { net } from './client';
 import { InterpDelay } from './interp';
 import { ET, INPUT_RATE, type MatchEndMsg, type MatchStartMsg, type StateMsg } from './protocol';
@@ -568,6 +569,7 @@ export class OnlineFreeRoam {
         SFX.power();
         this.burst(p.x, p.z, p.hero.col, 16);
         this.engine.camera.shake(1.5);
+        if (p.you) characterVoice.ability(p.hero.key).catch(() => {});
         if (p.you) HUD.banner(mech === 'paint' ? 'PAINT BOMB!' : p.hero.ultName.toUpperCase() + '!', p.hero.col);
       } else if (ev.t === 'fall') {
         SFX.fall();

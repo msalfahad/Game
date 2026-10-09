@@ -6,6 +6,7 @@ import { Match } from './game/match';
 import { buildScreens, show, hideScreens, showResults } from './ui/screens';
 import { buildOnlineScreens, enterOnline, offerInviteJoin } from './ui/online';
 import { setupInstall } from './ui/install';
+import { characterVoice } from './core/voice-barks';
 import { OnlineMatch } from './net/onlinematch';
 import { OnlineHockey } from './net/onlinehockey';
 import { OnlineFreeRoam } from './net/onlinefreeroam';
@@ -76,6 +77,8 @@ buildOnlineScreens({
       : mech === 'pushout' ? new OnlineMatch(engine, input, done)
       : new OnlineFreeRoam(engine, input, done);
     online.start(m);
+    const me = m.players?.[m.youSlot]?.heroKey;
+    if (me) characterVoice.spawn(me).catch(() => {});
   },
   // Halt the 3D controller between games / when leaving a series.
   stopMatch: () => { online?.stop(); online = null; inMatch = false; },
