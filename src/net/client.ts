@@ -27,6 +27,10 @@ export function resolveServerUrl(): string | null {
     localStorage.setItem(SERVER_KEY, qs);
     return qs;
   }
+  // A server baked into the build wins over a remembered one, so players with
+  // a stale saved URL (e.g. a retired host) move over automatically.
+  const baked = import.meta.env.VITE_SERVER_URL;
+  if (baked) return baked.replace(/\/$/, '');
   const saved = localStorage.getItem(SERVER_KEY);
   if (saved) return saved;
   if (location.protocol === 'file:' || location.hostname.endsWith('github.io')) return null;

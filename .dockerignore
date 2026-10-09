@@ -1,0 +1,10 @@
+node_modules
+server/node_modules
+dist
+server/dist
+server-data
+server/server-data
+assets-staging
+models-src
+.git
+*.log

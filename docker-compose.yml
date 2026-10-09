@@ -1,0 +1,33 @@
+# Production stack for a Gulf-region VM: the game + automatic HTTPS (Caddy).
+#
+#   1. Point a domain (or a free DuckDNS name) at the VM's public IP.
+#   2. Open ports 80 and 443 in the VM's firewall.
+#   3. DOMAIN=play.example.com docker compose up -d --build
+#
+# HTTPS is required: the GitHub Pages site (https) cannot talk to a plain
+# http:// server, and phones refuse to install the game as an app without it.
+
+services:
+  game:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - game-data:/data
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN=your.domain.name}
+    command: caddy reverse-proxy --from ${DOMAIN} --to game:3001
+    volumes:
+      - caddy-data:/data
+    depends_on:
+      - game
+
+volumes:
+  game-data:
+  caddy-data:

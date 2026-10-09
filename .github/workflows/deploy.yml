@@ -31,6 +31,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          # Set the repo variable GAME_SERVER_URL (Settings > Variables) to
+          # your https game server so this site connects to it by default.
+          VITE_SERVER_URL: ${{ vars.GAME_SERVER_URL }}
       - run: node scripts/build-single.mjs
       - name: Publish dist to gh-pages branch
         run: |
