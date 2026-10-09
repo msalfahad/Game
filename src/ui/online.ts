@@ -309,20 +309,54 @@ export async function enterOnline() {
   }
   const name = savedName() ?? prompt('Pick a player name:') ?? '';
   const loading = document.getElementById('loading')!;
+  // Connecting overlay with a live countdown + CANCEL — a sleeping free
+  // server takes ~1 min to wake, and a dead one must never trap the player.
+  loading.innerHTML =
+    `<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:0 20px;text-align:center">
+      <span id="connMsg">CONNECTING…</span>
+      <span id="connSub" style="font-size:12px;opacity:.75">a sleeping free server can take up to a minute to wake</span>
+      <button id="connCancel" style="pointer-events:auto">✕ CANCEL</button>
+    </div>`;
+  loading.style.display = 'flex';
+  const t0 = Date.now();
+  const tick = setInterval(() => {
+    const el = document.getElementById('connSub');
+    if (el) el.textContent = `waking the server… ${Math.round((Date.now() - t0) / 1000)}s (up to 75s)`;
+  }, 1000);
+  document.getElementById('connCancel')!.addEventListener('click', () => net.cancelConnect?.());
   try {
-    loading.textContent = 'CONNECTING… (a sleeping free server can take up to a minute to wake)';
-    loading.style.display = 'flex';
     await net.connect(server, name);
     showOnline('scrOnlineHome');
     refreshWho();
   } catch (e) {
     show('scrTitle');
-    alert((e as Error).message + '\nCheck the server URL (see README → Multiplayer).');
-    localStorage.removeItem('ba-server');
+    if ((e as Error).message !== 'cancelled') {
+      localStorage.removeItem('ba-server');
+      titleBanner(
+        '🌐 Online is unavailable right now (the game server did not answer). ' +
+        'PLAY OFFLINE works — or try online again in a minute.',
+      );
+    }
   } finally {
+    clearInterval(tick);
     loading.style.display = 'none';
     loading.textContent = 'LOADING ARENA…';
   }
+}
+
+/** Dismissable notice on the title screen (replaces blocking alert()s). */
+function titleBanner(text: string) {
+  document.getElementById('titleBanner')?.remove();
+  const d = document.createElement('div');
+  d.id = 'titleBanner';
+  d.style.cssText =
+    'margin:4px auto 0;max-width:420px;background:rgba(170,40,50,.92);color:#fff;' +
+    'border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;line-height:1.35;cursor:pointer';
+  d.textContent = text;
+  d.onclick = () => d.remove();
+  const title = document.getElementById('scrTitle')!;
+  title.insertBefore(d, title.children[1] ?? null);
+  setTimeout(() => d.remove(), 12000);
 }
 
 function refreshWho() {

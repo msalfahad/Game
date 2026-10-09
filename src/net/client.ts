@@ -54,6 +54,8 @@ export interface NetCallbacks {
 export class Net {
   socket: Socket | null = null;
   me: WelcomeMsg | null = null;
+  /** Set while a connect attempt is pending; call to abandon it. */
+  cancelConnect: (() => void) | null = null;
   cb: NetCallbacks = {};
 
   get connected(): boolean {
@@ -75,14 +77,19 @@ export class Net {
       });
       this.socket = socket;
       const fail = (why: string) => {
+        this.cancelConnect = null;
         socket.close();
         this.socket = null;
         reject(new Error(why));
       };
+      // Lets the UI abandon a connect attempt (dead/sleeping server) without
+      // waiting out the full deadline.
+      this.cancelConnect = () => fail('cancelled');
       const timer = setTimeout(() => fail('Could not reach the server.'), 75000);
       socket.on('connect', () => {
         socket.emit('hello', { token: localStorage.getItem(TOKEN_KEY) ?? undefined, name }, (w: WelcomeMsg) => {
           clearTimeout(timer);
+          this.cancelConnect = null;
           this.me = w;
           localStorage.setItem(TOKEN_KEY, w.token);
           localStorage.setItem(NAME_KEY, w.name);
