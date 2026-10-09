@@ -63,6 +63,7 @@ export class Engine {
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
     this.hitstopT = 0;
+    this.slowT = 0;
   }
 
   /**
@@ -74,6 +75,17 @@ export class Engine {
     this.hitstopT = Math.max(this.hitstopT, sec);
   }
 
+  private slowScale = 1;
+  private slowT = 0;
+  /**
+   * Run game logic at `scale` x speed for `sec` real seconds (dramatic KO /
+   * chaos moments). Rendering stays at full frame rate, so it looks smooth.
+   */
+  slowmo(scale: number, sec: number) {
+    this.slowScale = scale;
+    this.slowT = Math.max(this.slowT, sec);
+  }
+
   private loop = () => {
     if (!this.update) return;
     const raw = Math.min(this.clock.getDelta(), 0.05);
@@ -83,6 +95,10 @@ export class Engine {
     if (this.hitstopT > 0) {
       this.hitstopT = Math.max(0, this.hitstopT - raw);
       dt = 0;
+    }
+    if (this.slowT > 0) {
+      this.slowT = Math.max(0, this.slowT - raw);
+      dt *= this.slowScale;
     }
     this.update(dt, this.clock.elapsedTime);
     this.camera.tickShake(raw);

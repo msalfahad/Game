@@ -103,13 +103,32 @@ export function setObjective(text: string) {
   objectiveEl.textContent = text;
 }
 
-export function banner(text: string, col = '#FFD23F') {
+export function banner(text: string, col = '#FFD23F', ms = 900) {
   if (!text) return;
   bannerEl.textContent = text;
   bannerEl.style.color = col;
   bannerEl.style.opacity = '1';
   clearTimeout(bannerTimer);
-  bannerTimer = window.setTimeout(() => (bannerEl.style.opacity = '0'), 900);
+  bannerTimer = window.setTimeout(() => (bannerEl.style.opacity = '0'), ms);
+}
+
+let tauntTimer = 0;
+/** Comic speech bubble with a hero's one-liner (knockout trash talk etc). */
+export function taunt(heroName: string, text: string, col: string) {
+  let el = document.getElementById('taunt');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'taunt';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = '';
+  const who = document.createElement('b');
+  who.textContent = heroName.toUpperCase();
+  who.style.color = col;
+  el.append(who, ' ', document.createTextNode(text));
+  el.className = 'show';
+  clearTimeout(tauntTimer);
+  tauntTimer = window.setTimeout(() => el!.classList.remove('show'), 2300);
 }
 
 export function setAbilityHint(state: 'armed' | 'ready' | '') {

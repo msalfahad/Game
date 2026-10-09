@@ -7,6 +7,7 @@ import { buildWorld, type World } from '../game/world';
 import { gameById, familyById, type GameDef } from '../data/maps';
 import { heroByKey, speedMult, HEROES } from '../data/characters';
 import * as HUD from '../ui/hud';
+import { koTaunt } from '../game/taunt';
 import { net } from './client';
 import { InterpDelay } from './interp';
 import { ET, INPUT_RATE, type MatchEndMsg, type MatchStartMsg, type StateMsg } from './protocol';
@@ -573,6 +574,8 @@ export class OnlineFreeRoam {
         this.burst(p.x, p.z, p.hero.col, 18);
         this.engine.camera.shake(2);
         HUD.banner(p.you ? 'YOU FELL!' : p.hero.name + ' FELL!', p.hero.col);
+        koTaunt(p, this.players);
+        this.engine.slowmo(p.you ? 0.4 : 0.5, p.you ? 0.6 : 0.4);
       } else if (ev.t === 'pick') {
         if (p.you) SFX.gem();
       } else if (ev.t === 'hit') {

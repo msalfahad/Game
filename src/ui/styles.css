@@ -177,3 +177,9 @@ button.big { width: 100%; max-width: 280px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
 @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.05); } }
+
+#taunt { position: fixed; top: 20%; left: 50%; transform: translate(-50%, 8px) rotate(-1.5deg) scale(.9); z-index: 9; pointer-events: none;
+  max-width: min(86vw, 380px); text-align: center; padding: 10px 16px; border-radius: 18px; background: #fff; color: #14183a;
+  font-family: 'Bungee', system-ui, sans-serif; font-size: clamp(13px, 3.6vw, 18px); line-height: 1.25;
+  box-shadow: 0 5px 0 rgba(0, 0, 0, .35); opacity: 0; transition: opacity .15s, transform .15s; }
+#taunt.show { opacity: 1; transform: translate(-50%, 0) rotate(-1.5deg) scale(1); }

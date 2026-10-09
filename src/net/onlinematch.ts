@@ -9,6 +9,7 @@ import { FAMILY_GRADE } from '../core/postfx';
 import { gameById, familyById } from '../data/maps';
 import { heroByKey, speedMult } from '../data/characters';
 import * as HUD from '../ui/hud';
+import { koTaunt } from '../game/taunt';
 import { net } from './client';
 import { InterpDelay } from './interp';
 import { INPUT_RATE, type MatchEndMsg, type MatchStartMsg, type StateMsg } from './protocol';
@@ -164,6 +165,8 @@ export class OnlineMatch {
         this.burst(p.x, p.z, p.hero.col, 18);
         this.engine.camera.shake(2);
         HUD.banner(p.you ? 'YOU FELL!' : p.hero.name + ' FELL!', p.hero.col);
+        koTaunt(p, this.players);
+        this.engine.slowmo(p.you ? 0.4 : 0.5, p.you ? 0.6 : 0.4);
       }
     }
   }

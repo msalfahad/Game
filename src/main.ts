@@ -5,6 +5,7 @@ import { loadTuning } from './core/tuning';
 import { Match } from './game/match';
 import { buildScreens, show, hideScreens, showResults } from './ui/screens';
 import { buildOnlineScreens, enterOnline, offerInviteJoin } from './ui/online';
+import { setupInstall } from './ui/install';
 import { OnlineMatch } from './net/onlinematch';
 import { OnlineHockey } from './net/onlinehockey';
 import { OnlineFreeRoam } from './net/onlinefreeroam';
@@ -111,3 +112,4 @@ document.getElementById('loading')!.style.display = 'none';
 show('scrTitle');
 
 offerInviteJoin();
+setupInstall();

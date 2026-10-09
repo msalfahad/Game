@@ -3,6 +3,8 @@ import { Engine } from '../core/engine';
 import { Input } from '../core/input';
 import { SFX } from '../core/audio';
 import { characterVoice } from '../core/voice-barks';
+import { Chaos } from './chaos';
+import { koTaunt } from './taunt';
 import { Player } from './player';
 import { buildWorld } from './world';
 import { Hazards } from './hazards';
@@ -38,6 +40,8 @@ export class Match {
 
   // Voice-bark edge detection for the local player (players[0]): barks fire on
   // state transitions this frame (ability used, dash started, rival KO'd).
+  private chaos: Chaos | null = null;
+  private vPrevLives: number[] = [];
   private vPrevCd = 0;
   private vPrevDash = 0;
   private vPrevDead: boolean[] = [];
@@ -156,9 +160,11 @@ export class Match {
     this.game.init(this.ctx);
     // Snapshot post-init state so the first loop frame doesn't read a stale
     // cooldown as a fresh ability/dash and fire a spurious bark.
+    this.chaos = Chaos.supports(game.mechanic) ? new Chaos() : null;
     this.vPrevCd = players[0].cd;
     this.vPrevDash = players[0].dashCd;
     this.vPrevDead = players.map((p) => p.dead);
+    this.vPrevLives = players.map((p) => p.lives);
     HUD.showHud(true);
     HUD.setObjective(this.game.objective);
     this.input.setEnabled(true);
@@ -183,6 +189,7 @@ export class Match {
     const you = this.ctx.players[0];
     HUD.setAbilityHint(you.armed ? 'armed' : you.cd <= 0 ? 'ready' : '');
 
+    this.chaos?.tick(dt, this.ctx.players, this.engine);
     this.game.tick(dt, elapsed);
     this.ctx.world.tick(dt);
     this.voiceBarks(you);
@@ -211,15 +218,19 @@ export class Match {
     const players = this.ctx.players;
     for (let i = 0; i < players.length; i++) {
       const p = players[i];
-      if (p.dead && !this.vPrevDead[i]) {
+      // A knockout is an elimination OR losing one of several lives (ring falls).
+      const lostLife = p.lives < (this.vPrevLives[i] ?? p.lives);
+      if ((p.dead && !this.vPrevDead[i]) || lostLife) {
         const isYou = i === 0;
         this.engine.hitstop(isYou ? 0.12 : 0.07);
         this.engine.camera.shake(isYou ? 0.9 : 0.55);
         this.spawnBurst(p.x, p.z, isYou ? '#ff5a5a' : '#ffffff', isYou ? 22 : 14);
-        if (!isYou && !you.dead) characterVoice.trash(key).catch(() => {});
+        koTaunt(p, players);
+        this.engine.slowmo(isYou ? 0.4 : 0.45, isYou ? 0.7 : 0.5);
       }
     }
     this.vPrevDead = players.map((q) => q.dead);
+    this.vPrevLives = players.map((q) => q.lives);
   }
 
   private finish(ranked: Player[], subtitle: string) {
