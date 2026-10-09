@@ -35,7 +35,7 @@ let seriesPlayers: SeriesNextMsg['players'] = [];
 let mySlot = 0;
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
 
-const ids = ['scrOnlineHome', 'scrQueue', 'scrParty', 'scrSeries', 'scrOnlineOver'];
+const ids = ['scrOnlineHome', 'scrQueue', 'scrParty', 'scrSeries', 'scrOnlineOver', 'scrBoard'];
 function showOnline(id: string) {
   hideScreens();
   for (const s of ids) document.getElementById(s)?.classList.add('hidden');
@@ -112,6 +112,17 @@ export function buildOnlineScreens(h: OnlineHooks) {
     <button class="alt" id="onlineFindNew">🔎 FIND NEW GAME</button>
   </div>`;
   root.appendChild(wrap);
+
+  const board = document.createElement('div');
+  board.id = 'scrBoard';
+  board.className = 'screen hidden';
+  board.innerHTML = `
+    <h2>🏆 LEADERBOARD</h2>
+    <p class="tag">Top players by online series wins</p>
+    <div id="boardList" style="width:min(92vw,420px);display:flex;flex-direction:column;gap:6px"></div>
+    <button class="alt" id="boardBack">◀ BACK</button>`;
+  root.appendChild(board);
+  document.getElementById('boardBack')!.addEventListener('click', () => show('scrTitle'));
 
   // Floating reaction pop-ups layer (over everything).
   if (!document.getElementById('reactPops')) {
@@ -552,4 +563,40 @@ function startCountdown(sec: number) {
 
 function stopCountdown() {
   if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+}
+
+/** Title-screen LEADERBOARD: fetch the top players from the game server. */
+export async function showLeaderboard() {
+  hideScreens();
+  for (const s of ids) document.getElementById(s)?.classList.add('hidden');
+  document.getElementById('scrBoard')!.classList.remove('hidden');
+  const list = document.getElementById('boardList')!;
+  const note = (t: string) => { list.innerHTML = `<p class="tag">${t}</p>`; };
+  const server = resolveServerUrl();
+  if (!server) { note('The leaderboard lives on the online server, which is not set up for this site yet.'); return; }
+  note('Loading…');
+  try {
+    const ctl = new AbortController();
+    const to = setTimeout(() => ctl.abort(), 8000);
+    const res = await fetch(`${server.replace(/\/$/, '')}/leaderboard`, { signal: ctl.signal });
+    clearTimeout(to);
+    const rows: { name: string; wins: number; games: number; bestStreak: number; streak: number }[] = (await res.json()).rows;
+    if (!rows.length) { note('No ranked games yet — be the first to win a series!'); return; }
+    list.innerHTML = '';
+    rows.forEach((r, i) => {
+      const d = document.createElement('div');
+      d.className = 'resRow' + (i === 0 ? ' first' : '');
+      const medal = ['🥇', '🥈', '🥉'][i] ?? `${i + 1}.`;
+      const name = document.createElement('div');
+      name.className = 'rn';
+      name.textContent = `${medal} ${r.name}`;
+      const stat = document.createElement('div');
+      stat.className = 'rs';
+      stat.textContent = `${r.wins} wins · 🔥${r.bestStreak} best`;
+      d.append(name, stat);
+      list.appendChild(d);
+    });
+  } catch {
+    note('Could not reach the server right now. Try again in a minute.');
+  }
 }

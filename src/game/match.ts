@@ -5,6 +5,7 @@ import { SFX } from '../core/audio';
 import { characterVoice } from '../core/voice-barks';
 import { Chaos } from './chaos';
 import { koTaunt } from './taunt';
+import { recordDailyResult } from '../data/daily';
 import { Player } from './player';
 import { buildWorld } from './world';
 import { Hazards } from './hazards';
@@ -242,6 +243,8 @@ export class Match {
     SFX.playMusic('menu');
     const you = ranked.find((p) => p.you)!;
     const youWon = ranked[0] === you;
+    const daily = this.ctx ? recordDailyResult(this.ctx.game.id, youWon) : null;
+    if (daily?.completed) subtitle += ` · 📅 DAILY COMPLETE! 🔥 ${daily.streak}-day streak`;
     if (youWon) {
       characterVoice.victory(you.hero.key).catch(() => {});
       SFX.win();

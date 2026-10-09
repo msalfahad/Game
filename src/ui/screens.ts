@@ -3,6 +3,7 @@ import { SFX } from '../core/audio';
 import { portraitImg, attachPortraitFallback } from './portrait';
 import { initCharSelect3d, startCharSelect3d, stopCharSelect3d, setCharSelectSelected } from './charselect3d';
 import { FAMILIES, familyGames, gameById, type GameDef } from '../data/maps';
+import { dailyChallenge } from '../data/daily';
 import type { Player } from '../game/player';
 import { TUNING, saveTuning, resetTuning } from '../core/tuning';
 
@@ -28,6 +29,8 @@ const root = document.getElementById('screens')!;
 let sel: Hero = HEROES[0];
 let diff: Diff = 'normal';
 let chosenGameId = 'frost-1';
+/** True while the player came in via the DAILY card: NEXT skips the world list. */
+let dailyPending = false;
 
 const ids = ['scrTitle', 'scrChar', 'scrFamilies', 'scrGames', 'scrVs', 'scrOver'];
 export function show(id: string) {
@@ -36,6 +39,18 @@ export function show(id: string) {
   // Only run the live hero animations while the select screen is on view.
   if (id === 'scrChar') startCharSelect3d();
   else stopCharSelect3d();
+  if (id === 'scrTitle') { dailyPending = false; renderDaily(); }
+}
+
+/** Title-screen daily challenge card: today's game, done-state and day-streak. */
+function renderDaily() {
+  const el = document.getElementById('dailyBtn');
+  if (!el) return;
+  const d = dailyChallenge();
+  el.innerHTML = d.done
+    ? `<span>✅ DAILY DONE · ${d.game.icon} ${d.game.name.toUpperCase()}</span><small>🔥 ${d.streak}-day streak — come back tomorrow!</small>`
+    : `<span>📅 DAILY: WIN ${d.game.icon} ${d.game.name.toUpperCase()}</span><small>${d.streak > 0 ? `🔥 ${d.streak}-day streak on the line!` : 'Win it to start a streak'}</small>`;
+  el.classList.toggle('done', d.done);
 }
 /** Hide every menu screen so the 3D canvas + HUD are visible during a match. */
 export function hideScreens() {
@@ -49,7 +64,9 @@ export function buildScreens(hooks: Hooks) {
     <h1>BASH<br>ARENA</h1>
     <p class="tag">Original 2-4 player arcade brawler · ${countGames()} mini-games across ${FAMILIES.length} themed worlds. Touch left side to move, tap right for ⚡. Keyboard: WASD/arrows · Space = ⚡ · Shift = jump. Gamepad supported.</p>
     <button class="big" data-go="scrChar">PLAY</button>
+    <button class="daily" id="dailyBtn"></button>
     <button class="big" id="onlineBtn" style="background:var(--aqua);box-shadow:0 5px 0 #0E9CB2">🌐 PLAY ONLINE</button>
+    <button class="alt big" id="boardBtn">🏆 LEADERBOARD</button>
     <button class="alt big" id="tuneBtn">⚙️ TUNING</button>
     <div class="settingRow"><span>CAMERA SHAKE</span><input id="shakeSlider" type="range" min="0" max="100" value="0"></div>
     <div class="settingRow"><span>QUALITY</span>
@@ -72,7 +89,7 @@ export function buildScreens(hooks: Hooks) {
       <div class="diff" data-d="hard">HARD</div>
       <div class="diff" data-d="expert">EXPERT</div>
     </div>
-    <button class="big" data-go="scrFamilies">NEXT ▶</button>
+    <button class="big" id="charNext">NEXT ▶</button>
   </div>
 
   <div id="scrFamilies" class="screen hidden">
@@ -211,6 +228,16 @@ export function buildScreens(hooks: Hooks) {
   );
   document.getElementById('vsBack')!.addEventListener('click', () => openFamily(gameById(chosenGameId).familyId));
   document.getElementById('overGames')!.addEventListener('click', () => openFamily(gameById(chosenGameId).familyId));
+
+  document.getElementById('charNext')!.addEventListener('click', () => {
+    if (dailyPending) { dailyPending = false; toVersus(); }
+    else show('scrFamilies');
+  });
+  document.getElementById('dailyBtn')!.addEventListener('click', () => {
+    chosenGameId = dailyChallenge().game.id;
+    dailyPending = true;
+    show('scrChar'); // pick a hero first, then straight to today's game
+  });
 
   document.getElementById('startBtn')!.addEventListener('click', () =>
     hooks.onStart({ hero: sel, diff, gameId: chosenGameId }),

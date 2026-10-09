@@ -4,7 +4,7 @@ import { SFX } from './core/audio';
 import { loadTuning } from './core/tuning';
 import { Match } from './game/match';
 import { buildScreens, show, hideScreens, showResults } from './ui/screens';
-import { buildOnlineScreens, enterOnline, offerInviteJoin } from './ui/online';
+import { buildOnlineScreens, enterOnline, offerInviteJoin, showLeaderboard } from './ui/online';
 import { setupInstall } from './ui/install';
 import { characterVoice } from './core/voice-barks';
 import { OnlineMatch } from './net/onlinematch';
@@ -84,6 +84,7 @@ buildOnlineScreens({
   stopMatch: () => { online?.stop(); online = null; inMatch = false; },
 });
 document.getElementById('onlineBtn')!.addEventListener('click', () => enterOnline());
+document.getElementById('boardBtn')!.addEventListener('click', () => showLeaderboard());
 
 // ✕ quit button (shown during matches) + the browser/phone BACK button both
 // bail the current match back to the menu.

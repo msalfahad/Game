@@ -15,6 +15,9 @@ export interface Account {
   xp: number;
   games: number;
   wins: number;
+  /** Current consecutive series wins (resets on a loss). Older saves lack it. */
+  streak?: number;
+  bestStreak?: number;
   createdAt: string;
 }
 
@@ -85,6 +88,35 @@ export function recordResult(token: string, won: boolean) {
   if (!acc) return;
   acc.games++;
   acc.xp += won ? 50 : 15;
-  if (won) acc.wins++;
+  if (won) {
+    acc.wins++;
+    acc.streak = (acc.streak ?? 0) + 1;
+    acc.bestStreak = Math.max(acc.bestStreak ?? 0, acc.streak);
+  } else {
+    acc.streak = 0;
+  }
   scheduleSave();
+}
+
+export interface BoardRow {
+  name: string;
+  wins: number;
+  games: number;
+  bestStreak: number;
+  streak: number;
+}
+
+/** Public leaderboard: top players by wins (names + stats only, never tokens). */
+export function leaderboard(n = 10): BoardRow[] {
+  return [...byToken.values()]
+    .filter((a) => a.games > 0)
+    .sort((a, b) => b.wins - a.wins || (b.bestStreak ?? 0) - (a.bestStreak ?? 0) || a.games - b.games)
+    .slice(0, n)
+    .map((a) => ({
+      name: a.name,
+      wins: a.wins,
+      games: a.games,
+      bestStreak: a.bestStreak ?? 0,
+      streak: a.streak ?? 0,
+    }));
 }

@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import express from 'express';
 import { Server } from 'socket.io';
-import { loadAccounts, hello } from './accounts.js';
+import { loadAccounts, hello, leaderboard } from './accounts.js';
 import { Lobby } from './rooms.js';
 import type { HelloMsg, WelcomeMsg } from './protocol.js';
 
@@ -23,6 +23,12 @@ if (distDir) {
   console.log('serving client from', distDir);
 }
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
+// The static client (GitHub Pages) fetches this cross-origin, so CORS is open.
+app.get('/leaderboard', (_req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Cache-Control', 'public, max-age=20');
+  res.json({ rows: leaderboard(10) });
+});
 
 const http = createServer(app);
 const io = new Server(http, {
