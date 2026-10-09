@@ -17,7 +17,7 @@ import {
 // game. Empty seats are bots; if a human drops mid-series their seat becomes a
 // bot and play continues.
 
-const QUEUE_BOT_FILL_SEC = 12;
+const QUEUE_BOT_FILL_SEC = 5; // a lone player is in a match within seconds — an empty-feeling lobby kills a party game
 const INTRO_SEC = 5; // countdown shown before each game (and result gap between)
 
 interface SeriesState {

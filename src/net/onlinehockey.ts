@@ -11,6 +11,7 @@ import { gameById, familyById } from '../data/maps';
 import { heroByKey, speedMult } from '../data/characters';
 import * as HUD from '../ui/hud';
 import { net } from './client';
+import { InterpDelay } from './interp';
 import { INPUT_RATE, type MatchEndMsg, type MatchStartMsg, type StateMsg } from './protocol';
 
 // Online hockey (Ice Hockey Brawl / Lava Hockey). The local paddle is driven
@@ -33,6 +34,7 @@ export class OnlineHockey {
   private players: Player[] = [];
   private youSlot = 0;
   private localPos = 0.5;
+  private interp = new InterpDelay();
   private snaps: Snap[] = [];
   private ballMeshes: THREE.Mesh[] = [];
   private seq = 0;
@@ -121,6 +123,7 @@ export class OnlineHockey {
   private onState(m: StateMsg) {
     if (!m.hockey) return;
     this.snaps.push({ at: performance.now(), pos: m.hockey.pos, balls: m.hockey.balls });
+    this.interp.onSnapshot();
     if (this.snaps.length > 30) this.snaps.shift();
     HUD.setClock(m.timeLeft);
 
@@ -214,7 +217,7 @@ export class OnlineHockey {
   /** Remote paddles + pucks rendered ~120ms behind, lerped between snapshots. */
   private interpolate() {
     if (this.snaps.length < 2) return;
-    const renderAt = performance.now() - 120;
+    const renderAt = performance.now() - this.interp.delay;
     let a = this.snaps[0], b = this.snaps[this.snaps.length - 1];
     for (let i = 0; i < this.snaps.length - 1; i++) {
       if (this.snaps[i].at <= renderAt && this.snaps[i + 1].at >= renderAt) {

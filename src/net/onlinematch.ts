@@ -10,13 +10,14 @@ import { gameById, familyById } from '../data/maps';
 import { heroByKey, speedMult } from '../data/characters';
 import * as HUD from '../ui/hud';
 import { net } from './client';
+import { InterpDelay } from './interp';
 import { INPUT_RATE, type MatchEndMsg, type MatchStartMsg, type StateMsg } from './protocol';
 
 // Online pushout match: the server is authoritative; this controller
 //  - sends the local input at 30Hz,
 //  - PREDICTS the local hero with the same movement math (mirrors
 //    server/src/sim.ts), gently reconciled toward server positions,
-//  - INTERPOLATES remote heroes ~120ms behind the newest snapshot,
+//  - INTERPOLATES remote heroes an adaptive ~50-120ms behind the newest snapshot,
 //  - plays events (ults / falls / outs) and the ring shrink.
 
 const BASE_SPEED = 14;
@@ -36,6 +37,7 @@ export class OnlineMatch {
   private youSlot = 0;
   private ring = 30;
   private half = 30;
+  private interp = new InterpDelay();
   private snaps: Snap[] = [];
   private seq = 0;
   private jumpQueued = false;
@@ -111,6 +113,7 @@ export class OnlineMatch {
 
   private onState(m: StateMsg) {
     this.snaps.push({ at: performance.now(), msg: m });
+    this.interp.onSnapshot();
     if (this.snaps.length > 30) this.snaps.shift();
     this.ring = m.ring;
     HUD.setClock(m.timeLeft);
@@ -241,7 +244,7 @@ export class OnlineMatch {
   /** Render remote heroes ~120ms in the past, between two snapshots. */
   private interpolateRemotes() {
     if (this.snaps.length < 2) return;
-    const renderAt = performance.now() - 120;
+    const renderAt = performance.now() - this.interp.delay;
     let a = this.snaps[0], b = this.snaps[this.snaps.length - 1];
     for (let i = 0; i < this.snaps.length - 1; i++) {
       if (this.snaps[i].at <= renderAt && this.snaps[i + 1].at >= renderAt) {

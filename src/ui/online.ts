@@ -74,7 +74,8 @@ export function buildOnlineScreens(h: OnlineHooks) {
   <div id="scrParty" class="screen hidden">
     <h2>🎉 PARTY ROOM</h2>
     <h1 id="partyCode" style="letter-spacing:12px"></h1>
-    <p class="tag">Share this code — friends tap JOIN PARTY and type it in. Empty seats become bots.</p>
+    <p class="tag">Send the invite — friends tap the link and land right in your room. Empty seats become bots.</p>
+    <button class="big" id="partyInvite">📲 INVITE FRIENDS</button>
     <div class="diffRow" id="modeRow">
       <div class="diff sel" data-mode="ffa">⚔️ FREE-FOR-ALL</div>
       <div class="diff" data-mode="2v2">🤝 2 VS 2</div>
@@ -156,15 +157,11 @@ export function buildOnlineScreens(h: OnlineHooks) {
   });
   document.getElementById('btnJoinParty')!.addEventListener('click', async () => {
     const code = prompt('Enter the 4-letter party code:');
-    if (!code) return;
-    net.setHero(hero.key);
-    const ok = await net.joinRoom(code);
-    if (ok) {
-      document.getElementById('partyCode')!.textContent = ok;
-      showOnline('scrParty');
-    } else {
-      setErr('Room not found (or already started / full).');
-    }
+    if (code) await joinPartyCode(code);
+  });
+  document.getElementById('partyInvite')!.addEventListener('click', () => {
+    const code = document.getElementById('partyCode')!.textContent ?? '';
+    if (code) shareInvite(code);
   });
   document.getElementById('partyStart')!.addEventListener('click', () => net.startRoom());
   document.getElementById('teamSwitch')!.addEventListener('click', () => net.toggleTeam());
@@ -204,11 +201,26 @@ export function buildOnlineScreens(h: OnlineHooks) {
   net.cb.onRematch = (m) => updateRematch(m);
 
   // Lobby events.
+  // The server only pushes a queue update when someone joins/leaves, so the
+  // bot-fill countdown ticks locally between updates.
+  let queueTick: ReturnType<typeof setInterval> | null = null;
   net.cb.onQueue = (m) => {
     const el = document.getElementById('queueStatus');
     if (!el) return;
-    const botNote = m.botFillInSec >= 0 ? ` Starting with bots in ${m.botFillInSec}s…` : '';
-    el.textContent = `${m.count}/${m.needed} players in queue.${botNote}`;
+    if (queueTick) { clearInterval(queueTick); queueTick = null; }
+    const render = (sec: number) => {
+      const botNote = sec >= 0 ? ` Bots join in ${sec}s…` : '';
+      el.textContent = `${m.count}/${m.needed} players in queue.${botNote}`;
+    };
+    render(m.botFillInSec);
+    if (m.botFillInSec > 0) {
+      const t0 = Date.now();
+      queueTick = setInterval(() => {
+        const left = Math.max(0, m.botFillInSec - Math.floor((Date.now() - t0) / 1000));
+        render(left);
+        if (left === 0 && queueTick) { clearInterval(queueTick); queueTick = null; }
+      }, 500);
+    }
   };
   net.cb.onRoom = (m) => {
     document.getElementById('partyCode')!.textContent = m.code;
@@ -289,12 +301,69 @@ function setErr(text: string) {
   if (el) el.textContent = text;
 }
 
+async function joinPartyCode(code: string) {
+  net.setHero(hero.key);
+  const ok = await net.joinRoom(code.trim().toUpperCase());
+  if (ok) {
+    document.getElementById('partyCode')!.textContent = ok;
+    showOnline('scrParty');
+  } else {
+    showOnline('scrOnlineHome');
+    setErr('Room not found (or already started / full).');
+  }
+}
+
+/** Invite link that drops a friend straight into this room. */
+function inviteUrl(code: string): string {
+  const u = new URL(location.href);
+  u.search = '';
+  u.hash = '';
+  u.searchParams.set('room', code);
+  // On a static host (GitHub Pages) the friend also needs to know where the game server is.
+  const server = resolveServerUrl();
+  if (server && server !== location.origin) u.searchParams.set('server', server);
+  return u.toString();
+}
+
+async function shareInvite(code: string) {
+  const url = inviteUrl(code);
+  const text = `Join my Bash Arena party! Room ${code} 🎮💥`;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'Bash Arena', text, url });
+      return;
+    }
+  } catch { /* user dismissed the sheet — fall through to copy */ }
+  try {
+    await navigator.clipboard.writeText(`${text} ${url}`);
+    titleBanner('📋 Invite link copied — paste it in WhatsApp / any chat!');
+  } catch {
+    window.open(`https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`, '_blank');
+  }
+}
+
+/** If the page was opened from an invite link, offer a one-tap join on the title screen. */
+export function offerInviteJoin() {
+  const code = new URLSearchParams(location.search).get('room')?.trim().toUpperCase();
+  if (!code || !/^[A-Z0-9]{3,8}$/.test(code)) return;
+  const d = document.createElement('button');
+  d.className = 'big';
+  d.id = 'inviteJoin';
+  d.style.cssText = 'background:#FF5C8A;box-shadow:0 5px 0 #B3335A;animation:pulse 1.2s infinite alternate';
+  d.textContent = `🎉 JOIN FRIEND'S PARTY (${code})`;
+  d.onclick = () => { d.remove(); enterOnline(code); };
+  const title = document.getElementById('scrTitle')!;
+  title.insertBefore(d, title.querySelector('button'));
+  history.replaceState(null, '', location.pathname); // don't re-offer after reload
+}
+
 /** Entry point from the title screen: connect (asking name/server once), then show the online home. */
-export async function enterOnline() {
+export async function enterOnline(joinCode?: string) {
   setErr('');
   if (net.connected) {
     showOnline('scrOnlineHome');
     refreshWho();
+    if (joinCode) await joinPartyCode(joinCode);
     return;
   }
   let server = resolveServerUrl();
@@ -328,6 +397,7 @@ export async function enterOnline() {
     await net.connect(server, name);
     showOnline('scrOnlineHome');
     refreshWho();
+    if (joinCode) await joinPartyCode(joinCode);
   } catch (e) {
     show('scrTitle');
     if ((e as Error).message !== 'cancelled') {

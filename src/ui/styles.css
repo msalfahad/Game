@@ -175,3 +175,5 @@ button.big { width: 100%; max-width: 280px; }
 .tuneRow em { font-style: normal; color: var(--gold); font-family: 'Bungee', system-ui, sans-serif; font-size: 11px; text-align: right; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+@keyframes pulse { from { transform: scale(1); } to { transform: scale(1.05); } }

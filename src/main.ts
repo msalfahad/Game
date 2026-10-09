@@ -4,7 +4,7 @@ import { SFX } from './core/audio';
 import { loadTuning } from './core/tuning';
 import { Match } from './game/match';
 import { buildScreens, show, hideScreens, showResults } from './ui/screens';
-import { buildOnlineScreens, enterOnline } from './ui/online';
+import { buildOnlineScreens, enterOnline, offerInviteJoin } from './ui/online';
 import { OnlineMatch } from './net/onlinematch';
 import { OnlineHockey } from './net/onlinehockey';
 import { OnlineFreeRoam } from './net/onlinefreeroam';
@@ -109,3 +109,5 @@ addEventListener('pointerdown', () => { SFX.unlock(); SFX.playMusic('menu'); }, 
 
 document.getElementById('loading')!.style.display = 'none';
 show('scrTitle');
+
+offerInviteJoin();

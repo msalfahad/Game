@@ -3,7 +3,7 @@
 // same meanings. Kept as a copied file (not an import) so the server deploys
 // standalone.
 
-export const TICK_RATE = 20; // server simulation + broadcast Hz
+export const TICK_RATE = 30; // server simulation + broadcast Hz
 export const INPUT_RATE = 30; // client input send Hz
 export const MAX_PLAYERS = 4;
 

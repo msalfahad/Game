@@ -8,6 +8,7 @@ import { gameById, familyById, type GameDef } from '../data/maps';
 import { heroByKey, speedMult, HEROES } from '../data/characters';
 import * as HUD from '../ui/hud';
 import { net } from './client';
+import { InterpDelay } from './interp';
 import { ET, INPUT_RATE, type MatchEndMsg, type MatchStartMsg, type StateMsg } from './protocol';
 import { spawnBolt, tickBolts, type Bolt } from '../game/boltfx';
 import { victoryWalk } from '../game/victorywalk';
@@ -43,6 +44,7 @@ export class OnlineFreeRoam {
   private players: Player[] = [];
   private youSlot = 0;
   private half = 30;
+  private interp = new InterpDelay();
   private snaps: Snap[] = [];
   private entMeshes = new Map<number, THREE.Object3D>();
   private tileMeshes: THREE.Mesh[] = [];
@@ -463,6 +465,7 @@ export class OnlineFreeRoam {
   // --- state ---------------------------------------------------------------------
   private onState(m: StateMsg) {
     this.snaps.push({ at: performance.now(), msg: m });
+    this.interp.onSnapshot();
     if (this.snaps.length > 30) this.snaps.shift();
     HUD.setClock(m.timeLeft);
 
@@ -746,7 +749,7 @@ export class OnlineFreeRoam {
 
   private interpolate() {
     if (this.snaps.length < 2) return;
-    const renderAt = performance.now() - 120;
+    const renderAt = performance.now() - this.interp.delay;
     let a = this.snaps[0], b = this.snaps[this.snaps.length - 1];
     for (let i = 0; i < this.snaps.length - 1; i++) {
       if (this.snaps[i].at <= renderAt && this.snaps[i + 1].at >= renderAt) {

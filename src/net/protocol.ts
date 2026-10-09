@@ -1,7 +1,7 @@
 // Wire protocol shared with the server.
 // KEEP IN SYNC with server/src/protocol.ts — same field names, same meanings.
 
-export const TICK_RATE = 20;
+export const TICK_RATE = 30;
 export const INPUT_RATE = 30;
 export const MAX_PLAYERS = 4;
 
