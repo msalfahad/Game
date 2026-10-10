@@ -33,13 +33,13 @@ function groundFade(halfSize: number): THREE.CanvasTexture {
 
 // Once a scenic backdrop image is behind the arena, the ground only needs to
 // be a soft halo around the board so the picture shows through everywhere else.
-function groundHalo(halfSize: number): THREE.CanvasTexture {
+function groundHalo(radius: number, innerK: number, outerK: number): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = 256;
   const g = c.getContext('2d')!;
   const R = 128;
-  const inner = Math.min(0.45, (halfSize * 1.2) / 250) * R;
-  const outer = Math.min(0.98, (halfSize * 2.5) / 250) * R;
+  const inner = Math.min(0.45, (radius * innerK) / 250) * R;
+  const outer = Math.min(0.98, (radius * outerK) / 250) * R;
   const grd = g.createRadialGradient(128, 128, inner, 128, 128, outer);
   grd.addColorStop(0, 'rgba(255,255,255,1)');
   grd.addColorStop(1, 'rgba(255,255,255,0)');
@@ -101,9 +101,16 @@ export function buildWorld(
     scene.backgroundIntensity = 2.6;
     // Let the picture show through: shrink the ground to a soft halo.
     const gm = groundRef?.material as THREE.MeshStandardMaterial | undefined;
-    if (gm) { gm.alphaMap?.dispose(); gm.alphaMap = groundHalo(halfSize); gm.needsUpdate = true; }
+    if (gm) { gm.alphaMap?.dispose(); gm.alphaMap = haloFor(); gm.needsUpdate = true; }
   };
   let groundRef: THREE.Mesh | null = null;
+  // Halo size depends on the camera: top-down boards fill the view, so the
+  // ground must vanish right at their edge for the picture to show in the
+  // margins; the climb corridor is narrow, so size by its width, not length.
+  const topDown = game.mechanic === 'chase' || game.mechanic === 'maze' || game.mechanic === 'dodgeball';
+  const haloFor = () => topDown ? groundHalo(halfSize, 1.03, 1.3)
+    : rect ? groundHalo(rect.w, 1.1, 2.2)
+    : groundHalo(halfSize, 1.2, 2.5);
   // The croc raft lives in the sky family but wants a clean forest-river look —
   // keep a flat sky-blue behind it instead of the bright cloud keyart (which
   // blows out the scene).
@@ -113,16 +120,21 @@ export function buildWorld(
   );
   refitBackground = null;
   // Background art, most specific first: this game's own picture
-  // (maps/<gameId>-bg.png), then a portrait phone-composed family one
-  // (maps/<family>-bg.png), then the landscape card art. The night maze only
+  // (maps/<gameId>-bg.webp), then a portrait phone-composed family one
+  // (maps/<family>-bg.webp), then the landscape card art. The night maze only
   // accepts its own picture and otherwise keeps the flat dark sky so map +
   // background read as one continuous night.
   const bgCandidates = flatSky ? [] : night
-    ? [`maps/${game.id}-bg.png`]
-    : [`maps/${game.id}-bg.png`, `maps/${family.id}-bg.png`, `maps/${family.id}.webp`];
+    ? [`maps/${game.id}-bg.webp`]
+    : [`maps/${game.id}-bg.webp`, `maps/${family.id}-bg.webp`, `maps/${family.id}.webp`];
   const tryBg = (i: number) => {
     if (i >= bgCandidates.length) return;
-    loader.load(bgCandidates[i], applyBg, undefined, () => tryBg(i + 1));
+    loader.load(bgCandidates[i], (tex) => {
+      applyBg(tex);
+      // The portrait -bg pictures are already well exposed; only the darker
+      // card art needs the full boost to survive the cinematic grade.
+      if (bgCandidates[i].includes('-bg.')) scene.backgroundIntensity = 1.6;
+    }, undefined, () => tryBg(i + 1));
   };
   tryBg(0);
   scene.fog = new THREE.Fog(new THREE.Color(night ? 0x070b18 : t.fog).getHex(), halfSize * (night ? 1.6 : 3.0), halfSize * (night ? 4.5 : 7.5));
