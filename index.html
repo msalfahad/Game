@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Bash Arena</title>
+  <meta name="theme-color" content="#0D1026" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Bash Arena" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <!-- Preload the display + body fonts so they're ready before first paint and
+       the menu doesn't flash the iOS 'cursive' fallback then swap. -->
+  <link rel="preload" href="./fonts/bungee.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="./fonts/nunito.woff2" as="font" type="font/woff2" crossorigin />
+  <script type="module" crossorigin src="./assets/index-BWV5KsQM.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-BWlQcZm2.css">
+</head>
+<body>
+  <div id="loading">LOADING ARENA…</div>
+
+  <!-- In-match HUD -->
+  <div id="hudHeads" class="hidden"></div>
+  <div id="clock" class="hidden">2:00</div>
+  <div id="objective" class="hidden"></div>
+  <div id="mute" class="hidden">🔊</div>
+  <div id="quit" class="hidden">✕</div>
+  <div id="banner"></div>
+  <div id="abilityHint">⚡</div>
+
+  <!-- Invisible / floating analog stick -->
+  <div id="stickBase"></div>
+  <div id="stickKnob"></div>
+
+  <!-- Screens are injected by src/ui/screens.ts -->
+  <div id="screens"></div>
+
+</body>
+</html>
