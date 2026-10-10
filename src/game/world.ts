@@ -31,6 +31,49 @@ function groundFade(halfSize: number): THREE.CanvasTexture {
   return new THREE.CanvasTexture(c);
 }
 
+// Once a scenic backdrop image is behind the arena, the ground only needs to
+// be a soft halo around the board so the picture shows through everywhere else.
+function groundHalo(halfSize: number): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d')!;
+  const R = 128;
+  const inner = Math.min(0.45, (halfSize * 1.2) / 250) * R;
+  const outer = Math.min(0.98, (halfSize * 2.5) / 250) * R;
+  const grd = g.createRadialGradient(128, 128, inner, 128, 128, outer);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 256, 256);
+  return new THREE.CanvasTexture(c);
+}
+
+// scene.background textures are stretched to the viewport by three.js, which
+// distorts art whose shape differs from the screen. Fit it "cover"-style
+// instead (crop, never squash), aimed at the sky and distant scenery (the darker band behind the board,
+// so the arena keeps contrast) rather than the bright foreground.
+let refitBackground: (() => void) | null = null;
+addEventListener('resize', () => refitBackground?.());
+function coverFit(tex: THREE.Texture) {
+  const img = tex.image as { width: number; height: number };
+  const imgAspect = img.width / img.height;
+  refitBackground = () => {
+    const viewAspect = innerWidth / Math.max(1, innerHeight);
+    tex.repeat.set(1, 1);
+    tex.offset.set(0, 0);
+    if (viewAspect > imgAspect) {
+      const ry = imgAspect / viewAspect;
+      tex.repeat.y = ry;
+      tex.offset.y = Math.max(0, Math.min(1 - ry, 0.64 - ry / 2));
+    } else {
+      const rx = viewAspect / imgAspect;
+      tex.repeat.x = rx;
+      tex.offset.x = (1 - rx) / 2;
+    }
+  };
+  refitBackground();
+}
+
 export function buildWorld(
   scene: THREE.Scene,
   family: FamilyDef,
@@ -52,10 +95,15 @@ export function buildWorld(
   const applyBg = (tex: THREE.Texture) => {
     tex.colorSpace = THREE.SRGBColorSpace;
     scene.background = tex;
+    coverFit(tex);
     // Brighten the backdrop so the scenic art reads clearly through the
     // cinematic grade (otherwise the tone curve + vignette crush it dark).
     scene.backgroundIntensity = 2.6;
+    // Let the picture show through: shrink the ground to a soft halo.
+    const gm = groundRef?.material as THREE.MeshStandardMaterial | undefined;
+    if (gm) { gm.alphaMap?.dispose(); gm.alphaMap = groundHalo(halfSize); gm.needsUpdate = true; }
   };
+  let groundRef: THREE.Mesh | null = null;
   // The croc raft lives in the sky family but wants a clean forest-river look —
   // keep a flat sky-blue behind it instead of the bright cloud keyart (which
   // blows out the scene).
@@ -63,16 +111,20 @@ export function buildWorld(
   if (flatSky) scene.background = new THREE.Color(
     game.mechanic === 'sprint' ? 0x8fc4ec : game.mechanic === 'foosball' ? 0x1a1c24 : 0x6fb0e6,
   );
-  // Prefer a portrait, phone-composed background (maps/<id>-bg.png) so the
-  // scene fills a tall screen without cropping out the sky; fall back to the
-  // landscape card art, then to the flat theme colour. Night keeps the flat
-  // dark sky so map + background read as one continuous night.
-  if (!night && !flatSky) loader.load(
-    `maps/${family.id}-bg.png`,
-    applyBg,
-    undefined,
-    () => loader.load(`maps/${family.id}.webp`, applyBg, undefined, () => {}),
-  );
+  refitBackground = null;
+  // Background art, most specific first: this game's own picture
+  // (maps/<gameId>-bg.png), then a portrait phone-composed family one
+  // (maps/<family>-bg.png), then the landscape card art. The night maze only
+  // accepts its own picture and otherwise keeps the flat dark sky so map +
+  // background read as one continuous night.
+  const bgCandidates = flatSky ? [] : night
+    ? [`maps/${game.id}-bg.png`]
+    : [`maps/${game.id}-bg.png`, `maps/${family.id}-bg.png`, `maps/${family.id}.webp`];
+  const tryBg = (i: number) => {
+    if (i >= bgCandidates.length) return;
+    loader.load(bgCandidates[i], applyBg, undefined, () => tryBg(i + 1));
+  };
+  tryBg(0);
   scene.fog = new THREE.Fog(new THREE.Color(night ? 0x070b18 : t.fog).getHex(), halfSize * (night ? 1.6 : 3.0), halfSize * (night ? 4.5 : 7.5));
   void auroraSky; void gradientSky; // retained for the single-file/legacy path
 
@@ -108,6 +160,7 @@ export function buildWorld(
   ground.position.y = -2;
   ground.renderOrder = -1;
   ground.receiveShadow = true;
+  groundRef = ground;
   scene.add(ground);
 
   // Arena floor. Night maze uses a plain dark ground so the torch beams read.
