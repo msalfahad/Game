@@ -157,7 +157,10 @@ export class Match {
     if (game.mechanic === 'chase' || game.mechanic === 'maze' || game.mechanic === 'dodgeball') this.engine.camera.frameTopDown(halfSize);
     else this.engine.camera.frame(isClimb ? 17 : halfSize, isGoal ? (portrait ? 1.62 : 1.28) : isIce ? 1.18 : game.mechanic === 'hotpotato' ? 1.05 : game.mechanic === 'kart' ? (portrait ? 1.24 : 1.05) : 1.0);
 
-    this.engine.post.setGrade(FAMILY_GRADE[family.id] ?? {});
+    // Floor Is Lava is wall-to-wall glowing lava: tame the family bloom/exposure.
+    this.engine.post.setGrade(game.mechanic === 'lavafloor'
+      ? { ...FAMILY_GRADE[family.id], bloom: 0.35, exposure: 0.92 }
+      : FAMILY_GRADE[family.id] ?? {});
     this.game.init(this.ctx);
     // Snapshot post-init state so the first loop frame doesn't read a stale
     // cooldown as a fresh ability/dash and fire a spurious bark.

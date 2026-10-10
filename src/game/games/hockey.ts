@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { makeHockeyBall, rollHockeyBall, styleHockeyBall } from '../hockeyball';
 import type { GameModule, MatchContext } from '../context';
 import type { Player } from '../player';
 import { HITBOX_RADIUS } from '../player';
@@ -90,10 +91,7 @@ export class HockeyGame implements GameModule {
   }
 
   private spawnBall() {
-    const m = new THREE.Mesh(
-      new THREE.SphereGeometry(0.9, 16, 16),
-      new THREE.MeshStandardMaterial({ color: 0xff8a2e, emissive: 0x7a3000, roughness: 0.3, metalness: 0.3 }),
-    );
+    const m = makeHockeyBall(this.ctx.family.id);
     // No cast shadow: the small puck throws a hard blocky shadow square on the
     // ice at low shadow-map density. It sits flat on the rink and reads fine.
     m.castShadow = false;
@@ -315,9 +313,8 @@ export class HockeyGame implements GameModule {
         else if (Math.abs(b.x) > m + 6 || Math.abs(b.z) > m + 6) this.resetBall(b);
       }
       b.m.position.set(b.x, b.y, b.z);
-      const mat = b.m.material as THREE.MeshStandardMaterial;
-      mat.emissive.setHex(b.power > 0 ? 0xff2020 : 0x7a3000);
-      mat.color.setHex(b.power > 0 ? 0xff4d4d : 0xff8a2e);
+      rollHockeyBall(b.m, b.vx, b.vz, dt);
+      styleHockeyBall(b.m, b.power > 0);
     }
   }
 }

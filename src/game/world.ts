@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { FamilyDef, GameDef } from '../data/maps';
 import type { SurfaceKind } from '../data/surfaces';
 import { auroraSky, gradientSky, styledFloor } from './textures';
+import { makeAmbientLife } from './ambientlife';
 
 // Builds the themed arena for a game: sky, fog, lights, ground, floor (square
 // or circle), neon trim, per-family decorative props, and ambient particles.
@@ -133,7 +134,7 @@ export function buildWorld(
       applyBg(tex);
       // The portrait -bg pictures are already well exposed; only the darker
       // card art needs the full boost to survive the cinematic grade.
-      if (bgCandidates[i].includes('-bg.')) scene.backgroundIntensity = 1.6;
+      if (bgCandidates[i].includes('-bg.')) scene.backgroundIntensity = game.mechanic === 'lavafloor' ? 1.1 : 1.6;
     }, undefined, () => tryBg(i + 1));
   };
   tryBg(0);
@@ -241,14 +242,16 @@ export function buildWorld(
   // Chairs wants a clean ring, and its tight framing put a prop in the
   // foreground.
   if (game.mechanic !== 'goal' && game.mechanic !== 'musicalchairs' && game.mechanic !== 'chase' && game.mechanic !== 'kart' && game.mechanic !== 'maze' && game.mechanic !== 'lavafloor' && game.mechanic !== 'boat' && game.mechanic !== 'raft' && game.mechanic !== 'sprint' && game.mechanic !== 'foosball' && !rect) buildProps(scene, family, halfSize, trimMat);
-  // Floor Is Lava: a bright, warm fill so the map + backdrop read as one glowing scene.
-  if (game.mechanic === 'lavafloor') { scene.add(new THREE.AmbientLight(0xffd8a8, 1.5)); scene.fog = new THREE.Fog(new THREE.Color(0xff7a2e).getHex(), halfSize * 3.5, halfSize * 9); }
+  // Floor Is Lava: a warm fill so the map + backdrop read as one glowing scene
+  // (kept moderate — the emissive lava + bloom already light it strongly).
+  if (game.mechanic === 'lavafloor') { scene.add(new THREE.AmbientLight(0xffd8a8, 0.6)); scene.fog = new THREE.Fog(new THREE.Color(0xff7a2e).getHex(), halfSize * 3.5, halfSize * 9); }
   // The Sprint stadium has its own sky/crowd; skip the family ambient particles
   // (bubbles floating over an athletics track look out of place).
   const ambientPts = (game.mechanic === 'sprint' || game.mechanic === 'foosball') ? null : buildAmbient(scene, family, halfSize);
 
   const surfaceAt = (_x: number, _z: number): SurfaceKind => family.surface;
 
+  const life = makeAmbientLife(scene, family, game, halfSize);
   return {
     floorMesh,
     ringMesh,
@@ -256,6 +259,7 @@ export function buildWorld(
     surfaceAt,
     tick(dt: number) {
       tickAmbient(ambientPts, family, dt);
+      life?.tick(dt);
     },
   };
 }

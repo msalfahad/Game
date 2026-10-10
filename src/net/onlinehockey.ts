@@ -8,6 +8,7 @@ import { victoryWalk } from '../game/victorywalk';
 import { FAMILY_GRADE } from '../core/postfx';
 import { decorateRink, sealStrip, type RinkDeco } from '../game/rinkdeco';
 import { gameById, familyById } from '../data/maps';
+import { makeHockeyBall, rollHockeyBall, styleHockeyBall } from '../game/hockeyball';
 import { heroByKey, speedMult } from '../data/characters';
 import * as HUD from '../ui/hud';
 import { net } from './client';
@@ -37,6 +38,7 @@ export class OnlineHockey {
   private interp = new InterpDelay();
   private snaps: Snap[] = [];
   private ballMeshes: THREE.Mesh[] = [];
+  private familyId = 'frost';
   private seq = 0;
   private ultQueued = false;
   private inputTimer = 0;
@@ -54,6 +56,7 @@ export class OnlineHockey {
   start(msg: MatchStartMsg) {
     const game = gameById(msg.gameId);
     const family = familyById(game.familyId);
+    this.familyId = family.id;
     this.youSlot = msg.youSlot;
     this.localPos = 0.5;
     this.snaps = [];
@@ -238,10 +241,7 @@ export class OnlineHockey {
     // Pucks: match mesh count to snapshot, then lerp.
     const n = b.balls.length;
     while (this.ballMeshes.length < n) {
-      const m = new THREE.Mesh(
-        new THREE.SphereGeometry(0.9, 16, 16),
-        new THREE.MeshStandardMaterial({ color: 0xff8a2e, emissive: 0x7a3000, roughness: 0.3, metalness: 0.3 }),
-      );
+      const m = makeHockeyBall(this.familyId);
       m.castShadow = true;
       this.engine.scene.add(m);
       this.ballMeshes.push(m);
@@ -254,14 +254,15 @@ export class OnlineHockey {
       const ba = a.balls[i] ?? b.balls[i];
       const bb = b.balls[i];
       const mesh = this.ballMeshes[i];
+      const px = mesh.position.x, pz = mesh.position.z;
       mesh.position.set(
         ba[0] + (bb[0] - ba[0]) * t,
         Math.max(ba[2] + (bb[2] - ba[2]) * t, 1.4),
         ba[1] + (bb[1] - ba[1]) * t,
       );
-      const mat = mesh.material as THREE.MeshStandardMaterial;
-      mat.emissive.setHex(bb[3] ? 0xff2020 : 0x7a3000);
-      mat.color.setHex(bb[3] ? 0xff4d4d : 0xff8a2e);
+      // No velocity in the snapshot: roll by this frame's movement instead.
+      rollHockeyBall(mesh, mesh.position.x - px, mesh.position.z - pz, 1);
+      styleHockeyBall(mesh, !!bb[3]);
     }
   }
 

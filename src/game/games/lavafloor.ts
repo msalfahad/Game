@@ -85,13 +85,13 @@ export class LavaFloorGame implements GameModule {
     this.lavaTex.repeat.set(3, 3);
     this.lava = new THREE.Mesh(
       new THREE.PlaneGeometry(half * 3, half * 3),
-      new THREE.MeshStandardMaterial({ map: this.lavaTex, emissiveMap: this.lavaTex, emissive: 0xff5a1e, emissiveIntensity: 2.2, roughness: 0.6 }),
+      new THREE.MeshStandardMaterial({ map: this.lavaTex, emissiveMap: this.lavaTex, emissive: 0xff5a1e, emissiveIntensity: 1.0, roughness: 0.6 }),
     );
     this.lava.rotation.x = -Math.PI / 2;
     this.lava.position.y = -1.5; // just under the tiles so it glows through every gap
     scene.add(this.lava);
     // A warm glow rising off the lava.
-    const glow = new THREE.PointLight(0xff7a2e, 3, half * 4, 0.4);
+    const glow = new THREE.PointLight(0xff7a2e, 1.6, half * 4, 0.4);
     glow.position.set(0, 2, 0);
     scene.add(glow);
   }
@@ -174,7 +174,7 @@ export class LavaFloorGame implements GameModule {
     // Animate the lava (flowing + pulsing glow).
     this.lavaTex.offset.x += dt * 0.03;
     this.lavaTex.offset.y += dt * 0.02;
-    (this.lava.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.4 + Math.sin(elapsed * 2) * 0.35;
+    (this.lava.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.75 + Math.sin(elapsed * 2) * 0.15;
 
     // Movement.
     localMove(ctx, dt);
